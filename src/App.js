@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-const API_BASE_URL = "https://news-scrap.onrender.com"; // 백엔드 URL
+const API_BASE_URL = "https://news-scrap.onrender.com"; // 백엔드 API 주소
 
 function App() {
   const [data, setData] = useState(null);
@@ -27,23 +27,22 @@ function App() {
                 borderRadius: "10px",
                 backgroundColor: "#fff",
                 boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.1)",
-                width: "250px",
+                width: "300px",
                 textAlign: "center",
               }}
             >
               <h3 style={{ marginBottom: "10px" }}>{country}</h3>
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <p
                 style={{
                   color: "#007bff",
-                  textDecoration: "none",
-                  fontWeight: "bold",
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                  wordBreak: "break-all"
                 }}
+                onClick={() => window.open(url, "_blank")}
               >
-                Watch Video
-              </a>
+                {url}
+              </p>
             </div>
           ))}
         </div>
