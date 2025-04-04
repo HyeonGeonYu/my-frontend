@@ -8,7 +8,11 @@ function App() {
   useEffect(() => {
     fetch(`${API_BASE_URL}/youtube`)
       .then((response) => response.json())
-      .then((data) => setData(data))
+      .then((jsonString) => {
+        // JSON 문자열을 객체로 변환
+        const parsedData = typeof jsonString === "string" ? JSON.parse(jsonString) : jsonString;
+        setData(parsedData);
+      })
       .catch((error) => console.error("Error fetching data:", error));
   }, []);
 
@@ -32,17 +36,14 @@ function App() {
               }}
             >
               <h3 style={{ marginBottom: "10px" }}>{country}</h3>
-              <p
-                style={{
-                  color: "#007bff",
-                  textDecoration: "underline",
-                  cursor: "pointer",
-                  wordBreak: "break-all"
-                }}
-                onClick={() => window.open(url, "_blank")}
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "#007bff", textDecoration: "none", fontWeight: "bold" }}
               >
                 {url}
-              </p>
+              </a>
             </div>
           ))}
         </div>
