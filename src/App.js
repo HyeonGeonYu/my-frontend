@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-const API_BASE_URL = "https://news-scrap.onrender.com"; // 백엔드 API 주소
-// 오프라인 "http://127.0.0.1:8000"
-// 온라인 "https://news-scrap.onrender.com"
+const API_BASE_URL = "https://news-scrap.onrender.com";
 
 function App() {
   const [data, setData] = useState(null);
@@ -55,13 +53,27 @@ function App() {
     );
   };
 
+  const parseSummaryItems = (text) => {
+    const matches = text.match(/(\d+)\.\s\*\*(.+?)\*\*:\s(.+?)(?=\n\d+\.|\n*$)/gs);
+    if (!matches) return [];
+
+    return matches.map((item) => {
+      const match = item.match(/(\d+)\.\s\*\*(.+?)\*\*:\s(.+)/s);
+      return {
+        number: match[1],
+        title: match[2],
+        content: match[3].trim(),
+      };
+    });
+  };
+
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1>YouTube News Videos</h1>
         {timestamp && (
           <div style={{ fontSize: "14px", color: "#555" }}>
-            Last updated: {timestamp}{" "}
+            Last updated: {timestamp}
             <span style={{ fontSize: "12px", marginLeft: "4px" }}>(한국 시간 기준)</span>
           </div>
         )}
@@ -88,7 +100,7 @@ function App() {
                 <span
                   style={{
                     fontSize: "12px",
-                    color: isToday(video.publishedAtFormatted) ? "green" : "#ccc",
+                    color: isToday(video.processedAt) ? "green" : "#ccc",
                   }}
                 >
                   ●
@@ -108,8 +120,8 @@ function App() {
                 📅 {video.publishedAtFormatted}
               </p>
 
-              {/* ▼ 설명 토글 버튼을 위로 이동 */}
-              {video.description.length > 200 && (
+              {/* ▼ 설명 토글 버튼 */}
+              {video.summary_result.length > 200 && (
                 <div style={{ marginTop: "10px" }}>
                   <button
                     onClick={() => toggleDescription(country)}
@@ -129,10 +141,31 @@ function App() {
 
               {/* 설명 내용 */}
               <div style={{ marginTop: "8px", fontSize: "13px", whiteSpace: "pre-wrap" }}>
-                {expandedDescriptions[country]
-                  ? video.description
-                  : video.description.slice(0, 200) +
-                    (video.description.length > 200 ? "..." : "")}
+                {expandedDescriptions[country] ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {parseSummaryItems(video.summary_result).map((item, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          border: "1px solid #eee",
+                          borderRadius: "8px",
+                          padding: "10px",
+                          backgroundColor: "#f9f9f9",
+                        }}
+                      >
+                        <strong>{item.number}. {item.title}</strong>
+                        <p style={{ margin: "5px 0 0", fontSize: "13px", lineHeight: "1.4" }}>
+                          {item.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ color: "#555" }}>
+                    {video.summary_result.slice(0, 200)}
+                    {video.summary_result.length > 200 && "..."}
+                  </div>
+                )}
               </div>
             </div>
           ))}
