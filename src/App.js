@@ -1,35 +1,19 @@
 import React, { useEffect, useState } from "react";
 
-const API_BASE_URL = "https://news-scrap.onrender.com";
+// ✅ API BASE URL 설정
+const API_BASE_URL = "https://news-scrap.onrender.com"; // 🔵 배포용
+//const API_BASE_URL = "http://127.0.0.1:8000"; // 🧪 로컬 개발용
 
 function App() {
   const [data, setData] = useState(null);
-  const [timestamp, setTimestamp] = useState(null);
   const [expandedDescriptions, setExpandedDescriptions] = useState({});
 
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_BASE_URL}/youtube`).then((res) => res.json()),
-      fetch(`${API_BASE_URL}/youtube/timestamp`).then((res) => res.text()),
-    ])
-      .then(([videoData, ts]) => {
+    fetch(`${API_BASE_URL}/youtube`)
+      .then((res) => res.json())
+      .then((videoData) => {
         const parsedData = typeof videoData === "string" ? JSON.parse(videoData) : videoData;
         setData(parsedData);
-
-        const parsedTs = parseFloat(ts);
-        if (!isNaN(parsedTs)) {
-          const formatted = new Date(parsedTs * 1000).toLocaleString("ko-KR", {
-            timeZone: "Asia/Seoul",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          setTimestamp(formatted);
-        } else {
-          setTimestamp("Invalid Timestamp");
-        }
       })
       .catch((err) => {
         console.error("❌ Error fetching data:", err);
@@ -43,13 +27,14 @@ function App() {
     }));
   };
 
-  const isToday = (dateString) => {
-    const today = new Date();
-    const date = new Date(dateString);
+  const isToday = (dateStr) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+
     return (
-      today.getFullYear() === date.getFullYear() &&
-      today.getMonth() === date.getMonth() &&
-      today.getDate() === date.getDate()
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear()
     );
   };
 
@@ -69,15 +54,7 @@ function App() {
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1>YouTube News Videos</h1>
-        {timestamp && (
-          <div style={{ fontSize: "14px", color: "#555" }}>
-            Last updated: {timestamp}
-            <span style={{ fontSize: "12px", marginLeft: "4px" }}>(한국 시간 기준)</span>
-          </div>
-        )}
-      </div>
+      <h1 style={{ marginBottom: "30px" }}>YouTube News Videos</h1>
 
       {data ? (
         <div style={{ display: "flex", justifyContent: "center", gap: "20px", flexWrap: "wrap" }}>
@@ -100,7 +77,7 @@ function App() {
                 <span
                   style={{
                     fontSize: "12px",
-                    color: isToday(video.processedAt) ? "green" : "#ccc",
+                    color: isToday(video.publishedAtFormatted) ? "green" : "#ccc",
                   }}
                 >
                   ●
@@ -116,9 +93,24 @@ function App() {
               >
                 {video.title}
               </a>
-              <p style={{ marginTop: "5px", fontSize: "14px", color: "#666" }}>
-                📅 {video.publishedAtFormatted}
-              </p>
+
+              {/* 시간 정보 */}
+              <div style={{ marginTop: "10px", fontSize: "13px", color: "#444" }}>
+                <div>🕒 업로드 시간: {video.publishedAtFormatted}</div>
+                {video.processedAt && (
+                  <div style={{ marginTop: "4px" }}>
+                    ✅ 확인된 시간:{" "}
+                    {new Date(video.processedAt * 1000).toLocaleString("ko-KR", {
+                      timeZone: "Asia/Seoul",
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                )}
+              </div>
 
               {/* ▼ 설명 토글 버튼 */}
               {video.summary_result.length > 200 && (
