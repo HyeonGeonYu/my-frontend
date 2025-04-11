@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 
-// ✅ API BASE URL 설정
 const API_BASE_URL = "https://news-scrap.onrender.com"; // 🔵 배포용
-//const API_BASE_URL = "http://127.0.0.1:8000"; // 🧪 로컬 개발용
+// const API_BASE_URL = "http://127.0.0.1:8000"; // 🧪 로컬 개발용
 
 function App() {
   const [data, setData] = useState(null);
@@ -38,23 +37,9 @@ function App() {
     );
   };
 
-  const parseSummaryItems = (text) => {
-    const matches = text.match(/(\d+)\.\s\*\*(.+?)\*\*:\s(.+?)(?=\n\d+\.|\n*$)/gs);
-    if (!matches) return [];
-
-    return matches.map((item) => {
-      const match = item.match(/(\d+)\.\s\*\*(.+?)\*\*:\s(.+)/s);
-      return {
-        number: match[1],
-        title: match[2],
-        content: match[3].trim(),
-      };
-    });
-  };
-
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h1 style={{ marginBottom: "30px" }}>YouTube News Videos</h1>
+    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif", backgroundColor: "#1a1a1a", color: "#fff", minHeight: "100vh" }}>
+      <h1 style={{ marginBottom: "30px", textAlign: "center", color: "#00bfff" }}>YouTube News Videos</h1>
 
       {data ? (
         <div style={{ display: "flex", justifyContent: "center", gap: "20px", flexWrap: "wrap" }}>
@@ -62,57 +47,51 @@ function App() {
             <div
               key={country}
               style={{
-                border: "1px solid #ddd",
+                border: "1px solid #333",
                 padding: "15px",
                 borderRadius: "10px",
-                backgroundColor: "#fff",
-                boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.1)",
+                backgroundColor: "#2a2a2a",
+                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.3)",
                 width: "300px",
                 textAlign: "left",
                 position: "relative",
               }}
             >
-              {/* 🔵 업데이트 상태 표시 점 */}
+              {/* ✅ 오늘 업데이트 표시 */}
               <div style={{ position: "absolute", top: "15px", right: "15px" }}>
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: isToday(video.publishedAtFormatted) ? "green" : "#ccc",
-                  }}
-                >
+                <span style={{ fontSize: "12px", color: isToday(video.publishedAtFormatted) ? "limegreen" : "#555" }}>
                   ●
                 </span>
               </div>
 
               <h3 style={{ marginBottom: "10px", textAlign: "center" }}>{country}</h3>
+
               <a
                 href={video.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: "#007bff", fontWeight: "bold" }}
+                style={{ color: "#00bfff", fontWeight: "bold" }}
               >
                 {video.title}
               </a>
 
-              {/* 시간 정보 */}
-              <div style={{ marginTop: "10px", fontSize: "13px", color: "#444" }}>
+              <div style={{ marginTop: "10px", fontSize: "13px", color: "#ccc" }}>
                 <div>🕒 업로드 시간: {video.publishedAtFormatted}</div>
                 {video.processedAt && (
                   <div style={{ marginTop: "4px" }}>
-                    ✅ 확인된 시간:{" "}
-                    {new Date(video.processedAt * 1000).toLocaleString("ko-KR", {
+                    ✅ 확인된 시간: {new Date(video.processedAt * 1000).toLocaleString("ko-KR", {
                       timeZone: "Asia/Seoul",
                       year: "numeric",
                       month: "2-digit",
                       day: "2-digit",
                       hour: "2-digit",
-                      minute: "2-digit",
+                      minute: "2-digit"
                     })}
                   </div>
                 )}
               </div>
 
-              {/* ▼ 설명 토글 버튼 */}
+              {/* ▼ 토글 버튼 */}
               {video.summary_result.length > 200 && (
                 <div style={{ marginTop: "10px" }}>
                   <button
@@ -120,7 +99,7 @@ function App() {
                     style={{
                       background: "none",
                       border: "none",
-                      color: "#007bff",
+                      color: "#00bfff",
                       cursor: "pointer",
                       fontSize: "13px",
                       padding: 0,
@@ -131,29 +110,12 @@ function App() {
                 </div>
               )}
 
-              {/* 설명 내용 */}
-              <div style={{ marginTop: "8px", fontSize: "13px", whiteSpace: "pre-wrap" }}>
+              {/* 설명 */}
+              <div style={{ marginTop: "8px", fontSize: "13px", whiteSpace: "pre-wrap", color: "#ddd" }}>
                 {expandedDescriptions[country] ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                    {parseSummaryItems(video.summary_result).map((item, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          border: "1px solid #eee",
-                          borderRadius: "8px",
-                          padding: "10px",
-                          backgroundColor: "#f9f9f9",
-                        }}
-                      >
-                        <strong>{item.number}. {item.title}</strong>
-                        <p style={{ margin: "5px 0 0", fontSize: "13px", lineHeight: "1.4" }}>
-                          {item.content}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                  <div>{video.summary_result}</div>
                 ) : (
-                  <div style={{ color: "#555" }}>
+                  <div>
                     {video.summary_result.slice(0, 200)}
                     {video.summary_result.length > 200 && "..."}
                   </div>
