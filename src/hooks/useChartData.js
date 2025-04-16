@@ -1,28 +1,41 @@
 import { useState, useEffect } from "react";
 
-const API_BASE_URL = "https://news-scrap.onrender.com";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
-export const useChartData = () => {
+export const useChartData = (endpoint) => {
   const [data, setData] = useState(null); // 나스닥 데이터 상태
   const [loading, setLoading] = useState(true); // 데이터 로딩 상태
   const [error, setError] = useState(null); // 에러 상태
 
   useEffect(() => {
-    // 나스닥 데이터 API 호출
-    fetch(`${API_BASE_URL}/index_data/nasdaq100`) // 나스닥 데이터 API URL
+    if (!endpoint) return;
+    setLoading(true);
+
+    fetch(`${API_BASE_URL}/index_data/${endpoint}`)
       .then((res) => res.json())
       .then((chartData) => {
         const parsedData = typeof chartData === "string" ? JSON.parse(chartData) : chartData;
-        setData(parsedData.data); // 데이터 상태에 저장
+        let rawData = parsedData.data;
+
+        if (rawData && rawData.length > 0) {
+          const lastItem = rawData[rawData.length - 1];
+
+          // 마지막 아이템을 3번 복제
+          const extendedData = [...rawData, lastItem, lastItem, lastItem];
+
+          setData(extendedData); // 가공된 데이터 저장
+        } else {
+          setData([]); // fallback
+        }
       })
       .catch((err) => {
         console.error("❌ Error fetching Nasdaq data:", err);
         setError("데이터를 가져오는 중 오류가 발생했습니다.");
       })
       .finally(() => {
-        setLoading(false); // 로딩 상태 종료
+        setLoading(false);
       });
-  }, []); // 컴포넌트가 마운트될 때 한 번만 실행
+  }, [endpoint]);
 
-  return { data, loading, error }; // 데이터와 상태를 반환
+  return { data, loading, error}; // 데이터와 상태를 반환
 };
