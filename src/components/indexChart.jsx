@@ -71,7 +71,7 @@ function IndexChart({ data,dataName }) {
         borderRadius: "12px",
         color: "#fff",
         width: "100%",
-        maxWidth: "700px",
+        maxWidth: "500px",
         display: "flex",
         justifyContent: "space-between"
       }}>

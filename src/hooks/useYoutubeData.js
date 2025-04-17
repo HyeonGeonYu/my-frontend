@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 export const useYoutubeData = () => {
+
   const [data, setData] = useState(null);
 
   useEffect(() => {
@@ -15,6 +16,5 @@ export const useYoutubeData = () => {
       })
       .catch((err) => console.error("❌ Error fetching data:", err));
   }, []);
-
   return data;
 };
