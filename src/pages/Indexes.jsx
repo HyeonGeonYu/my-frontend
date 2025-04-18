@@ -23,7 +23,11 @@ function Indexes() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", marginTop: "40px" }}>
         {indexList.map(({ label, data }) => (
           <div key={label} style={{ backgroundColor: "#222", padding: "20px", borderRadius: "12px" }}>
-            <IndexChart data={data} dataName={label} />
+            {data ? (
+              <IndexChart data={data} dataName={label} />
+            ) : (
+              <div style={{ color: "#888" }}>📊 {label} 데이터 로딩 중...</div>
+            )}
           </div>
         ))}
       </div>

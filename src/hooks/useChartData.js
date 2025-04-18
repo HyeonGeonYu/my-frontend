@@ -36,6 +36,10 @@ export const useChartData = (endpoint) => {
         setLoading(false);
       });
   }, [endpoint]);
+  console.log(`${API_BASE_URL}/index_data/${endpoint}`)
+     console.log("data", data);
+    console.log("loading", loading);
+    console.log("error", error);
 
   return { data, loading, error}; // 데이터와 상태를 반환
 };
