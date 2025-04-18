@@ -11,7 +11,7 @@ function Indexes() {
 
   return (
     <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
-      <h1 style={{ color: "#00ffcc" }}>지수 관련</h1>
+      <h1 style={{ color: "#00ffcc" }}>원자재 관련</h1>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", marginTop: "40px" }}>
         {indexList.map(({ label, data }) => (
