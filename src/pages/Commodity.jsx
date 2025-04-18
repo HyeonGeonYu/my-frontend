@@ -11,12 +11,16 @@ function Indexes() {
 
   return (
     <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
-      <h1 style={{ color: "#00ffcc" }}>원자재 관련</h1>
+      <h1 style={{ color: "#00ffcc" }}>지수 관련</h1>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", marginTop: "40px" }}>
         {indexList.map(({ label, data }) => (
           <div key={label} style={{ backgroundColor: "#222", padding: "20px", borderRadius: "12px" }}>
-            <IndexChart data={data} dataName={label} />
+            {data ? (
+              <IndexChart data={data} dataName={label} />
+            ) : (
+              <div style={{ color: "#888" }}>📊 {label} 데이터 로딩 중...</div>
+            )}
           </div>
         ))}
       </div>
