@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, NavLink } from "react-router-do
 import Home from "../pages/Home";
 import Exchange from "../pages/Exchange";
 import Indexes from "../pages/Indexes";
+import Commodity from "../pages/Commodity";
 import Others from "../pages/Others";
 import Layout from "../components/Layout"; // ✅ 추가
 
@@ -32,6 +33,7 @@ function AppRouter() {
           <Route path="/" element={<Home />} />
           <Route path="/exchange" element={<Exchange />} />
           <Route path="/indexes" element={<Indexes />} />
+          <Route path="/commodity" element={<Commodity />} />
           <Route path="/others" element={<Others />} />
         </Route>
       </Routes>
@@ -43,6 +45,7 @@ const navItems = [
   { path: "/", label: "홈" },
   { path: "/exchange", label: "환율관련" },
   { path: "/indexes", label: "지수관련" },
+  { path: "/commodity", label: "원자재관련" },
   { path: "/others", label: "기타" },
 ];
 

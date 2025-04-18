@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, ReferenceLine } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import dayjs from "dayjs"; // 날짜 포맷을 관리할 때 유용하게 사용
-
+import 'dayjs/locale/ko';
+dayjs.locale('ko');
 function IndexChart({ data,dataName }) {
   const [customTooltip, setCustomTooltip] = useState(null); // 마우스 커서 위치
-
+  const { firstDaysByMonth, firstDaysByYear } = getLabelMap(data);
   const handleTooltip = useCallback(({ active, payload, label, coordinate }) => {
     if (active && payload && payload.length) {
       const newTooltip = payload.map((item) => ({
@@ -17,7 +18,7 @@ function IndexChart({ data,dataName }) {
       if (label) {
       newTooltip.unshift({
         name: "date",
-        value: dayjs(label).format("MM/DD"),  // 날짜 포맷을 MM/DD로 설정
+        value: dayjs(label).format("MM/DD (dd)"),  // 날짜 포맷을 MM/DD로 설정
         color: "#fff",  // 날짜 항목의 색상
       });
     }
@@ -44,26 +45,21 @@ function IndexChart({ data,dataName }) {
   if (!data) {
     return <p>Loading chart data...</p>;
   }
-
-
-  // x축 날짜 포맷 수정
-  const firstDateMap = getLabelMap(data);
   const formatXAxis = (tickItem) => {
     const date = dayjs(tickItem);
     const currentMonthKey = `${date.year()}-${date.month()}`;
     const currentYearKey = `${date.year()}`;
 
-    if (firstDateMap.firstDaysByYear[currentYearKey] === date.format("YYYY-MM-DD")) {
+    if (firstDaysByYear[currentYearKey] === date.format("YYYY-MM-DD")) {
       return date.format("YY/MM");
     }
 
-    if (firstDateMap.firstDaysByMonth[currentMonthKey] === date.format("YYYY-MM-DD")) {
+    if (firstDaysByMonth[currentMonthKey] === date.format("YYYY-MM-DD")) {
       return date.format("MM");
     }
-
-
-    return "";
   };
+
+
   return (
       <div style={{
         background: "#222",
@@ -83,31 +79,19 @@ function IndexChart({ data,dataName }) {
               <CartesianGrid stroke="#666" strokeDasharray="3 3"/>
               <XAxis
                   dataKey="date"
+                  ticks={Object.values(firstDaysByMonth)}
                   tickFormatter={(tickItem) => formatXAxis(tickItem)}
                   tick={{fill: "#fff", fontSize: 12}}
-                  interval={0}
               />
               <YAxis domain={["auto", "auto"]} tick={{fill: "#fff", fontSize: 12}}/>
               <Line type="monotone" dataKey="close" stroke="#00bfff" dot={false}/>
               <Line type="monotone" dataKey="ma100" stroke="#00c853" dot={false}/>
               <Line type="monotone" dataKey="envelope10_upper" stroke="#ff5252" dot={false}/>
               <Line type="monotone" dataKey="envelope10_lower" stroke="#ff8a80" dot={false}/>
-              {Object.keys(firstDateMap.firstDaysByMonth).map((monthKey) => {
-                const firstDay = firstDateMap.firstDaysByMonth[monthKey];
-                return (
-                    <ReferenceLine
-                        key={monthKey}
-                        x={firstDay}
-                        stroke="rgba(169, 169, 169, 0.5)"
-                        strokeDasharray="0 0"
-                        label={{value: firstDay, position: "top", fill: "#ff7300", fontSize: 12}}
-                    />
-                );
-              })}
-            <Tooltip
+              <Tooltip
                 cursor={{ stroke: "#8884d8", strokeWidth: 1 }}
                 content={handleTooltip}
-            />
+              />
             </LineChart>
           </ResponsiveContainer>
        </div>
