@@ -8,7 +8,7 @@ function Indexes() {
   const nikkeiData = useChartData("nikkei225");
   const hangsengData = useChartData("hangseng");
   const kospiData = useChartData("kospi200");
-
+ const envelope = 10;
   const indexList = [
     { label: "NASDAQ 100", data: nasdaqData.data },
     { label: "Nikkei 225", data: nikkeiData.data },
@@ -24,7 +24,7 @@ function Indexes() {
         {indexList.map(({ label, data }) => (
           <div key={label} style={{ backgroundColor: "#222", padding: "20px", borderRadius: "12px" }}>
             {data ? (
-              <IndexChart data={data} dataName={label} />
+              <IndexChart data={data} dataName={label} envelope={envelope}/>
             ) : (
               <div style={{ color: "#888" }}>📊 {label} 데이터 로딩 중...</div>
             )}

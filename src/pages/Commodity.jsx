@@ -5,6 +5,8 @@ import { useChartData } from "../hooks/useChartData";
 function Indexes() {
   // useChartData는 최상단에서 호출!
   const goldData = useChartData("gold");
+  const envelope = 10;
+
   const indexList = [
     { label: "Gold", data: goldData.data },
   ];
@@ -17,7 +19,7 @@ function Indexes() {
         {indexList.map(({ label, data }) => (
           <div key={label} style={{ backgroundColor: "#222", padding: "20px", borderRadius: "12px" }}>
             {data ? (
-              <IndexChart data={data} dataName={label} />
+              <IndexChart data={data} dataName={label} envelope={envelope} />
             ) : (
               <div style={{ color: "#888" }}>📊 {label} 데이터 로딩 중...</div>
             )}

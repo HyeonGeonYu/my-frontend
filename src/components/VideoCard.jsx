@@ -3,16 +3,15 @@ import { isToday } from "../utils/date";
 
 const VideoCard = ({ country, video, isExpanded, onToggle }) => {
   // ⏱️ 업로드된 시간 차이 계산
-  const uploadedAt = new Date(video.publishedAtFormatted);
-  const now = new Date();
-  const diffMs = now - uploadedAt;
+  const uploadedAt = new Date(video.publishedAt); // 이미 한국 시간(KST)으로 되어 있음
+  const now = new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }); // 한국 시간으로 변환
+  const nowKST = new Date(now); // 문자열을 다시 Date 객체로 변환
+  const diffMs = nowKST - uploadedAt;
   const diffMinutes = Math.floor(diffMs / 60000); // 1분 = 60000ms
   const hours = Math.floor(diffMinutes / 60);
   const minutes = diffMinutes % 60;
-
   const timeAgo =
     hours > 0 ? `${hours}시간 ${minutes}분 전` : `${minutes}분 전`;
-
   return (
     <div
       style={{
@@ -30,7 +29,7 @@ const VideoCard = ({ country, video, isExpanded, onToggle }) => {
         <span
           style={{
             fontSize: "12px",
-            color: isToday(video.publishedAtFormatted)
+            color: isToday(video.publishedAt)
               ? "limegreen"
               : "#555",
           }}
@@ -48,13 +47,12 @@ const VideoCard = ({ country, video, isExpanded, onToggle }) => {
       >
         {video.title}
       </a>
-
       <div style={{ marginTop: "10px", fontSize: "13px", color: "#ccc" }}>
-        <div>🕒 업로드: {timeAgo}</div>
-        {video.processedAt && (
+        <div>🕒 업로드: {timeAgo} </div>
+        {video.ts && (
           <div style={{ marginTop: "4px" }}>
             ✅ 확인:{" "}
-            {new Date(video.processedAt * 1000).toLocaleString("ko-KR", {
+            {new Date(video.ts).toLocaleString("ko-KR", {
               timeZone: "Asia/Seoul",
               hour: "2-digit",
               minute: "2-digit",

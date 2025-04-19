@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContai
 import dayjs from "dayjs"; // 날짜 포맷을 관리할 때 유용하게 사용
 import 'dayjs/locale/ko';
 dayjs.locale('ko');
-function IndexChart({ data,dataName }) {
+function IndexChart({ data,dataName,envelope }) {
   const [customTooltip, setCustomTooltip] = useState(null); // 마우스 커서 위치
   const { firstDaysByMonth, firstDaysByYear } = getLabelMap(data);
   const handleTooltip = useCallback(({ active, payload, label, coordinate }) => {
@@ -38,6 +38,8 @@ function IndexChart({ data,dataName }) {
       ma100: "avg(100)",
       envelope10_upper: "avg+10%",
       envelope10_lower: "avg-10%",
+      envelope3_upper: "avg+3%",
+      envelope3_lower: "avg-3%",
     };
     return map[key] || key;
   };
@@ -61,6 +63,8 @@ function IndexChart({ data,dataName }) {
 
 
   return (
+
+
       <div style={{
         background: "#222",
         padding: "20px",
@@ -74,6 +78,8 @@ function IndexChart({ data,dataName }) {
 
         {/* 차트 영역 (70% 크기) */}
         <div style={{flex: "0 0 60%"}}>
+          {envelope===10 && (
+              <>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={data}>
               <CartesianGrid stroke="#666" strokeDasharray="3 3"/>
@@ -86,14 +92,42 @@ function IndexChart({ data,dataName }) {
               <YAxis domain={["auto", "auto"]} tick={{fill: "#fff", fontSize: 12}}/>
               <Line type="monotone" dataKey="close" stroke="#00bfff" dot={false}/>
               <Line type="monotone" dataKey="ma100" stroke="#00c853" dot={false}/>
-              <Line type="monotone" dataKey="envelope10_upper" stroke="#ff5252" dot={false}/>
-              <Line type="monotone" dataKey="envelope10_lower" stroke="#ff8a80" dot={false}/>
+              <Line type="monotone" dataKey="envelope10_upper" stroke="#ff5252" dot={false} />
+              <Line type="monotone" dataKey="envelope10_lower" stroke="#ff8a80" dot={false} />
               <Tooltip
                 cursor={{ stroke: "#8884d8", strokeWidth: 1 }}
                 content={handleTooltip}
               />
             </LineChart>
           </ResponsiveContainer>
+              </>
+            )}
+            {envelope===3 && (
+              <>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={data}>
+              <CartesianGrid stroke="#666" strokeDasharray="3 3"/>
+              <XAxis
+                  dataKey="date"
+                  ticks={Object.values(firstDaysByMonth)}
+                  tickFormatter={(tickItem) => formatXAxis(tickItem)}
+                  tick={{fill: "#fff", fontSize: 12}}
+              />
+              <YAxis domain={["auto", "auto"]} tick={{fill: "#fff", fontSize: 12}}/>
+              <Line type="monotone" dataKey="close" stroke="#00bfff" dot={false}/>
+              <Line type="monotone" dataKey="ma100" stroke="#00c853" dot={false}/>
+                <Line type="monotone" dataKey="envelope3_upper" stroke="#ff5252" dot={false} />
+                <Line type="monotone" dataKey="envelope3_lower" stroke="#ff8a80" dot={false} />
+
+
+              <Tooltip
+                cursor={{ stroke: "#8884d8", strokeWidth: 1 }}
+                content={handleTooltip}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+              </>
+            )}
        </div>
           {/* 오른쪽 제목 + 툴팁 */}
           <div style={{
