@@ -14,7 +14,7 @@ function Indexes() {
     <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
       <h1 style={{ color: "#00ffcc" }}>지수 관련(+-10%)</h1>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", marginTop: "40px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "40px", marginTop: "40px" }}>
         {selectedList.map((index) => (
           <div key={index.label} style={{ backgroundColor: "#222", padding: "20px", borderRadius: "12px" }}>
             <IndexChart
