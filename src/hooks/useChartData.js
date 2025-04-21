@@ -11,7 +11,7 @@ export const useChartData = (endpoint) => {
     if (!endpoint) return;
     setLoading(true);
 
-    fetch(`${API_BASE_URL}/index_data/${endpoint}`)
+    fetch(`${API_BASE_URL}/chartdata/${endpoint}`)
       .then((res) => res.json())
       .then((chartData) => {
         const parsedData = typeof chartData === "string" ? JSON.parse(chartData) : chartData;
