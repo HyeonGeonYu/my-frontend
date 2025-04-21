@@ -49,10 +49,10 @@ const VideoCard = ({ country, video, isExpanded, onToggle }) => {
       </a>
       <div style={{ marginTop: "10px", fontSize: "13px", color: "#ccc" }}>
         <div>🕒 업로드: {timeAgo} </div>
-        {video.ts && (
+        {video.processed_time && (
           <div style={{ marginTop: "4px" }}>
             ✅ 확인:{" "}
-            {new Date(video.ts).toLocaleString("ko-KR", {
+            {new Date(video.processed_time).toLocaleString("ko-KR", {
               timeZone: "Asia/Seoul",
               hour: "2-digit",
               minute: "2-digit",

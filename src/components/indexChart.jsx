@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import dayjs from "dayjs"; // 날짜 포맷을 관리할 때 유용하게 사용
 import 'dayjs/locale/ko';
@@ -7,40 +7,54 @@ dayjs.locale('ko');
 function IndexChart({ data,dataName,envelope }) {
   const [customTooltip, setCustomTooltip] = useState(null); // 마우스 커서 위치
   const { firstDaysByMonth, firstDaysByYear } = getLabelMap(data);
-  const handleTooltip = useCallback(({ active, payload, label, coordinate }) => {
-    if (active && payload && payload.length) {
-      const newTooltip = payload.map((item) => ({
-        name: getPrettyName(item.dataKey),
-        value: Number(item.value).toFixed(2),
-        color: item.color,
-      }));
 
-      // 날짜를 툴팁에 추가
-      if (label) {
-      newTooltip.unshift({
-        name: "date",
-        value: dayjs(label).format("MM/DD (dd)"),  // 날짜 포맷을 MM/DD로 설정
-        color: "#fff",  // 날짜 항목의 색상
+  // 페이지 로드 시 마지막 데이터로 툴팁을 초기화
+useEffect(() => {
+  if (data && data.length > 0) {
+    const lastItem = data[data.length - 1];
+    setCustomTooltip({
+        label: lastItem.date,
+        payload: [
+          { dataKey: "close", value: lastItem.close, color: "#00bfff" },
+          { dataKey: "ma100", value: lastItem.ma100, color: "#00c853" },
+          ...(envelope === 10
+            ? [
+                { dataKey: "envelope10_upper", value: lastItem.envelope10_upper, color: "#ff5252" },
+                { dataKey: "envelope10_lower", value: lastItem.envelope10_lower, color: "#ff8a80" },
+              ]
+            : envelope === 3
+            ? [
+                { dataKey: "envelope3_upper", value: lastItem.envelope3_upper, color: "#ff5252" },
+                { dataKey: "envelope3_lower", value: lastItem.envelope3_lower, color: "#ff8a80" },
+              ]
+            : []),
+        ],
       });
-    }
+  }
+}, [data,envelope]);
+  const renderTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const isEqual = JSON.stringify(label) === JSON.stringify(customTooltip.label);
 
-      // 현재 값이랑 다를 때만 업데이트 (무한 루프 방지)
-      const isEqual = JSON.stringify(newTooltip) === JSON.stringify(customTooltip);
       if (!isEqual) {
-        setCustomTooltip(newTooltip);
-      }
+          setCustomTooltip({
+          label,
+          payload,
+        });
     }
-    return null;
-  }, [customTooltip]);
 
+  }
+
+  return null;
+};
   const getPrettyName = (key) => {
     const map = {
-      close: "close",
-      ma100: "avg(100)",
-      envelope10_upper: "avg+10%",
-      envelope10_lower: "avg-10%",
-      envelope3_upper: "avg+3%",
-      envelope3_lower: "avg-3%",
+      close: "종가",
+      ma100: "100일 이평선",
+      envelope10_upper: "이평선 +10%",
+      envelope10_lower: "이평선 -10%",
+      envelope3_upper: "이평선 +3%",
+      envelope3_lower: "이평선 -3%",
     };
     return map[key] || key;
   };
@@ -62,6 +76,18 @@ function IndexChart({ data,dataName,envelope }) {
     }
   };
 
+  const envelopeLines = {
+    10: [
+      { dataKey: 'envelope10_upper', stroke: '#ff5252' },
+      { dataKey: 'envelope10_lower', stroke: '#ff8a80' },
+    ],
+    3: [
+      { dataKey: 'envelope3_upper', stroke: '#ff5252' },
+      { dataKey: 'envelope3_lower', stroke: '#ff8a80' },
+    ]
+  };
+  const lines = envelopeLines[envelope] || [];
+
 
   return (
           <div style={{
@@ -81,56 +107,28 @@ function IndexChart({ data,dataName,envelope }) {
               <h2 style={{marginBottom: "10px", color: "#00ffcc", textAlign: "center"}}>{dataName}</h2>
         {/* 차트 영역 (70% 크기) */}
           <div style={{width: "100%"}}>
-              {envelope === 10 && (
-                  <>
-                      <ResponsiveContainer width="100%" height={250}>
-                          <LineChart data={data}>
-                              <CartesianGrid stroke="#666" strokeDasharray="3 3"/>
-                              <XAxis
-                                  dataKey="date"
-                                  ticks={Object.values(firstDaysByMonth)}
-                                  tickFormatter={(tickItem) => formatXAxis(tickItem)}
-                                  tick={{fill: "#fff", fontSize: 12}}
-                              />
-                              <YAxis domain={["auto", "auto"]} tick={{fill: "#fff", fontSize: 12}}/>
-                              <Line type="monotone" dataKey="close" stroke="#00bfff" dot={false}/>
-                              <Line type="monotone" dataKey="ma100" stroke="#00c853" dot={false}/>
-                              <Line type="monotone" dataKey="envelope10_upper" stroke="#ff5252" dot={false}/>
-                              <Line type="monotone" dataKey="envelope10_lower" stroke="#ff8a80" dot={false}/>
-                              <Tooltip
-                                  cursor={{stroke: "#8884d8", strokeWidth: 1}}
-                                  content={handleTooltip}
-                              />
-                          </LineChart>
-                      </ResponsiveContainer>
-                  </>
-              )}
-              {envelope === 3 && (
-                  <>
-                      <ResponsiveContainer width="100%" height={250}>
-                          <LineChart data={data}>
-                              <CartesianGrid stroke="#666" strokeDasharray="3 3"/>
-                              <XAxis
-                                  dataKey="date"
-                                  ticks={Object.values(firstDaysByMonth)}
-                                  tickFormatter={(tickItem) => formatXAxis(tickItem)}
-                                  tick={{fill: "#fff", fontSize: 12}}
-                              />
-                              <YAxis domain={["auto", "auto"]} tick={{fill: "#fff", fontSize: 12}}/>
-                              <Line type="monotone" dataKey="close" stroke="#00bfff" dot={false}/>
-                              <Line type="monotone" dataKey="ma100" stroke="#00c853" dot={false}/>
-                              <Line type="monotone" dataKey="envelope3_upper" stroke="#ff5252" dot={false}/>
-                              <Line type="monotone" dataKey="envelope3_lower" stroke="#ff8a80" dot={false}/>
-
-
-                              <Tooltip
-                                  cursor={{stroke: "#8884d8", strokeWidth: 1}}
-                                  content={handleTooltip}
-                              />
-                          </LineChart>
-                      </ResponsiveContainer>
-                  </>
-              )}
+              <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={data}>
+                      <CartesianGrid stroke="#666" strokeDasharray="3 3"/>
+                      <XAxis
+                          dataKey="date"
+                          ticks={Object.values(firstDaysByMonth)}
+                          tickFormatter={(tickItem) => formatXAxis(tickItem)}
+                          tick={{fill: "#fff", fontSize: 12}}
+                      />
+                      <YAxis domain={["auto", "auto"]} tick={{fill: "#fff", fontSize: 12}}/>
+                      <Line type="monotone" dataKey="close" stroke="#00bfff" dot={false}/>
+                      <Line type="monotone" dataKey="ma100" stroke="#00c853" dot={false}/>
+                      {/* 선택된 envelope에 맞는 라인 추가 */}
+                        {lines.map((line, index) => (
+                          <Line key={index} type="monotone" dataKey={line.dataKey} stroke={line.stroke} dot={false} />
+                        ))}
+                      <Tooltip
+                          cursor={{stroke: "#8884d8", strokeWidth: 1}}
+                          content={renderTooltip}
+                      />
+                  </LineChart>
+              </ResponsiveContainer>
           </div>
           {/*  제목 + 툴팁 */}
           <div style={{
@@ -142,42 +140,60 @@ function IndexChart({ data,dataName,envelope }) {
               color: "#fff",
               textAlign: "center"
           }}>
-
-
-              {/* 날짜 */}
+          {/* 모든 지표 - close 포함 */}
+          {customTooltip?.payload?.length > 0 && (
+          <div style={{
+            marginTop: "10px",
+            backgroundColor: "#333",
+            padding: "10px",
+            borderRadius: "8px",
+            color: "#fff"
+          }}>
+            {/* 날짜 */}
+            {customTooltip.label && (
               <div style={{
-                  marginBottom: "8px",
-                  paddingBottom: "8px",
-                  borderBottom: "1px solid #555",
-                  fontWeight: "bold",
-                  textAlign: "center"
+                marginBottom: "8px",
+                paddingBottom: "8px",
+                borderBottom: "1px solid #555",
+                fontWeight: "bold",
+                textAlign: "center"
               }}>
-                  {customTooltip?.find(item => item.name === "date")?.value}
+                {dayjs(customTooltip.label).format("MM/DD (dd)")}
               </div>
+            )}
 
-              {/* 모든 지표 - close 포함 */}
-              <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  rowGap: "6px",
-                  columnGap: "10px",
-              }}>
-                  {customTooltip
-                      ?.filter(entry => entry.name !== "date")
-                      .map((entry, index) => (
-                          <React.Fragment key={index}>
-                              <div style={{color: entry.color, borderBottom: "1px solid #444", paddingBottom: "4px"}}>
-                                  {entry.name}
-                              </div>
-                              <div style={{textAlign: "right", borderBottom: "1px solid #444", paddingBottom: "4px"}}>
-                                  {entry.value}
-                              </div>
-                          </React.Fragment>
-                      ))}
-              </div>
-
+            {/* 값들 */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              rowGap: "6px",
+              columnGap: "10px",
+            }}>
+              {customTooltip.payload.map((item, idx) => (
+                <React.Fragment key={idx}>
+                  <div style={{
+                    color: item.color,
+                    borderBottom: "1px solid #444",
+                    paddingBottom: "4px"
+                  }}>
+                    {getPrettyName(item.dataKey)}
+                  </div>
+                  <div style={{
+                    textAlign: "right",
+                    borderBottom: "1px solid #444",
+                    paddingBottom: "4px"
+                  }}>
+                    {Number(item.value).toFixed(2)}
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
           </div>
+        )}
+
+
       </div>
+  </div>
   );
 }
 
@@ -189,22 +205,22 @@ function getLabelMap(data) {
 
     for (let i = 0; i < data.length; i++) {
         const d = dayjs(data[i].date);
-    const m = d.month();
-    const y = d.year();
+        const m = d.month();
+        const y = d.year();
 
-    const monthKey = `${y}-${m}`;
-    const yearKey = `${y}`;
+        const monthKey = `${y}-${m}`;
+        const yearKey = `${y}`;
 
-    if (!firstDaysByMonth[monthKey]) {
-      firstDaysByMonth[monthKey] = d.format("YYYY-MM-DD");
+        if (!firstDaysByMonth[monthKey]) {
+            firstDaysByMonth[monthKey] = d.format("YYYY-MM-DD");
+        }
+
+        if (!firstDaysByYear[yearKey]) {
+            firstDaysByYear[yearKey] = d.format("YYYY-MM-DD");
+        }
     }
 
-    if (!firstDaysByYear[yearKey]) {
-      firstDaysByYear[yearKey] = d.format("YYYY-MM-DD");
-    }
-  }
-
-  return { firstDaysByMonth, firstDaysByYear };
+    return {firstDaysByMonth, firstDaysByYear};
 }
 
 export default IndexChart;
