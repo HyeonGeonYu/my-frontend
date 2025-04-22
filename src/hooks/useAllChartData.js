@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 export const useAllChartData = (endpointPath) => {
-  const [data, setData] = useState({});
+  const [processedData, setData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -18,13 +18,23 @@ export const useAllChartData = (endpointPath) => {
       .then((chartData) => {
         const parsedData = typeof chartData === "string" ? JSON.parse(chartData) : chartData;
 
+
         const extended = {};
         for (const  [key, rawData] of Object.entries(parsedData)) {
-          if (Array.isArray(rawData) && rawData.length > 0) {
-            const lastItem = rawData[rawData.length - 1];
-            extended[key] = [...rawData, lastItem, lastItem, lastItem];
+          const originalArray = rawData.data;
+          const processed_time = rawData.processed_time
+
+          if (Array.isArray(originalArray) && originalArray.length > 0) {
+            const lastItem = originalArray[originalArray.length - 1];
+            extended[key] = {
+              'data' : [...originalArray, lastItem, lastItem, lastItem],
+            'processed_time' : processed_time
+            };
           } else {
-            extended[key] = [];
+            extended[key] = {
+            data: [],
+            processed_time: '',
+          }
           }
         }
 
@@ -36,7 +46,6 @@ export const useAllChartData = (endpointPath) => {
       .finally(() => {
         setLoading(false);
       });
-  }, [endpointPath]);
-
-  return { data, loading, error };
+  }, [endpointPath])
+  return { processedData, loading, error };
 };

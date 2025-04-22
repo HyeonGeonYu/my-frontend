@@ -5,7 +5,8 @@ import { chartParams } from "../constants/chartMeta"; // chartMeta.js에서 impo
 
 const ChartPage = ({ chartType, title, envelop }) => {
   // `chartType`에 따라 데이터를 가져옵니다.
-  const { data, loading, error } = useAllChartData(chartType);
+  const { processedData, loading, error } = useAllChartData(chartType);
+
   const envelope = envelop;
   const selectedList = chartParams[chartType] || [];
 
@@ -57,7 +58,7 @@ const ChartPage = ({ chartType, title, envelop }) => {
           <div
             key={index.label}
             style={{
-              backgroundColor: "#222",
+              backgroundColor: "transparent", // 배경을 투명하게 설정
               padding: "20px",
               borderRadius: "12px",
               display: "flex",
@@ -65,7 +66,7 @@ const ChartPage = ({ chartType, title, envelop }) => {
               alignItems: "center", // 가로 중앙 정렬
             }}
           >
-            <IndexChart dataName={index.label} data={data[index.key]} envelope={envelope} />
+            <IndexChart dataName={index.label} processedData={processedData[index.key]} envelope={envelope} />
           </div>
         ))}
       </div>
