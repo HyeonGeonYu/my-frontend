@@ -42,7 +42,7 @@ function Home() {
             padding: "20px",
             backgroundColor: "#2c2c2c",
             borderRadius: "8px",
-            maxWidth: "800px",      // ✅ 최대 너비 제한
+            maxWidth: "370px",      // ✅ 최대 너비 제한
             margin: "40px auto 0",  // ✅ 가운데 정렬 + 위 여백
           }}
         >

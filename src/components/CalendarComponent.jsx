@@ -1,7 +1,9 @@
 import React from "react";
 import { useMarketHolidaysData } from "../hooks/useCalendarData";
-import { parseISO, format, addDays } from "date-fns";
+import { parseISO, format, addDays, isToday, isSameWeek } from "date-fns";
 import { ko } from "date-fns/locale";
+import { countryNameMap as calendarMeta } from "../constants/calendarMeta";
+
 
 const MarketHolidaysComponent = () => {
   const { holidaysData, loading, error } = useMarketHolidaysData();
@@ -14,56 +16,79 @@ const MarketHolidaysComponent = () => {
 
   const timestamp = parseISO(holidaysData.timestamp);
   const endDate = addDays(timestamp, 13);
-  const formattedRange = `${format(timestamp, "yyyy년 M월 d일", { locale: ko })} ~ ${format(endDate, "M월 d일", { locale: ko })}`;
-
-  // 원하는 순서
-  const countryOrder = ["KR", "CN", "JP", "US", "GB", "DE", "HK"];
-
-  // 한글 이름 매핑
-  const countryNameMap = {
-    KR: "한국",
-    CN: "중국",
-    JP: "일본",
-    US: "미국",
-    GB: "영국",
-    DE: "독일",
-    HK: "홍콩",
-  };
+  const countryOrder = calendarMeta.countryList;
+  const countryNameMap = calendarMeta.country;
 
   return (
-  <div
-    style={{
-      padding: "20px",
-      fontFamily: "Arial, sans-serif",
-      maxWidth: "600px",        // 최대 너비 제한
-      margin: "0 auto",         // 가운데 정렬
-    }}
-  >
-    <h2>🌍 {formattedRange} 사이의 국가별 공휴일</h2>
-    {countryOrder.map((code) => {
-      const data = holidaysData.holidays[code] || [];
-      const countryName = countryNameMap[code] || code;
-
-      return (
-        <div key={code} style={{ marginBottom: "20px" }}>
-          <h3>{countryName}</h3>
-          {Array.isArray(data) && data.length > 0 ? (
-            <ul>
-              {data.map((holiday) => (
-                <li key={holiday.date}>
-                  <strong>{holiday.name}</strong> ({holiday.date})
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>이번 주에 해당 국가의 공휴일이 없습니다.</p>
-          )}
+      <div
+          style={{
+            padding: "20px",
+            fontFamily: "Arial, sans-serif",
+            maxWidth: "600px",
+            margin: "0 auto",
+          }}
+      >
+        <h2>
+          {format(timestamp, "yyyy년 M월 d일 (E) ~", {locale: ko})} <br/>
+          {format(endDate, "M월 d일 (E)", {locale: ko})}
+        </h2>
+        <div style={{display: "flex", gap: "12px", marginBottom: "16px"}}>
+          <div style={{display: "flex", alignItems: "center", gap: "4px"}}>
+            <span style={{width: "12px", height: "12px", backgroundColor: "#2ecc71", borderRadius: "50%"}}></span>
+            <span>오늘</span>
+          </div>
+          <div style={{display: "flex", alignItems: "center", gap: "4px"}}>
+            <span style={{
+              width: "12px",
+              height: "12px",
+              backgroundColor: "#ffffff",
+              border: "1px solid #ccc",
+              borderRadius: "50%"
+            }}></span>
+            <span>이번 주</span>
+          </div>
+          <div style={{display: "flex", alignItems: "center", gap: "4px"}}>
+            <span style={{width: "12px", height: "12px", backgroundColor: "#999999", borderRadius: "50%"}}></span>
+            <span>다음 주</span>
+          </div>
         </div>
-      );
-    })}
-  </div>
-);
 
+        {countryOrder.map((code) => {
+          const data = holidaysData.holidays[code] || [];
+          const countryName = countryNameMap[code] || code;
+
+          return (
+              <div key={code} style={{marginBottom: "20px"}}>
+                <h3>{countryName}</h3>
+                {Array.isArray(data) && data.length > 0 ? (
+                    <ul>
+                      {data.map((holiday) => {
+                        const dateObj = parseISO(holiday.date);
+                        let color = "#ffffff"; // 기본: 금주 (흰색)
+
+                        if (isToday(dateObj)) {
+                          color = "#2ecc71"; // 오늘: 초록색
+                        } else if (!isSameWeek(dateObj, new Date(), {locale: ko})) {
+                          color = "#999999"; // 차주: 회색
+                        }
+
+                        const formattedDate = format(dateObj, "MM-dd (E)", {locale: ko});
+
+                        return (
+                            <li key={holiday.date} style={{color}}>
+                              <strong>{holiday.name}</strong> ({formattedDate})
+                            </li>
+                        );
+                      })}
+                    </ul>
+                ) : (
+                    <p>이번 주에 해당 국가의 공휴일이 없습니다.</p>
+                )}
+              </div>
+          );
+        })}
+      </div>
+  );
 };
 
 export default MarketHolidaysComponent;
