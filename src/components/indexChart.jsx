@@ -59,8 +59,6 @@ useEffect(() => {
 
   if (data && data.length > 0) {
     const lastItem = data[data.length - 1];
-    const close = lastItem.close;
-    const ma100 = lastItem.ma100;
 
 
     setCustomTooltip({
