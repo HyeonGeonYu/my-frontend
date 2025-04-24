@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import 'dayjs/locale/ko';
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import 'dayjs/locale/ko';
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -24,8 +23,12 @@ function IndexChart({ processedData, dataName, envelope }) {
   const maxDiff = ma100 * 0.1; // 최대 10% 차이를 기준
   const intensity = Math.min(1, diff / maxDiff); // 0 ~ 1 사이 값
 
-  const baseColor = close > ma100 ? "255, 82, 82" : "0, 191, 255";
+  const baseColor = close > ma100 ? "0, 195, 83" : "255, 82, 82";  // 초록색(양의 변화) 또는 빨간색(음의 변화)
   const borderColor = `rgba(${baseColor}, ${0.4 + intensity * 0.6})`;
+
+  const diffValue = close - data[data.length - 5]?.close; // 전일 대비 차이
+  const diffPercentage = ((diffValue / data[data.length - 5]?.close) * 100).toFixed(2); // 전일 대비 백분율
+  const diffColor = diffValue >= 0 ? "#00c853" : "#ff5252"; // +는 초록색, -는 빨간색
 
   const [customTooltip, setCustomTooltip] = useState(null); // 마우스 커서 위치
   const { firstDaysByMonth, firstDaysByYear } = useMemo(() => getLabelMap(data), [data]);
@@ -77,60 +80,60 @@ function IndexChart({ processedData, dataName, envelope }) {
       {label ?? (value !== undefined ? value : "-")}
     </div>
   );
-
+const chartLinesConfig = {
+  10: [
+    { dataKey: "envelope10_upper", stroke: "#00c853" },
+    { dataKey: "envelope10_lower", stroke: "#ff5252" },
+  ],
+  3: [
+    { dataKey: "envelope3_upper", stroke: "#00c853" },
+    { dataKey: "envelope3_lower", stroke: "#ff5252" },
+  ],
+};
   // 페이지 로드 시 마지막 데이터로 툴팁을 초기화
-  const chartLines = useMemo(() => [
-    { dataKey: "close", stroke: "#FFA500", strokeWidth: 3 },
-    { dataKey: "ma100", stroke: "#00c853" },
-    ...(envelope === 10
-      ? [
-        { dataKey: "envelope10_upper", stroke: "#ff5252" },
-        { dataKey: "envelope10_lower", stroke: "#00bfff" },
-      ]
-      : envelope === 3
-        ? [
-          { dataKey: "envelope3_upper", stroke: "#ff5252" },
-          { dataKey: "envelope3_lower", stroke: "#00bfff" },
-        ]
-        : []),
-  ], [envelope]);
+const chartLines = [
+  { dataKey: "close", stroke: "#FFA500", strokeWidth: 3 },
+  { dataKey: "ma100", stroke: "#00bfff" },
+  ...(chartLinesConfig[envelope] || []),
+];
 
-  useEffect(() => {
-    if (data && data.length > 0) {
-      const lastItem = data[data.length - 1];
+// 툴팁 컴포넌트는 순수하게 UI만 그리도록 (이 예시에서는 null로 상태만 컨트롤)
 
-      setCustomTooltip({
-        label: lastItem.date,
-        payload: chartLines.map(({ dataKey, stroke }) => ({
-          dataKey,
-          value: lastItem[dataKey],
-          color: stroke,
-        })),
-      });
-    }
-  }, [data, envelope]);
+if (data && data.length > 0 && customTooltip === null) {
+  const lastItem = data[data.length - 1];
+  setCustomTooltip({
+    label: lastItem.date,
+    payload: chartLines.map(({ dataKey, stroke }) => ({
+      dataKey,
+      value: lastItem[dataKey],
+      color: stroke,
+    })),
+  });
+}
 
-  const renderTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      setCustomTooltip({
-        label,
-        payload,
-      });
-    } else if (!active && data && data.length > 0) {
-      const lastItem = data[data.length - 1];
-      if (lastItem.date !== customTooltip?.label) {
-        setCustomTooltip({
-          label: lastItem.date,
-          payload: chartLines.map(({ dataKey, stroke }) => ({
-            dataKey,
-            value: lastItem[dataKey],
-            color: stroke,
-          })),
-        });
-      }
-    }
-    return null;
-  };
+const renderTooltip = ({ active, payload, label }) => {
+  if (
+    active &&
+    payload?.length &&
+    (customTooltip?.label !== label)
+  ) {
+    setCustomTooltip({ label, payload });
+  }else if (
+    !active &&
+    lastItem &&
+    customTooltip?.label !== lastItem.date
+  ) {
+    setCustomTooltip({
+      label: lastItem.date,
+      payload: chartLines.map(({ dataKey, stroke }) => ({
+        dataKey,
+        value: lastItem[dataKey],
+        color: stroke,
+      })),
+    });
+  }
+  return null;
+};
 
   const getPrettyName = (key) => {
     const map = {
@@ -188,6 +191,7 @@ function IndexChart({ processedData, dataName, envelope }) {
           whiteSpace: "nowrap",
         }}>
           업데이트: {howLongAgo}
+
         </span>
       </div>
       <h2 style={{
@@ -196,9 +200,22 @@ function IndexChart({ processedData, dataName, envelope }) {
         textAlign: "center"
       }}>
         {dataName}
+        <span style={{
+          fontSize: "0.7rem",
+          color: "#aaa",
+          marginLeft: "10px",
+        }}>
+          <span style={{
+            color: diffColor, // diffColor는 diffValue가 양수일 때와 음수일 때 색상이 바뀌는 값으로 설정
+             textAlign: "right",  // 오른쪽 정렬
+            fontSize: "0.9rem",
+          }}>
+  {`(${diffValue >= 0 ? '+' : ''}${diffValue.toFixed(2)} (${diffPercentage >= 0 ? '+' : ''}${diffPercentage}%))`}
+</span>
+        </span>
       </h2>
       {/* 차트 영역 */}
-      <div style={{ width: "100%" }}>
+      <div style={{width: "100%"}}>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={data}>
             <CartesianGrid stroke="#666" strokeDasharray="3 3" />
@@ -220,9 +237,10 @@ function IndexChart({ processedData, dataName, envelope }) {
               />
             ))}
             <Tooltip
-              cursor={{ stroke: "#8884d8", strokeWidth: 1 }}
-              content={renderTooltip}
-            />
+          cursor={{ stroke: "#8884d8", strokeWidth: 1 }}
+          content={renderTooltip}
+
+        />
           </LineChart>
         </ResponsiveContainer>
       </div>
