@@ -29,4 +29,8 @@ export const chartParams = {
     { label: "Wheat", key: "wheat" },
     { label: "Live Cattle", key: "live_cattle" },
   ],
+  kr_stock: [
+    { label: "한화오션", key: "한화오션" },
+    { label: "현대해상", key: "현대해상" },
+  ],
 };

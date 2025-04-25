@@ -4,9 +4,9 @@ import { useAllChartData } from "../hooks/useAllChartData";
 import { chartParams } from "../constants/chartMeta"; // chartMeta.js에서 import
 
 const ChartPage = ({ chartType, title, envelop }) => {
+
   // `chartType`에 따라 데이터를 가져옵니다.
   const { processedData, loading, error } = useAllChartData(chartType);
-
   const envelope = envelop;
   const selectedList = chartParams[chartType] || [];
 
@@ -41,7 +41,6 @@ const ChartPage = ({ chartType, title, envelop }) => {
 
   if (loading) return <p>📊 로딩 중...</p>;
   if (error) return <p>❌ {error}</p>;
-
   return (
     <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
       <h1 style={{ color: "#00ffcc" }}>{title}</h1>

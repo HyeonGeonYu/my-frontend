@@ -4,6 +4,7 @@ import Home from "../pages/Home";
 import Exchange from "../pages/Exchange";
 import Indexes from "../pages/Indexes";
 import Commodity from "../pages/Commodity";
+import KoreaStock from "../pages/KoreaStock";
 import Others from "../pages/Others";
 import Layout from "../components/Layout"; // ✅ 추가
 
@@ -34,6 +35,7 @@ function AppRouter() {
           <Route path="/exchange" element={<Exchange />} />
           <Route path="/indexes" element={<Indexes />} />
           <Route path="/commodity" element={<Commodity />} />
+          <Route path="/koreastock" element={<KoreaStock />} />
           <Route path="/others" element={<Others />} />
         </Route>
       </Routes>
@@ -46,6 +48,7 @@ const navItems = [
   { path: "/exchange", label: "환율관련" },
   { path: "/indexes", label: "지수관련" },
   { path: "/commodity", label: "원자재관련" },
+    { path: "/koreastock", label: "국내개별주관련" },
   { path: "/others", label: "기타" },
 ];
 
