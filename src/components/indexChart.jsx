@@ -16,6 +16,7 @@ function IndexChart({ processedData, dataName, envelope }) {
   const processedKST = dayjs.utc(processedTime).tz("Asia/Seoul");
   const howLongAgo = processedKST.fromNow();
   const data = processedData.data;
+  const hasShortRatio = data.some(d => d.short_ratio !== undefined);
   const lastItem = data[data.length - 1];
   const close = lastItem?.close;
   const ma100 = lastItem?.ma100;
@@ -92,9 +93,12 @@ const chartLinesConfig = {
 };
   // 페이지 로드 시 마지막 데이터로 툴팁을 초기화
 const chartLines = [
-  { dataKey: "close", stroke: "#FFA500", strokeWidth: 3 },
-  { dataKey: "ma100", stroke: "#00bfff" },
-  ...(chartLinesConfig[envelope] || []),
+  { dataKey: "close", stroke: "#FFA500", strokeWidth: 3, yAxisId: "left" },
+  { dataKey: "ma100", stroke: "#00bfff", yAxisId: "left" },
+  ...(chartLinesConfig[envelope]?.map(line => ({ ...line, yAxisId: "left" })) || []),
+  ...(hasShortRatio
+    ? [{ dataKey: "short_ratio", stroke:"rgba(136, 132, 216, 0.1)", yAxisId: "right", strokeDasharray: "5 3", strokeWidth: 0.01}]
+    : [])
 ];
 
 // 툴팁 컴포넌트는 순수하게 UI만 그리도록 (이 예시에서는 null로 상태만 컨트롤)
@@ -225,17 +229,60 @@ const renderTooltip = ({ active, payload, label }) => {
               tickFormatter={(tickItem) => formatXAxis(tickItem)}
               tick={{ fill: "#fff", fontSize: 12 }}
             />
-            <YAxis domain={["auto", "auto"]} tick={{ fill: "#fff", fontSize: 12 }} />
-            {chartLines.map(({ dataKey, stroke, strokeWidth = 2 }, index) => (
-              <Line
-                key={index}
-                type="monotone"
-                dataKey={dataKey}
-                stroke={stroke}
-                strokeWidth={strokeWidth}
-                dot={false}
-              />
-            ))}
+
+    <YAxis
+          yAxisId="left"
+          domain={["auto", "auto"]}
+          tick={{ fill: "#fff", fontSize: 12 }}
+          label={{
+            value: "가격",
+            angle: -90,
+            position: "insideLeft",
+            fill: "#fff",
+            style: { textAnchor: "middle" }
+          }}
+        />
+
+          {hasShortRatio && (
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              domain={[0, 'auto']}
+              tick={{ fill: "#fff", fontSize: 12 }}
+              label={{
+                value: "공매도 비율 (%)",
+                angle: 90,
+                position: "insideRight",
+                fill: "#fff",
+                style: { textAnchor: "middle" }
+              }}
+            />
+          )}
+            {/* 왼쪽 Y축 라인들 */}
+          {chartLines.map(({ dataKey, stroke, strokeWidth = 2 }, index) => (
+            <Line
+              key={index}
+              yAxisId="left"
+              type="monotone"
+              dataKey={dataKey}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              dot={false}
+            />
+          ))}
+
+          {/* 오른쪽 Y축 라인 (short_ratio) */}
+         {hasShortRatio && (
+  <Line
+    yAxisId="right"
+    type="monotone"
+    dataKey="short_ratio"
+    stroke="rgba(136, 132, 216, 1)"  // 흐릿한 보라색 (투명도 0.2)
+    strokeWidth={0.5}  // 더 얇은 선
+    strokeDasharray="5 3"  // 대시라인 스타일
+    dot={false}  // 점 표시하지 않음
+  />
+)}
             <Tooltip
           cursor={{ stroke: "#8884d8", strokeWidth: 1 }}
           content={renderTooltip}

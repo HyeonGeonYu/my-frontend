@@ -30,6 +30,7 @@ export const chartParams = {
     { label: "Live Cattle", key: "live_cattle" },
   ],
   kr_stock: [
+     { label: "삼성전자", key: "삼성전자" },
     { label: "한화오션", key: "한화오션" },
     { label: "현대해상", key: "현대해상" },
   ],

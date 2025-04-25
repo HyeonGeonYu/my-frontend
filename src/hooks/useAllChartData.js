@@ -48,5 +48,6 @@ export const useAllChartData = (endpointPath) => {
         setLoading(false);
       });
   }, [endpointPath])
+
   return { processedData, loading, error };
 };

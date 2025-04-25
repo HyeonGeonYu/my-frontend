@@ -41,7 +41,9 @@ const ChartPage = ({ chartType, title, envelop }) => {
 
   if (loading) return <p>📊 로딩 중...</p>;
   if (error) return <p>❌ {error}</p>;
+
   return (
+
     <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
       <h1 style={{ color: "#00ffcc" }}>{title}</h1>
 
