@@ -6,7 +6,7 @@ import Indexes from "../pages/Indexes";
 import Commodity from "../pages/Commodity";
 import KoreaStock from "../pages/KoreaStock";
 import Others from "../pages/Others";
-import Layout from "../components/Layout"; // ✅ 추가
+import Layout from "../components/Layout";
 
 function AppRouter() {
   return (

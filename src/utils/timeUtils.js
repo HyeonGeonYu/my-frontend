@@ -8,10 +8,15 @@ export const getFormattedTime = () => {
     month: "2-digit",
     day: "2-digit",
   }).format(now);
+  const weekday = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    weekday: "short",
+  }).format(now); // 결과 예시: "월"
 
   // '2025. 04. 14.' → ['2025', '04', '14']
   const [year, month, day] = rawDate.replace(/\.$/, "").split(". ").map((s) => s.trim());
-  const formattedDate = `${year}년 ${month}월 ${day}일`;
+  const formattedDate = `${year}년 ${month}월 ${day}일 (${weekday})`;
+
 
   // 시간 포맷: 오후 4:06
   const formattedTime = new Intl.DateTimeFormat("ko-KR", {

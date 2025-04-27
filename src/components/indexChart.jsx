@@ -230,58 +230,62 @@ const renderTooltip = ({ active, payload, label }) => {
               tick={{ fill: "#fff", fontSize: 12 }}
             />
 
-    <YAxis
-          yAxisId="left"
-          domain={["auto", "auto"]}
-          tick={{ fill: "#fff", fontSize: 12 }}
-          label={{
-            value: "가격",
-            angle: -90,
-            position: "insideLeft",
-            fill: "#fff",
-            style: { textAnchor: "middle" }
-          }}
-        />
-
-          {hasShortRatio && (
             <YAxis
-              yAxisId="right"
-              orientation="right"
-              domain={[0, 'auto']}
-              tick={{ fill: "#fff", fontSize: 12 }}
-              label={{
-                value: "공매도 비율 (%)",
-                angle: 90,
-                position: "insideRight",
-                fill: "#fff",
-                style: { textAnchor: "middle" }
-              }}
-            />
-          )}
+                  yAxisId="left"
+                  domain={["auto", "auto"]}
+                  tick={{ fill: "#fff", fontSize: 12 }}
+                  label={{
+                    value: "가격",
+                    angle: -90,
+                    position: "insideLeft",
+                    fill: "#fff",
+                    style: { textAnchor: "middle" }
+                  }}
+                />
+
+            {hasShortRatio && (
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  domain={[0, 'auto']}
+                  ticks={[0, 0.05, 0.1]}
+                  tick={{ fill: "#fff", fontSize: 12 }}
+                  label={{
+                    value: "공매도 비율 (%)",
+                    angle: 90,
+                    position: "insideRight",
+                    fill: "#fff",
+                    style: { textAnchor: "middle" }
+                  }}
+                />
+              )}
             {/* 왼쪽 Y축 라인들 */}
-          {chartLines.map(({ dataKey, stroke, strokeWidth = 2 }, index) => (
-            <Line
-              key={index}
-              yAxisId="left"
-              type="monotone"
-              dataKey={dataKey}
-              stroke={stroke}
-              strokeWidth={strokeWidth}
-              dot={false}
-            />
-          ))}
+          {chartLines
+              .filter(line => line.dataKey !== 'short_ratio')
+              .map(({ dataKey, stroke, strokeWidth = 2 }, index) => (
+                <Line
+                  key={index}
+                  yAxisId="left"
+                  type="monotone"
+                  domain={['auto', 'auto']}
+                  dataKey={dataKey}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  dot={false}
+                />
+              ))}
 
           {/* 오른쪽 Y축 라인 (short_ratio) */}
          {hasShortRatio && (
-  <Line
-    yAxisId="right"
-    type="monotone"
-    dataKey="short_ratio"
-    stroke="rgba(136, 132, 216, 1)"  // 흐릿한 보라색 (투명도 0.2)
-    strokeWidth={0.5}  // 더 얇은 선
-    strokeDasharray="5 3"  // 대시라인 스타일
-    dot={false}  // 점 표시하지 않음
-  />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="short_ratio"
+                stroke="rgba(136, 132, 216, 1)"  // 흐릿한 보라색 (투명도 0.2)
+                strokeWidth={1}  // 더 얇은 선
+                strokeDasharray="5 3"  // 대시라인 스타일
+                dot={false}  // 점 표시하지 않음
+              />
 )}
             <Tooltip
           cursor={{ stroke: "#8884d8", strokeWidth: 1 }}

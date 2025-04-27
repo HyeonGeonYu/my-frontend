@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { getFormattedTime } from "../utils/timeUtils";
 
 export const useCurrentTime = () => {
-  const [currentTime, setCurrentTime] = useState({ date: "", time: "" });
+  const [currentTime, setCurrentTime] = useState(getFormattedTime());
+
 
   useEffect(() => {
     const updateTime = () => {
