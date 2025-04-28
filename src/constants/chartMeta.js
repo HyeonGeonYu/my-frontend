@@ -34,4 +34,8 @@ export const chartParams = {
     { label: "한화오션", key: "한화오션" },
     { label: "현대해상", key: "현대해상" },
   ],
+   us_stock: [
+     { label: "Tesla", key: "tesla" },
+    ],
+
 };
