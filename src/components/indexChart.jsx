@@ -170,25 +170,25 @@ const renderTooltip = ({ active, payload, label }) => {
   };
 
   return (
-    <div style={{
-      background: "#222",
-      padding: "20px",
-      borderRadius: "12px",
-      color: "#fff",
-      width: "100%",
-      maxWidth: "500px",
-      display: "flex",
-      flexDirection: "column",  // 세로 방향으로 배치
-      justifyContent: "center",
-      alignItems: "center",
-      border: `2px solid ${borderColor}` // 조건부 테두리 색상
-    }}>
-      {/* 제목 */}
       <div style={{
+        background: "#222",
+        padding: "20px",
+        borderRadius: "12px",
+        color: "#fff",
         width: "100%",
-        textAlign: "right",
-        marginBottom: "10px"
+        maxWidth: "500px",
+        display: "flex",
+        flexDirection: "column",  // 세로 방향으로 배치
+        justifyContent: "center",
+        alignItems: "center",
+        border: `2px solid ${borderColor}` // 조건부 테두리 색상
       }}>
+        {/* 제목 */}
+        <div style={{
+          width: "100%",
+          textAlign: "right",
+          marginBottom: "10px"
+        }}>
         <span style={{
           fontSize: "0.8rem",
           color: "#aaa",
@@ -197,205 +197,221 @@ const renderTooltip = ({ active, payload, label }) => {
           업데이트: {howLongAgo}
 
         </span>
-      </div>
-      <h2 style={{
-        marginBottom: "10px",
-        color: "#00ffcc",
-        textAlign: "center"
-      }}>
-        {dataName}
-        <span style={{
-          fontSize: "0.7rem",
-          color: "#aaa",
-          marginLeft: "10px",
+        </div>
+        <h2 style={{
+          marginBottom: "5px",
+          color: "#00ffcc",
+          textAlign: "center"
         }}>
-          <span style={{
-            color: diffColor, // diffColor는 diffValue가 양수일 때와 음수일 때 색상이 바뀌는 값으로 설정
-             textAlign: "right",  // 오른쪽 정렬
-            fontSize: "0.9rem",
-          }}>
-  {`(${diffValue >= 0 ? '+' : ''}${diffValue.toFixed(2)} (${diffPercentage >= 0 ? '+' : ''}${diffPercentage}%))`}
-</span>
-        </span>
-      </h2>
-      {/* 차트 영역 */}
-      <div style={{width: "100%"}}>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={data}>
-            <CartesianGrid stroke="#666" strokeDasharray="3 3" />
-            <XAxis
-              dataKey="date"
-              ticks={Object.values(firstDaysByMonth)}
-              tickFormatter={(tickItem) => formatXAxis(tickItem)}
-              tick={{ fill: "#fff", fontSize: 12 }}
-            />
+          {dataName}
+        </h2>
 
-            <YAxis
+        <div style={{
+          textAlign: "center",
+          color: diffColor,
+          fontSize: "0.9rem",
+        }}>
+  <span style={{display: "inline-block", minWidth: "100px"}}>
+    종가: <strong>{close.toFixed(2)}</strong>
+  </span>
+          <span style={{
+            display: "inline-block",
+            minWidth: "100px",
+            fontWeight: Math.abs(diffPercentage) >= 3 ? "bold" : "normal"
+          }}>
+    {(() => {
+      const isPositive = diffValue >= 0;
+      const absValue = Math.abs(diffValue);
+      const absPercent = Math.abs(diffPercentage);
+      const symbol = absPercent >= 3
+          ? (isPositive ? '↑' : '↓')
+          : (isPositive ? '▲' : '▼');
+      return `${symbol} ${absValue.toFixed(2)}`;
+    })()}
+  </span>
+          <span style={{display: "inline-block", minWidth: "100px"}}>
+    ({diffPercentage >= 0 ? '+' : ''}{diffPercentage}%)
+  </span>
+        </div>
+
+        {/* 차트 영역 */}
+        <div style={{width: "100%"}}>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={data}>
+              <CartesianGrid stroke="#666" strokeDasharray="3 3"/>
+              <XAxis
+                  dataKey="date"
+                  ticks={Object.values(firstDaysByMonth)}
+                  tickFormatter={(tickItem) => formatXAxis(tickItem)}
+                  tick={{fill: "#fff", fontSize: 12}}
+              />
+
+              <YAxis
                   yAxisId="left"
                   domain={["auto", "auto"]}
-                  tick={{ fill: "#fff", fontSize: 12 }}
+                  tick={{fill: "#fff", fontSize: 12}}
                   label={{
                     value: "가격",
                     angle: -90,
                     position: "insideLeft",
                     fill: "#fff",
-                    style: { textAnchor: "middle" }
+                    style: {textAnchor: "middle"}
                   }}
-                />
-
-            {hasShortRatio && (
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  domain={[0, 'auto']}
-                  ticks={[0, 0.05, 0.1]}
-                  tick={{ fill: "#fff", fontSize: 12 }}
-                  label={{
-                    value: "공매도 비율 (%)",
-                    angle: 90,
-                    position: "insideRight",
-                    fill: "#fff",
-                    style: { textAnchor: "middle" }
-                  }}
-                />
-              )}
-            {/* 왼쪽 Y축 라인들 */}
-          {chartLines
-              .filter(line => line.dataKey !== 'short_ratio')
-              .map(({ dataKey, stroke, strokeWidth = 2 }, index) => (
-                <Line
-                  key={index}
-                  yAxisId="left"
-                  type="monotone"
-                  domain={['auto', 'auto']}
-                  dataKey={dataKey}
-                  stroke={stroke}
-                  strokeWidth={strokeWidth}
-                  dot={false}
-                />
-              ))}
-
-          {/* 오른쪽 Y축 라인 (short_ratio) */}
-         {hasShortRatio && (
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="short_ratio"
-                stroke="rgba(136, 132, 216, 1)"  // 흐릿한 보라색 (투명도 0.2)
-                strokeWidth={1}  // 더 얇은 선
-                strokeDasharray="5 3"  // 대시라인 스타일
-                dot={false}  // 점 표시하지 않음
               />
-)}
-            <Tooltip
-          cursor={{ stroke: "#8884d8", strokeWidth: 1 }}
-          content={renderTooltip}
 
-        />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      {/* 내용 영역 */}
-      {customTooltip?.payload?.length > 0 && (
-        <div style={{
-          marginTop: "10px",
-          backgroundColor: "#333",
-          padding: "10px",
-          borderRadius: "8px",
-          color: "#fff",
-          width: "100%",
-        }}>
-          {/* 날짜 표시 */}
-          {customTooltip.label && (
-            <div style={{
-              marginBottom: "8px",
-              paddingBottom: "8px",
-              borderBottom: "2px solid #555",
-              fontWeight: "bold",
-              textAlign: "center",
-              fontSize: "16px"
-            }}>
-              {dayjs(customTooltip.label).format("MM/DD (dd)")}
-            </div>
-          )}
+              {hasShortRatio && (
+                  <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      domain={[0, 'auto']}
+                      ticks={[0, 0.05, 0.1]}
+                      tick={{fill: "#fff", fontSize: 12}}
+                      label={{
+                        value: "공매도 비율 (%)",
+                        angle: 90,
+                        position: "insideRight",
+                        fill: "#fff",
+                        style: {textAnchor: "middle"}
+                      }}
+                  />
+              )}
+              {/* 왼쪽 Y축 라인들 */}
+              {chartLines
+                  .filter(line => line.dataKey !== 'short_ratio')
+                  .map(({dataKey, stroke, strokeWidth = 2}, index) => (
+                      <Line
+                          key={index}
+                          yAxisId="left"
+                          type="monotone"
+                          domain={['auto', 'auto']}
+                          dataKey={dataKey}
+                          stroke={stroke}
+                          strokeWidth={strokeWidth}
+                          dot={false}
+                      />
+                  ))}
 
-          {/* 데이터 표 형태 */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "auto 1fr auto 1fr",
-            border: "2px solid #444",
-          }}>
-            {/* 1행: 종가 | 이평선+10% */}
-            <Cell label="종가" color={customTooltip?.payload[0]?.color} border />
-            <Cell value={customTooltip.payload[0]?.value.toFixed(2)} align="right" border />
-            <Cell label={getPrettyName("envelope10_upper")} color={customTooltip?.payload[2]?.color} border />
-            <Cell value={customTooltip.payload[2]?.value.toFixed(2)} align="right" />
+              {/* 오른쪽 Y축 라인 (short_ratio) */}
+              {hasShortRatio && (
+                  <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="short_ratio"
+                      stroke="rgba(136, 132, 216, 1)"  // 흐릿한 보라색 (투명도 0.2)
+                      strokeWidth={1}  // 더 얇은 선
+                      strokeDasharray="5 3"  // 대시라인 스타일
+                      dot={false}  // 점 표시하지 않음
+                  />
+              )}
+              <Tooltip
+                  cursor={{stroke: "#8884d8", strokeWidth: 1}}
+                  content={renderTooltip}
 
-            {/* 2행: 이평선대비 (값) | 이평선 */}
-            <Cell
-              label="이평선대비 (값)"
-              color={
-                customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
-                  ? customTooltip?.payload[2]?.color
-                  : customTooltip?.payload[3]?.color
-              }
-              background="#2a2a2a"
-              border
-            />
-
-            <Cell
-              value={(() => {
-                if (!customTooltip.payload[1]) return "-";
-                const diff = customTooltip.payload[0].value - customTooltip.payload[1].value;
-                const sign = diff > 0 ? "+" : "";
-                return `${sign}${diff.toFixed(2)}`;
-              })()}
-              align="right"
-              background="#2a2a2a"
-              color={
-                customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
-                  ? customTooltip?.payload[2]?.color
-                  : customTooltip?.payload[3]?.color
-              }
-              border
-            />
-            <Cell label={getPrettyName("ma100")} color={customTooltip?.payload[1]?.color} border />
-            <Cell value={customTooltip.payload[1]?.value.toFixed(2)} align="right" />
-
-            {/* 3행: 이평선대비 (%) | 이평선-10% */}
-            <Cell
-              label="이평선대비 (%)"
-              color={
-                customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
-                  ? customTooltip?.payload[2]?.color
-                  : customTooltip?.payload[3]?.color
-              }
-              background="#2a2a2a"
-              border
-            />
-            <Cell
-              value={(() => {
-                if (!customTooltip.payload[1]) return "-";
-                const percent =
-                  ((customTooltip.payload[0].value - customTooltip.payload[1].value) / customTooltip.payload[1].value) * 100;
-                const sign = percent > 0 ? "+" : "";
-                return `${sign}${percent.toFixed(2)}`;
-              })()}
-              align="right"
-              background="#2a2a2a"
-              color={
-                customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
-                  ? customTooltip?.payload[2]?.color
-                  : customTooltip?.payload[3]?.color
-              }
-              border
-            />
-            <Cell label={getPrettyName("envelope10_lower")} color={customTooltip?.payload[3]?.color} border />
-            <Cell value={customTooltip.payload[3]?.value.toFixed(2)} align="right" />
-          </div>
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-      )}
-    </div>
+        {/* 내용 영역 */}
+        {customTooltip?.payload?.length > 0 && (
+            <div style={{
+              marginTop: "10px",
+              backgroundColor: "#333",
+              padding: "10px",
+              borderRadius: "8px",
+              color: "#fff",
+              width: "100%",
+            }}>
+              {/* 날짜 표시 */}
+              {customTooltip.label && (
+                  <div style={{
+                    marginBottom: "8px",
+                    paddingBottom: "8px",
+                    borderBottom: "2px solid #555",
+                    fontWeight: "bold",
+                    textAlign: "center",
+                    fontSize: "16px"
+                  }}>
+                    {dayjs(customTooltip.label).format("MM/DD (dd)")}
+                  </div>
+              )}
+
+              {/* 데이터 표 형태 */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr auto 1fr",
+                border: "2px solid #444",
+              }}>
+                {/* 1행: 종가 | 이평선+10% */}
+                <Cell label="종가" color={customTooltip?.payload[0]?.color} border/>
+                <Cell value={customTooltip.payload[0]?.value.toFixed(2)} align="right" border/>
+                <Cell label={getPrettyName("envelope10_upper")} color={customTooltip?.payload[2]?.color} border/>
+                <Cell value={customTooltip.payload[2]?.value.toFixed(2)} align="right"/>
+
+                {/* 2행: 이평선대비 (값) | 이평선 */}
+                <Cell
+                    label="이평선대비 (값)"
+                    color={
+                      customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
+                          ? customTooltip?.payload[2]?.color
+                          : customTooltip?.payload[3]?.color
+                    }
+                    background="#2a2a2a"
+                    border
+                />
+
+                <Cell
+                    value={(() => {
+                      if (!customTooltip.payload[1]) return "-";
+                      const diff = customTooltip.payload[0].value - customTooltip.payload[1].value;
+                      const sign = diff > 0 ? "+" : "";
+                      return `${sign}${diff.toFixed(2)}`;
+                    })()}
+                    align="right"
+                    background="#2a2a2a"
+                    color={
+                      customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
+                          ? customTooltip?.payload[2]?.color
+                          : customTooltip?.payload[3]?.color
+                    }
+                    border
+                />
+                <Cell label={getPrettyName("ma100")} color={customTooltip?.payload[1]?.color} border/>
+                <Cell value={customTooltip.payload[1]?.value.toFixed(2)} align="right"/>
+
+                {/* 3행: 이평선대비 (%) | 이평선-10% */}
+                <Cell
+                    label="이평선대비 (%)"
+                    color={
+                      customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
+                          ? customTooltip?.payload[2]?.color
+                          : customTooltip?.payload[3]?.color
+                    }
+                    background="#2a2a2a"
+                    border
+                />
+                <Cell
+                    value={(() => {
+                      if (!customTooltip.payload[1]) return "-";
+                      const percent =
+                          ((customTooltip.payload[0].value - customTooltip.payload[1].value) / customTooltip.payload[1].value) * 100;
+                      const sign = percent > 0 ? "+" : "";
+                      return `${sign}${percent.toFixed(2)}`;
+                    })()}
+                    align="right"
+                    background="#2a2a2a"
+                    color={
+                      customTooltip?.payload[0]?.value - customTooltip?.payload[1]?.value > 0
+                          ? customTooltip?.payload[2]?.color
+                          : customTooltip?.payload[3]?.color
+                    }
+                    border
+                />
+                <Cell label={getPrettyName("envelope10_lower")} color={customTooltip?.payload[3]?.color} border/>
+                <Cell value={customTooltip.payload[3]?.value.toFixed(2)} align="right"/>
+              </div>
+            </div>
+        )}
+      </div>
   );
 }
 
