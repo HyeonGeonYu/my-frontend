@@ -28,7 +28,7 @@ export const useAllChartData = (endpointPath) => {
           if (Array.isArray(originalArray) && originalArray.length > 0) {
             const lastItem = originalArray[originalArray.length - 1];
             extended[key] = {
-              'data' : [...originalArray, lastItem, lastItem, lastItem],
+              'data' : [...originalArray, lastItem],
             'processed_time' : processed_time
             };
           } else {

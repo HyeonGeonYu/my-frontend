@@ -55,21 +55,30 @@ const ChartPage = ({ chartType, title, envelop }) => {
           marginTop: "40px",
         }}
       >
-        {selectedList.map((index) => (
-          <div
-            key={index.label}
-            style={{
-              backgroundColor: "transparent", // 배경을 투명하게 설정
-              padding: "20px",
-              borderRadius: "12px",
-              display: "flex",
-              flexDirection: "column", // 세로로 배치
-              alignItems: "center", // 가로 중앙 정렬
-            }}
-          >
-            <IndexChart dataName={index.label} processedData={processedData[index.key]} envelope={envelope} />
-          </div>
-        ))}
+        {selectedList.map((index) => {
+  const chartData = processedData[index.key];
+  if (!chartData || !chartData.data || chartData.data.length === 0) return null;
+
+  return (
+    <div
+      key={index.label}
+      style={{
+        backgroundColor: "transparent",
+        padding: "20px",
+        borderRadius: "12px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <IndexChart
+        dataName={index.label}
+        processedData={chartData}
+        envelope={envelope}
+      />
+    </div>
+  );
+})}
       </div>
     </div>
   );

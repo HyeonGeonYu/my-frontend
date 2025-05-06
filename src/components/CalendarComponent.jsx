@@ -82,7 +82,7 @@ const MarketHolidaysComponent = () => {
                       })}
                     </ul>
                 ) : (
-                    <p>이번 주에 해당 국가의 공휴일이 없습니다.</p>
+                    <p>해당 국가의 공휴일이 없습니다.</p>
                 )}
               </div>
           );
