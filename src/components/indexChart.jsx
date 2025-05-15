@@ -27,8 +27,8 @@ function IndexChart({ processedData, dataName, envelope }) {
   const baseColor = close > ma100 ? "0, 195, 83" : "255, 82, 82";  // 초록색(양의 변화) 또는 빨간색(음의 변화)
   const borderColor = `rgba(${baseColor}, ${0.4 + intensity * 0.6})`;
 
-  const diffValue = close - data[data.length - 5]?.close; // 전일 대비 차이
-  const diffPercentage = ((diffValue / data[data.length - 5]?.close) * 100).toFixed(2); // 전일 대비 백분율
+  const diffValue = close - data[data.length - 2]?.close; // 전일 대비 차이
+  const diffPercentage = ((diffValue / data[data.length - 1]?.close) * 100).toFixed(2); // 전일 대비 백분율
   const diffColor = diffValue >= 0 ? "#00c853" : "#ff5252"; // +는 초록색, -는 빨간색
 
   const [customTooltip, setCustomTooltip] = useState(null); // 마우스 커서 위치
