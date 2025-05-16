@@ -30,7 +30,6 @@ export const useAllChartData = (endpointInput) => {
         );
 
         const mergedData = {};
-        console.log(results)
         for (const parsed of results) {
           for (const [key, rawData] of Object.entries(parsed)) {
 
