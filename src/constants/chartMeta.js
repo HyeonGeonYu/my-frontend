@@ -1,14 +1,25 @@
 // src/constants/chartMeta.js
 
 export const chartParams = {
+
   index: [
-    { label: "NASDAQ 100", key: "nasdaq100" },
-    { label: "Nikkei 225", key: "nikkei225" },
-    { label: "Hang Seng", key: "hangseng" },
-    { label: "KOSPI 200", key: "kospi200" },
-    { label: "Eurostoxx 50", key: "eurostoxx50" },
-    { label: "DAX", key: "dax" },
+    { label: "미국 NASDAQ 100", key: "nasdaq100" },
+    { label: "일본 Nikkei 225", key: "nikkei225" },
+    { label: "홍콩 Hang Seng", key: "hangseng" },
+    { label: "한국 KOSPI 200", key: "kospi200" },
+    { label: "유로 Eurostoxx 50", key: "eurostoxx50" },
+    { label: "독일 DAX", key: "dax" },
   ],
+  treasury: [
+    { label: "미국 10 years yield", key: "us-t10" },
+    { label: "일본 10 years yield", key: "jp-t10" },
+    { label: "한국 3 years yield", key: "kr-t3" },
+  ],
+  calculated_dxy: [
+    { label: "Dollar index", key: "dxy" },
+  ],
+
+
   currency: [
   { label: "1 USD → KRW (한국 원)", key: "usd_krw" },
   { label: "Dollar Index (DXY)", key: "usd_dxy" },

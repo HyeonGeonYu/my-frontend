@@ -47,11 +47,11 @@ function AppRouter() {
 
 const navItems = [
   { path: "/", label: "홈" },
-  { path: "/exchange", label: "환율관련" },
-  { path: "/indexes", label: "지수관련" },
-  { path: "/commodity", label: "원자재관련" },
-    { path: "/koreastock", label: "국내개별주관련" },
-     { path: "/usstock", label: "해외개별주관련" },
+  { path: "/exchange", label: "환율, 채권 관련" },
+  { path: "/indexes", label: "지수 관련" },
+  { path: "/commodity", label: "원자재 관련" },
+  { path: "/koreastock", label: "국내 개별주 관련" },
+ { path: "/usstock", label: "해외 개별주 관련" },
   { path: "/others", label: "기타" },
 ];
 

@@ -4,8 +4,8 @@ import ChartPage from "../components/ChartPage";
 function Exchange() {
   return (
     <ChartPage
-      chartType="currency"
-      title="환율 관련(+-3%)"
+      chartType={["calculated_dxy", "currency", "treasury"]}  // 배열로 입력 가능
+      title="환율 및 채권 관련(+-3%)"
       envelop={3}
     />
   );

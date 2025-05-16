@@ -7,9 +7,11 @@ const ChartPage = ({ chartType, title, envelop }) => {
 
   // `chartType`에 따라 데이터를 가져옵니다.
   const { processedData, loading, error } = useAllChartData(chartType);
-  const envelope = envelop;
-  const selectedList = chartParams[chartType] || [];
 
+  const envelope = envelop;
+  const chartTypeList = Array.isArray(chartType) ? chartType : [chartType];
+
+  const selectedList = chartTypeList.flatMap((type) => chartParams[type] || []);
   // 그리드 열 수를 동적으로 설정
   const [gridColumns, setGridColumns] = useState("1fr"); // 기본 1개의 열로 설정
 
@@ -57,6 +59,7 @@ const ChartPage = ({ chartType, title, envelop }) => {
       >
         {selectedList.map((index) => {
   const chartData = processedData[index.key];
+
   if (!chartData || !chartData.data || chartData.data.length === 0) return null;
 
   return (
