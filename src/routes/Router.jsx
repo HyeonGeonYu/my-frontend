@@ -14,19 +14,20 @@ function AppRouter() {
     <Router>
       {/* 공통 네비게이션 */}
       <nav style={navStyle}>
-        {navItems.map(({ path, label }) => (
-          <NavLink
-            key={path}
-            to={path}
-            style={({ isActive }) => ({
-              ...linkStyle,
-              backgroundColor: isActive ? "#00ffcc33" : "transparent",
-              borderColor: isActive ? "#00ffcc" : "#444"
-            })}
-          >
-            {label}
-          </NavLink>
-        ))}
+        {navItems.map(({ path, label, emoji }) => (
+  <NavLink
+    key={path}
+    to={path}
+    style={({ isActive }) => ({
+      ...linkStyle,
+      backgroundColor: isActive ? "#00ffcc33" : "transparent",
+      borderColor: isActive ? "#00ffcc" : "#444"
+    })}
+  >
+    <span style={{ marginRight: "6px" }}>{label}</span>
+    {emoji}
+  </NavLink>
+))}
       </nav>
 
       {/* 페이지 내용은 공통 레이아웃 안에서 렌더링 */}
@@ -46,13 +47,13 @@ function AppRouter() {
 }
 
 const navItems = [
-  { path: "/", label: "홈" },
-  { path: "/exchange", label: "환율, 채권 관련" },
-  { path: "/indexes", label: "지수 관련" },
-  { path: "/commodity", label: "원자재 관련" },
-  { path: "/koreastock", label: "국내 개별주 관련" },
- { path: "/usstock", label: "해외 개별주 관련" },
-  { path: "/others", label: "기타" },
+  { path: "/", label: "홈", emoji: "🏠" },
+  { path: "/exchange", label: "환율, 채권", emoji: "💱" },
+  { path: "/indexes", label: "지수", emoji: "📈" },
+  { path: "/commodity", label: "원자재", emoji: "⛏️" },
+  { path: "/koreastock", label: "국내 개별주", emoji: "📊🇰🇷" },
+  { path: "/usstock", label: "해외 개별주", emoji: "📊🇺🇸" },
+  { path: "/others", label: "기타", emoji: "🔧" },
 ];
 
 const navStyle = {

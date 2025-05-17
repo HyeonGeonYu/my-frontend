@@ -15,14 +15,9 @@ export const chartParams = {
     { label: "일본 10 years yield", key: "jp-t10" },
     { label: "한국 3 years yield", key: "kr-t3" },
   ],
-  calculated_dxy: [
-    { label: "Dollar index", key: "dxy" },
-  ],
-
-
   currency: [
+  { label: "Dollar Index", key: "dxy" },
   { label: "1 USD → KRW (한국 원)", key: "usd_krw" },
-  { label: "Dollar Index (DXY)", key: "usd_dxy" },
   { label: "1 USD → JPY (일본 엔)", key: "usd_jpy" },
   { label: "1 USD → CNY (중국 위안)", key: "usd_cny" },
   { label: "1 USD → EUR (유로)", key: "usd_eur" },
