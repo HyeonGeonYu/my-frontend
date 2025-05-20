@@ -32,6 +32,7 @@ export const chartParams = {
     { label: "Crude Oil", key: "crude_oil" },
     { label: "Natural Gas", key: "natural_gas" },
     { label: "Corn", key: "corn" },
+    { label: "Coffe", key: "coffe" },
     { label: "Wheat", key: "wheat" },
     { label: "Live Cattle", key: "live_cattle" },
   ],
