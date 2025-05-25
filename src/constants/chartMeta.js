@@ -5,7 +5,9 @@ export const chartParams = {
   index: [
     { label: "미국 NASDAQ 100", key: "nasdaq100" },
     { label: "일본 Nikkei 225", key: "nikkei225" },
+    { label: "중국 Shanghai A", key: "ShanghaiA" },
     { label: "홍콩 Hang Seng", key: "hangseng" },
+    { label: "인도 BSE30", key: "BSE30" },
     { label: "한국 KOSPI 200", key: "kospi200" },
     { label: "유로 Eurostoxx 50", key: "eurostoxx50" },
     { label: "독일 DAX", key: "dax" },
@@ -32,7 +34,7 @@ export const chartParams = {
     { label: "Crude Oil", key: "crude_oil" },
     { label: "Natural Gas", key: "natural_gas" },
     { label: "Corn", key: "corn" },
-    { label: "Coffe", key: "coffe" },
+    { label: "Coffee", key: "coffee" },
     { label: "Wheat", key: "wheat" },
     { label: "Live Cattle", key: "live_cattle" },
   ],
