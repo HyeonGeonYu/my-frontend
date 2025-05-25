@@ -1,5 +1,5 @@
 // src/constants/newsMeta.js
 
 export const newsParams = {
-    order: ["Korea", "USA", "Japan", "China"]
+    order: ["Korea", "Japan", "China", "USA", "Germany", "UK", "India"]
 };
