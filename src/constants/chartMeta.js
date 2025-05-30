@@ -22,6 +22,7 @@ export const chartParams = {
   { label: "1 USD → KRW (한국 원)", key: "usd_krw" },
   { label: "1 USD → JPY (일본 엔)", key: "usd_jpy" },
   { label: "1 USD → CNY (중국 위안)", key: "usd_cny" },
+  { label: "1 USD → HKD (홍콩 달러)", key: "usd_hkd" },
   { label: "1 USD → EUR (유로)", key: "usd_eur" },
   { label: "1 USD → GBP (영국 파운드)", key: "usd_gbp" },
   { label: "1 USD → INR (인도 루피)", key: "usd_inr" },
