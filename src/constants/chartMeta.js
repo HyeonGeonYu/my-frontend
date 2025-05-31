@@ -42,7 +42,7 @@ export const chartParams = {
   kr_stock: [
      { label: "삼성전자", key: "삼성전자" },
     { label: "한화오션", key: "한화오션" },
-    { label: "현대해상", key: "현대해상" },
+    { label: "카카오", key: "카카오" },
   ],
    us_stock: [
      { label: "Tesla", key: "tesla" },
