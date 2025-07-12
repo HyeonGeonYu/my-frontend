@@ -1,6 +1,42 @@
 import React, { useState } from "react";
 import { useDailySavedData } from "../hooks/useDailySavedData";
 import { newsParams } from "../constants/newsMeta";
+import { ClipboardCopy, Check } from "lucide-react";
+
+// CopyButton 컴포넌트
+function CopyButton({ text, size = 18 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (e) {
+      alert("복사 실패!");
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      title="복사하기"
+      style={{
+        background: "none",
+        border: "none",
+        position: "absolute",
+        top: 8,
+        right: 8,
+        cursor: "pointer",
+        color: "#00ffcc",
+        padding: 2,
+        zIndex: 10,
+      }}
+    >
+      {copied ? <Check size={size} /> : <ClipboardCopy size={size} />}
+    </button>
+  );
+}
 
 // 날짜 포맷 함수: 20250619 → 2025년 6월 19일 (목요일)
 const formatDateWithDay = (dateStr) => {
@@ -116,6 +152,7 @@ function Archive() {
                                           borderRadius: "6px",
                                         }}
                                     >
+                                      <CopyButton text={info.summary_result} />
                                       <strong>🧾 summary_result:</strong>
                                       <pre style={{whiteSpace: "pre-wrap", marginTop: "4px", color: "#ccc"}}>
                                   {info.summary_result}
@@ -149,8 +186,10 @@ function Archive() {
                                       backgroundColor: "#222",
                                       padding: "8px",
                                       borderRadius: "6px",
+                                      position: "relative", // 복사 버튼 위치 위해 추가
                                     }}
                                 >
+                                  <CopyButton text={info.summary_content || ""} />
                                   <strong>📄 summary_content:</strong>
                                   <br/>
                                   {info.summary_content || "내용 없음"}
