@@ -6,8 +6,8 @@ import Indexes from "../pages/Indexes";
 import Commodity from "../pages/Commodity";
 import KoreaStock from "../pages/KoreaStock";
 import UsStock from "../pages/UsStock";
-import Archive from "../pages/Archive";
 import Coin from "../pages/Coin";
+import Archive from "../pages/Archive";
 import Others from "../pages/Others";
 import Layout from "../components/Layout";
 
@@ -41,8 +41,8 @@ function AppRouter() {
           <Route path="/commodity" element={<Commodity />} />
           <Route path="/koreastock" element={<KoreaStock />} />
           <Route path="/usstock" element={<UsStock />} />
-          <Route path="/archive" element={<Archive />} />
           <Route path="/coin" element={<Coin />} />
+          <Route path="/archive" element={<Archive />} />
           <Route path="/others" element={<Others />} />
         </Route>
       </Routes>
@@ -57,8 +57,8 @@ const navItems = [
   { path: "/commodity", label: "원자재", emoji: "⛏️" },
   { path: "/koreastock", label: "국내 개별주", emoji: "📊🇰🇷" },
   { path: "/usstock", label: "해외 개별주", emoji: "📊🇺🇸" },
-  { path: "/archive", label: "아카이브", emoji: "🗂️" },
   { path: "/coin", label: "코인", emoji: "🪙" },
+  { path: "/archive", label: "아카이브", emoji: "🗂️" },
   { path: "/others", label: "기타", emoji: "🔧" },
 ];
 

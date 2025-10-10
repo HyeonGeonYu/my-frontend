@@ -4,7 +4,7 @@ import { newsParams } from "../constants/newsMeta";
 import { ClipboardCopy, Check } from "lucide-react";
 
 // CopyButton 컴포넌트
-function CopyButton({ text, size = 18 }) {
+function CopyButton({ text, size = 18, absolute = true, titleLabel = "복사하기" }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -20,13 +20,13 @@ function CopyButton({ text, size = 18 }) {
   return (
     <button
       onClick={handleCopy}
-      title="복사하기"
+      title={titleLabel}
       style={{
         background: "none",
         border: "none",
-        position: "absolute",
-        top: 8,
-        right: 8,
+        position: absolute ? "absolute" : "static",
+        top: absolute ? 8 : undefined,
+        right: absolute ? 8 : undefined,
         cursor: "pointer",
         color: "#00ffcc",
         padding: 2,
@@ -37,6 +37,25 @@ function CopyButton({ text, size = 18 }) {
     </button>
   );
 }
+
+const buildNewsPrompt = (content = "") => {
+  const base = (content || "").trim();
+  const promptTail =
+    "\n\n---\n\n" +
+    "위 뉴스 전체 내용을 기반으로 각 뉴스 항목별로 정리해줘.\n" +
+    "뉴스가 여러 개일 경우 **각 뉴스마다 아래 형식**을 반복해서 작성해줘:\n\n" +
+    "(대제목으로 1,2,3...) 1. 🗞️ [뉴스 제목 혹은 주제 요약] \n\n" +
+    "✅ 한줄 요약: (핵심 사건을 한 문장으로)\n" +
+    "🔥 주요 쟁점:\n" +
+    "(들여쓰기 4칸 보기편하게)1) ...\n" +
+    "(들여쓰기 4칸 보기편하게)2) ...\n" +
+    "(들여쓰기 4칸 보기편하게)3) ...\n\n" +
+    "각 뉴스는 명확히 구분해서 작성해\n" +
+    "정리 순서는 뉴스 등장 순서와 같게 해줘.\n" +
+    "반드시 한글,한국어로만 작성해.";
+  return base + promptTail;
+};
+
 
 // 날짜 포맷 함수: 20250619 → 2025년 6월 19일 (목요일)
 const formatDateWithDay = (dateStr) => {
@@ -180,20 +199,46 @@ function Archive() {
                             </button>
 
                             {expandedSummary[summaryKey] && (
+                              <div
+                                style={{
+                                  marginTop: "6px",
+                                  backgroundColor: "#222",
+                                  padding: "10px 12px",
+                                  borderRadius: "6px",
+                                  position: "relative", // ✅ 버튼 위치 기준
+                                }}
+                              >
+                                {/* 왼쪽 라벨 */}
+                                <strong style={{ color: "#fff", display: "inline-block" }}>
+                                  📄 summary_content:
+                                </strong>
+
+                                {/* 👉 오른쪽 끝에 고정되는 버튼 그룹 */}
                                 <div
-                                    style={{
-                                      marginTop: "6px",
-                                      backgroundColor: "#222",
-                                      padding: "8px",
-                                      borderRadius: "6px",
-                                      position: "relative", // 복사 버튼 위치 위해 추가
-                                    }}
+                                  style={{
+                                    position: "absolute",
+                                    top: 8,
+                                    right: 12,                // ✅ 박스 오른쪽 끝에 밀착
+                                    display: "flex",
+                                    gap: 8,
+                                    alignItems: "center",
+                                  }}
                                 >
-                                  <CopyButton text={info.summary_content || ""} />
-                                  <strong>📄 summary_content:</strong>
-                                  <br/>
-                                  {info.summary_content || "내용 없음"}
+                                  <CopyButton
+                                    text={info.summary_content || ""}
+                                    absolute={false}          // ✅ 내부 버튼은 absolute 아님
+                                    titleLabel="원문 복사"
+                                  />
+                                  <CopyButton
+                                    text={buildNewsPrompt(info.summary_content || "")}
+                                    absolute={false}
+                                    titleLabel="원문+프롬프트 복사"
+                                  />
                                 </div>
+                              <br/>
+                                {/* 본문 */}
+                                  {info.summary_content || "내용 없음"}
+                              </div>
                             )}
                           </div>
                         </div>
