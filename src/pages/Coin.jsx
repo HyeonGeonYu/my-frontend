@@ -144,13 +144,11 @@ export default function Coin() {
         const restPath = `/api/kline?category=linear&symbol=BTCUSDT&interval=${interval}&limit=300`;
         const resp = await fetch(restPath);
         const txt = await resp.text();
-
+        const json = JSON.parse(txt);
         // JSON 아닌 경우(리라이트/경로 문제) 바로 확인
         if (!resp.headers.get("content-type")?.includes("application/json")) {
           throw new Error("Not JSON: " + txt.slice(0, 200));
         }
-
-        const json = JSON.parse(txt);
         const rows = json?.result?.list || [];
         const data = rows
           .map(r => ({
