@@ -5,6 +5,9 @@
         serve -s build
 (서버 백엔드씀)
 
+npm i -g vercel
+vercel dev
+
 # 게시판 추가
 1. Router.jsx 에서 아래 추가
 import Archive from "../pages/Archive";

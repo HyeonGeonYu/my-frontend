@@ -141,13 +141,16 @@ export default function Coin() {
     // 초기 300개 (REST)
     (async () => {
       try {
-        const url = new URL("/v5/market/kline", window.location.origin);
-        url.searchParams.set("category", "linear");
-        url.searchParams.set("symbol", "BTCUSDT");
-        url.searchParams.set("interval", interval); // "1"|"D"
-        url.searchParams.set("limit", "300");
-        const resp = await fetch(url.toString());
-        const json = await resp.json();
+        const restPath = `/api/kline?category=linear&symbol=BTCUSDT&interval=${interval}&limit=300`;
+        const resp = await fetch(restPath);
+        const txt = await resp.text();
+
+        // JSON 아닌 경우(리라이트/경로 문제) 바로 확인
+        if (!resp.headers.get("content-type")?.includes("application/json")) {
+          throw new Error("Not JSON: " + txt.slice(0, 200));
+        }
+
+        const json = JSON.parse(txt);
         const rows = json?.result?.list || [];
         const data = rows
           .map(r => ({
@@ -158,14 +161,16 @@ export default function Coin() {
             close:Number(r[4]),
           }))
           .reverse();
+
         if (versionRef.current === myVersion && seriesRef.current && data.length) {
           seriesRef.current.setData(data);
         }
       } catch (e) {
-          console.error("[REST] failed", e);
+        console.error("[REST] failed", e);
         console.warn("kline REST failed", e);
       }
     })();
+
 
     // 실시간 Kline WS
     const wsUrl = "wss://stream.bybit.com/v5/public/linear";
