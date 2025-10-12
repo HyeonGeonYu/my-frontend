@@ -14,12 +14,12 @@
     "axios": "^1.8.4",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.13",
+    "fflate": "^0.8.2",
     "lightweight-charts": "^4.2.3",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.5.0",
-    "react-scripts": "5.0.1",
     "recharts": "^2.15.2",
     "web-vitals": "^2.1.4"
   },
@@ -47,5 +47,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "react-scripts": "^5.0.1"
   }
 }
