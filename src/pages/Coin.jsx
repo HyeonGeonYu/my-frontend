@@ -2,9 +2,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { createChart } from "lightweight-charts";
 
-/** ─────────────────────────────────────────────────────────
- * 공통 유틸
- * ───────────────────────────────────────────────────────── */
 const KST_OFFSET_SEC = 9 * 3600;
 const DAY_SEC = 24 * 3600;
 

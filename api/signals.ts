@@ -13,15 +13,16 @@ function json(payload: unknown, status = 200): Response {
 const DAY_MS = 86_400_000;
 const KST_OFFSET_MS = 9 * 3600 * 1000;
 
-/** 오늘(KST) 포함 최근 n일의 YYYY-MM-DD 배열(오름차순) */
 function lastNDaysKST(n: number): string[] {
   const out: string[] = [];
   const now = Date.now();
   const kstNow = now + KST_OFFSET_MS;
-  const kstMidnight = Math.floor(kstNow / DAY_MS) * DAY_MS; // 오늘 00:00 KST
+  const kstMidnight = Math.floor(kstNow / DAY_MS) * DAY_MS; // KST 자정(UTC 타임라인상)
+
   for (let i = n - 1; i >= 0; i--) {
     const t = kstMidnight - i * DAY_MS;
-    const d = new Date(t - KST_OFFSET_MS); // UTC 기준
+    // 여기서는 추가 보정 없이 UTC getter만 사용
+    const d = new Date(t);
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, "0");
     const dd = String(d.getUTCDate()).padStart(2, "0");
@@ -30,21 +31,24 @@ function lastNDaysKST(n: number): string[] {
   return out;
 }
 
+
 function enumerateDaysKST(fromYmd: string, toYmd: string): string[] {
   const start = new Date(`${fromYmd}T00:00:00+09:00`).getTime();
-  const end = new Date(`${toYmd}T00:00:00+09:00`).getTime();
+  const end   = new Date(`${toYmd}T00:00:00+09:00`).getTime();
   const a = Math.min(start, end);
   const b = Math.max(start, end);
   const out: string[] = [];
+
   for (let t = a; t <= b; t += DAY_MS) {
-    const d = new Date(t);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
+    const d = new Date(t); // 추가 보정 X
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
     out.push(`${y}-${m}-${dd}`);
   }
   return out;
 }
+
 
 /** Upstash HSCAN 결과를 [cursor, array]로 정규화 */
 type HScanTuple = readonly [number | string, string[]];
