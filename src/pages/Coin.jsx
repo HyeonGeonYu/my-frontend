@@ -12,15 +12,25 @@ const DAY_SEC = 24 * 3600;
 function sessionKeyKST_0650(tsSec) {
   // KST로 옮겨서 06:50 오프셋을 뺀 뒤 day 경계로 내림
   const kst = tsSec + KST_OFFSET_SEC;
-  const sessionStartKst = Math.floor((kst - (6*3600 + 50*60)) / DAY_SEC) * DAY_SEC + (6*3600 + 50*60);
+  const sessionStartKst =
+    Math.floor((kst - (6 * 3600 + 50 * 60)) / DAY_SEC) * DAY_SEC +
+    (6 * 3600 + 50 * 60);
   // 라벨은 보기 좋게 KST 날짜(YYYY-MM-DD)로
   const d = new Date((sessionStartKst - KST_OFFSET_SEC) * 1000); // 다시 UTC 기준 Date
-  const yyyy = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric" });
-  const mm   = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit" });
-  const dd   = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", day: "2-digit" });
+  const yyyy = d.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+  });
+  const mm = d.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+  });
+  const dd = d.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    day: "2-digit",
+  });
   return `${yyyy}-${mm}-${dd}`;
 }
-
 
 const getTs = (t) =>
   typeof t === "number" ? t : t && typeof t.timestamp === "number" ? t.timestamp : 0;
@@ -129,7 +139,7 @@ function buildSignalAnnotations(sigs) {
     .map((s) => {
       const ts = s.ts || s.time || s.timeSec;
       const timeSec = s.timeSec ? Number(s.timeSec) : Math.floor(new Date(ts).getTime() / 1000);
-      const sessionKey = sessionKeyKST_0650(timeSec);  // ← 세션 기준 키
+      const sessionKey = sessionKeyKST_0650(timeSec); // ← 세션 기준 키
       return { ...s, timeSec, sessionKey };
     })
     .sort((a, b) => a.timeSec - b.timeSec);
@@ -155,17 +165,33 @@ function buildSignalAnnotations(sigs) {
   const notes = [];
   for (const s of annotated) {
     const isEntry = s.kind === "ENTRY";
-    const isExit  = s.kind === "EXIT";
-    const isLong  = s.side === "LONG";
+    const isExit = s.kind === "EXIT";
+    const isLong = s.side === "LONG";
     const isShort = s.side === "SHORT";
 
     let position = "aboveBar";
     let color = "#ffd166";
     let shape = "arrowDown";
-    if (isEntry && isLong)  { position = "belowBar"; color = "#2fe08d"; shape = "arrowUp"; }
-    if (isEntry && isShort) { position = "aboveBar"; color = "#ff6b6b"; shape = "arrowDown"; }
-    if (isExit  && isLong)  { position = "aboveBar"; color = "#2fe08d"; shape = "arrowDown"; }
-    if (isExit  && isShort) { position = "belowBar"; color = "#ff6b6b"; shape = "arrowUp"; }
+    if (isEntry && isLong) {
+      position = "belowBar";
+      color = "#2fe08d";
+      shape = "arrowUp";
+    }
+    if (isEntry && isShort) {
+      position = "aboveBar";
+      color = "#ff6b6b";
+      shape = "arrowDown";
+    }
+    if (isExit && isLong) {
+      position = "aboveBar";
+      color = "#2fe08d";
+      shape = "arrowDown";
+    }
+    if (isExit && isShort) {
+      position = "belowBar";
+      color = "#ff6b6b";
+      shape = "arrowUp";
+    }
 
     markers.push({ time: s.timeSec, position, color, shape, text: `#${s.seq}` });
     notes.push({
@@ -182,7 +208,6 @@ function buildSignalAnnotations(sigs) {
 
   return { markers, notes };
 }
-
 
 /** ─────────────────────────────────────────────────────────
  * 티커 카드 (WS)
@@ -262,14 +287,11 @@ function TickerCard({ symbol, market = "linear" }) {
           color: up ? "#2fe08d" : "#ff6b6b",
         }}
       >
-        24h {up ? "▲" : "▼"}{" "}
-        {changePct != null ? `${Math.abs(changePct).toFixed(2)}%` : "--"}
+        24h {up ? "▲" : "▼"} {changePct != null ? `${Math.abs(changePct).toFixed(2)}%` : "--"}
       </div>
       <div style={{ fontSize: 12, lineHeight: 1.6, marginTop: 8, opacity: 0.9 }}>
         <div>마크: {mark != null ? fmtUSD(mark) : "--"}</div>
-        {market === "linear" && (
-          <div>펀딩: {funding != null ? `${funding.toFixed(4)}%` : "--"}</div>
-        )}
+        {market === "linear" && <div>펀딩: {funding != null ? `${funding.toFixed(4)}%` : "--"}</div>}
         <div style={{ opacity: 0.7, marginTop: 6 }}>연결: {connected ? "✅" : "❌"}</div>
       </div>
     </div>
@@ -278,22 +300,22 @@ function TickerCard({ symbol, market = "linear" }) {
 
 /** ─────────────────────────────────────────────────────────
  * 차트 패널 (심볼 1개)
- * props: { symbol, globalInterval, dayOffset }
+ * props: { symbol, globalInterval, dayOffset, onBounds }
  *  - 1분봉: REST 10080개 로드, WS 없음, 시그널=윈도우 필터
  *  - 1일봉: REST 300개 + WS 유지, 시그널=7일 전체
  *  - 시그널: 마커엔 #순번만, 아래 패널에 상세(reasons) 나열
  * ───────────────────────────────────────────────────────── */
-function ChartPanel({ symbol, globalInterval, dayOffset }) {
+function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const maSeriesRef = useRef(null);
   const roRef = useRef(null);
   const wsRef = useRef(null);
-  const allBarsRef = useRef([]);  // 1분봉 원본 (10080)
+  const allBarsRef = useRef([]); // 1분봉 원본 (10080)
   const dailyBarsRef = useRef([]); // 일봉 원본
   const markersAllRef = useRef([]); // 7일치 마커 전체
-  const notesAllRef = useRef([]);   // 7일치 노트 전체
+  const notesAllRef = useRef([]); // 7일치 노트 전체
   const [notesView, setNotesView] = useState([]); // 현재 보여줄 노트
   const versionRef = useRef(0);
 
@@ -309,8 +331,8 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
       seriesRef.current.setMarkers(m);
       setNotesView(n);
     } else {
-      seriesRef.current.setMarkers(allM);
-      setNotesView(allN);
+      seriesRef.current.setMarkers([]);
+      setNotesView([]);
     }
   }
 
@@ -321,11 +343,17 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
     const myVersion = ++versionRef.current;
 
     // 정리
-    try { wsRef.current?.close(); } catch {}
+    try {
+      wsRef.current?.close();
+    } catch {}
     wsRef.current = null;
-    try { roRef.current?.disconnect(); } catch {}
+    try {
+      roRef.current?.disconnect();
+    } catch {}
     roRef.current = null;
-    try { chartRef.current?.remove(); } catch {}
+    try {
+      chartRef.current?.remove();
+    } catch {}
     chartRef.current = null;
     seriesRef.current = null;
     maSeriesRef.current = null;
@@ -398,7 +426,8 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
         const restPath = `/api/klines?symbol=${symbol}&interval=${globalInterval}&limit=${limit}`;
         const resp = await fetch(restPath, { cache: "no-store" });
         const json = await resp.json();
-        if (!resp.ok || json?.retCode !== 0) throw new Error(`bad response: ${resp.status}`);
+        if (!resp.ok || json?.retCode !== 0)
+          throw new Error(`bad response: ${resp.status}`);
 
         const rows = Array.isArray(json?.list) ? json.list : [];
         const normalized = rows.map((r) => {
@@ -429,8 +458,17 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
           maSeries.setData(ma100);
           chartRef.current?.timeScale().setVisibleRange({ from: start, to: end });
 
-          // 마커/노트 적용(윈도우 필터)
-          applyMarkersAndNotes(allBarsRef.current, 0, "1");
+          // ▼ dayOffset 이동 가능 범위 계산 후 부모에 전달
+          const hasData = (off) => {
+            const [s, e] = getWindowRangeUtcFromBars(bars, off);
+            if (!s && !e) return false;
+            return bars.some((b) => b.time >= s && b.time < e);
+          };
+          let min = 0,
+            max = 0;
+          while (hasData(min - 1)) min -= 1;
+          while (hasData(max + 1)) max += 1;
+          onBounds?.(symbol, { min, max });
         } else {
           // 일봉
           dailyBarsRef.current = bars;
@@ -438,8 +476,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
           maSeries.setData(calcSMA(bars, 100));
           chartRef.current?.timeScale().fitContent();
 
-          // 마커/노트 적용(7일 전체)
-          applyMarkersAndNotes(dailyBarsRef.current, 0, "D");
+          // 일봉에선 bounds 리포트 불필요
         }
       } catch (e) {
         console.error("[REST] failed", e);
@@ -480,16 +517,24 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
         } catch {}
       };
       ws.onerror = () => {
-        try { ws.close(); } catch {}
+        try {
+          ws.close();
+        } catch {}
       };
     }
 
     return () => {
-      try { wsRef.current?.close(); } catch {}
+      try {
+        wsRef.current?.close();
+      } catch {}
       wsRef.current = null;
-      try { roRef.current?.disconnect(); } catch {}
+      try {
+        roRef.current?.disconnect();
+      } catch {}
       roRef.current = null;
-      try { chart.remove(); } catch {}
+      try {
+        chart.remove();
+      } catch {}
       chartRef.current = null;
       seriesRef.current = null;
       maSeriesRef.current = null;
@@ -512,7 +557,6 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
     const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
     seriesRef.current.setData(priceSlice);
     maSeriesRef.current?.setData(ma100);
-    seriesRef.current.setMarkers([]); // 깜빡임 방지 초기화
     chartRef.current?.timeScale().setVisibleRange({ from: start, to: end });
     applyMarkersAndNotes(bars, dayOffset, "1");
   }, [dayOffset, globalInterval]);
@@ -542,7 +586,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
       />
       {globalInterval === "1" && sUtc ? (
         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          보기(KST): {fmtKSTFull(sUtc + KST_OFFSET_SEC)} ~ {fmtKSTFull(eUtc + KST_OFFSET_SEC)}
+          보기(KST): {fmtKSTFull(sUtc)} ~ {fmtKSTFull(eUtc)}
         </div>
       ) : null}
 
@@ -576,7 +620,8 @@ function ChartPanel({ symbol, globalInterval, dayOffset }) {
                 <div style={{ fontSize: 13, marginBottom: 6 }}>
                   <b>#{n.seq}</b>{" "}
                   <span style={{ opacity: 0.9 }}>
-                    · {n.kind} {n.side} @ {fmtUSD(n.price)} · {fmtKSTFull(n.timeSec + KST_OFFSET_SEC)}
+                    · {n.kind} {n.side} @ {fmtUSD(n.price)} ·{" "}
+                    {fmtKSTFull(n.timeSec + KST_OFFSET_SEC)}
                   </span>
                 </div>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -602,12 +647,50 @@ export default function Coin() {
   // 공통 인터벌 (세 차트 동기)
   const [interval, setInterval_] = useState("1"); // "1" | "D"
   const [dayOffset, setDayOffset] = useState(0); // 1분봉 전/다음날
+
   // 왼쪽 카드용 심볼 세트
   const symbols = [
     { symbol: "BTCUSDT", market: "linear" },
     { symbol: "ETHUSDT", market: "linear" },
-    { symbol: "XAUTUSDT", market: "spot" }, // XAUTUSDT가 spot일 가능성 대비
+    { symbol: "XAUTUSDT", market: "linear" }, // XAUTUSDT가 spot일 가능성 대비
   ];
+  const requiredSymbols = symbols.map((s) => s.symbol);
+
+  // 각 심볼 별 이동 가능 오프셋 범위 수집
+  const [perSymbolBounds, setPerSymbolBounds] = useState({});
+  const onBounds = (symbol, bounds) => {
+    setPerSymbolBounds((prev) => ({ ...prev, [symbol]: bounds }));
+  };
+
+  // 세 차트 모두에 유효한 공통 범위 + 준비 여부
+  const { minOffset, maxOffset, boundsReady } = useMemo(() => {
+    const haveAll = requiredSymbols.every((sym) => perSymbolBounds[sym]);
+    if (!haveAll) return { minOffset: 0, maxOffset: 0, boundsReady: false };
+    const values = requiredSymbols.map((sym) => perSymbolBounds[sym]);
+    const minCommon = Math.max(...values.map((b) => b.min ?? 0));
+    const maxCommon = Math.min(...values.map((b) => b.max ?? 0));
+    return { minOffset: minCommon, maxOffset: maxCommon, boundsReady: true };
+  }, [perSymbolBounds, requiredSymbols]);
+
+  // 🔒 공통 범위가 바뀌거나 인터벌이 1→D/ D→1 전환될 때 dayOffset 자동 클램프
+  useEffect(() => {
+    if (interval !== "1" || !boundsReady) return;
+    if (dayOffset < minOffset) setDayOffset(minOffset);
+    else if (dayOffset > maxOffset) setDayOffset(maxOffset);
+  }, [interval, boundsReady, minOffset, maxOffset]);
+
+  const atMin = interval === "1" && boundsReady && dayOffset <= minOffset;
+  const atMax = interval === "1" && boundsReady && dayOffset >= maxOffset;
+  const disBtnStyle = (disabled) => ({
+    padding: "8px 12px",
+    borderRadius: 10,
+    border: 0,
+    background: disabled ? "#222" : "#2a2a2a",
+    color: "#fff",
+    fontWeight: 700,
+    opacity: disabled ? 0.5 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+  });
 
   return (
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
@@ -667,15 +750,11 @@ export default function Coin() {
                 <div style={{ height: 10 }} />
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
-                    onClick={() => setDayOffset((d) => d - 1)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 10,
-                      border: 0,
-                      background: "#2a2a2a",
-                      color: "#fff",
-                      fontWeight: 700,
-                    }}
+                    onClick={() =>
+                      setDayOffset((d) => Math.max(minOffset, d - 1))
+                    }
+                    disabled={!boundsReady || atMin}
+                    style={disBtnStyle(!boundsReady || atMin)}
                   >
                     ◀ 전날
                   </button>
@@ -693,15 +772,11 @@ export default function Coin() {
                     오늘
                   </button>
                   <button
-                    onClick={() => setDayOffset((d) => d + 1)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 10,
-                      border: 0,
-                      background: "#2a2a2a",
-                      color: "#fff",
-                      fontWeight: 700,
-                    }}
+                    onClick={() =>
+                      setDayOffset((d) => Math.min(maxOffset, d + 1))
+                    }
+                    disabled={!boundsReady || atMax}
+                    style={disBtnStyle(!boundsReady || atMax)}
                   >
                     다음날 ▶
                   </button>
@@ -720,9 +795,24 @@ export default function Coin() {
 
         {/* 오른쪽: 세로 스택 차트 3개 */}
         <div>
-          <ChartPanel symbol="BTCUSDT" globalInterval={interval} dayOffset={dayOffset} />
-          <ChartPanel symbol="ETHUSDT" globalInterval={interval} dayOffset={dayOffset} />
-          <ChartPanel symbol="XAUTUSDT" globalInterval={interval} dayOffset={dayOffset} />
+          <ChartPanel
+            symbol="BTCUSDT"
+            globalInterval={interval}
+            dayOffset={dayOffset}
+            onBounds={onBounds}
+          />
+          <ChartPanel
+            symbol="ETHUSDT"
+            globalInterval={interval}
+            dayOffset={dayOffset}
+            onBounds={onBounds}
+          />
+          <ChartPanel
+            symbol="XAUTUSDT"
+            globalInterval={interval}
+            dayOffset={dayOffset}
+            onBounds={onBounds}
+          />
         </div>
       </div>
     </div>
