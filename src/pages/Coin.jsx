@@ -454,10 +454,18 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
           const forMa = sliceWithBuffer(bars, start, end, 99);
           const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
 
-          candleSeries.setData(priceSlice);
-          maSeries.setData(ma100);
-          chartRef.current?.timeScale().setVisibleRange({ from: start, to: end });
-
+             if (priceSlice.length > 0) {
+               candleSeries.setData(priceSlice);
+               maSeries.setData(ma100);
+               const from = priceSlice[0].time;
+               const to   = priceSlice[priceSlice.length - 1].time;
+               chartRef.current?.timeScale().setVisibleRange({ from, to });
+             } else {
+               // 데이터가 없으면 visibleRange를 건드리지 않음
+               candleSeries.setData([]);
+               maSeries.setData([]);
+               chartRef.current?.timeScale().fitContent();
+             }
           // ▼ dayOffset 이동 가능 범위 계산 후 부모에 전달
           const hasData = (off) => {
             const [s, e] = getWindowRangeUtcFromBars(bars, off);
@@ -556,8 +564,14 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
     const forMa = sliceWithBuffer(bars, start, end, 99);
     const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
     seriesRef.current.setData(priceSlice);
-    maSeriesRef.current?.setData(ma100);
-    chartRef.current?.timeScale().setVisibleRange({ from: start, to: end });
+     maSeriesRef.current?.setData(ma100);
+     if (priceSlice.length > 0) {
+       const from = priceSlice[0].time;
+       const to   = priceSlice[priceSlice.length - 1].time;
+       chartRef.current?.timeScale().setVisibleRange({ from, to });
+     } else {
+       chartRef.current?.timeScale().fitContent();
+     }
     applyMarkersAndNotes(bars, dayOffset, "1");
   }, [dayOffset, globalInterval]);
 
