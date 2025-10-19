@@ -618,32 +618,58 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
           <div style={{ fontSize: 12, opacity: 0.7 }}>표시 구간에 시그널 없음</div>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
-            {notesView.map((n) => (
+            {notesView.map((n) => {
+                const side = String(n.side || "").toUpperCase();
+                const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
+                const reasonsTxt = n.reasons?.length ? ` (${n.reasons.join(", ")})` : "";
+              return (
+            <div
+              key={n.key}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                background: "#1b1b1b",
+                border: "1px solid #2a2a2a",
+              }}
+            >
               <div
-                key={n.key}
                 style={{
-                  padding: "8px 10px",
-                  borderRadius: 10,
-                  background: "#1b1b1b",
-                  border: "1px solid #2a2a2a",
+                  display: "grid",
+                  // [seq] [kind] [side] [price] [time+reasons]
+                  gridTemplateColumns: "6ch 6ch 7ch 14ch 1fr",
+                  columnGap: 12,
+                  alignItems: "baseline",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  // 숫자/문자 간격 일정하게
+                  fontVariantNumeric: "tabular-nums",
                 }}
+                title={[
+                  `#${n.seq}`,
+                  `${n.kind} ${side}`,
+                  (n.price),
+                  fmtKSTFull(n.timeSec),
+                  reasonsTxt,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               >
-                <div style={{ fontSize: 13, marginBottom: 6 }}>
-                  <b>#{n.seq}</b>{" "}
-                  <span style={{ opacity: 0.9 }}>
-                    · {n.kind} {n.side} @ {fmtUSD(n.price)} ·{" "}
-                    {fmtKSTFull(n.timeSec + KST_OFFSET_SEC)}
-                  </span>
-                </div>
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {n.reasons.map((r, i) => (
-                    <li key={i} style={{ fontSize: 12, lineHeight: 1.5 }}>
-                      {r}
-                    </li>
-                  ))}
-                </ul>
+                <b style={{ opacity: 0.95 }}>#{n.seq}</b>
+                <span style={{ opacity: 0.85 }}>{n.kind}</span>
+                <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
+                <span>{fmtUSD(n.price)}</span>
+
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontFamily: "inherit" }}>
+                  {fmtKSTFull(n.timeSec)}
+                  {reasonsTxt}
+                </span>
               </div>
-            ))}
+            </div>
+          );
+            })}
           </div>
         )}
       </div>
