@@ -1,12 +1,91 @@
 // src/pages/Coin.jsx
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { createChart } from "lightweight-charts";
-import { useCallback } from "react";
 
+/* ─────────────────────────────────────────────────────────
+ * WS Hub: 전역 싱글톤. 한 커넥션으로 다중 토픽 영구 구독/디스패치
+ * ───────────────────────────────────────────────────────── */
+const WS_URL_LINEAR = "wss://stream.bybit.com/v5/public/linear";
+
+class WsHub {
+  constructor() {
+    this.ws = null;
+    this.connected = false;
+    this.pendingTopics = new Set(); // subscribe까지 보낸 토픽
+    this.handlers = new Map();      // topic -> Set<fn>
+    this.queue = [];                // 연결 전에 요청된 토픽
+  this.statusHandlers = new Set();           // ← 추가
+  this._connect();
+  }
+  _emitStatus() {                              // ← 추가
+    this.statusHandlers.forEach(fn => { try { fn(this.connected); } catch {} });
+  }
+   onStatus(fn) {                               // ← 추가 (구독)
+    this.statusHandlers.add(fn);
+    // 현재 상태 즉시 전달
+    try { fn(this.connected); } catch {}
+    return () => this.statusHandlers.delete(fn); // 언구독
+  }
+  _connect() {
+    if (this.ws) return;
+    this.ws = new WebSocket(WS_URL_LINEAR);
+    this.ws.onopen = () => {
+      this.connected = true;
+      this._emitStatus();                      // ← 추가
+      if (this.queue.length) {
+        const args = [...new Set(this.queue)];
+        this.ws.send(JSON.stringify({ op: "subscribe", args }));
+        args.forEach(t => this.pendingTopics.add(t));
+        this.queue = [];
+      }
+    };
+    this.ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data || "{}");
+        const topic = msg.topic;
+        if (!topic) return;
+        const set = this.handlers.get(topic);
+        if (!set || set.size === 0) return;
+        const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+        set.forEach(fn => { try { fn(payload); } catch {} });
+      } catch {}
+    };
+    this.ws.onclose = () => {
+      this.ws = null;
+      this.connected = false;
+      this._emitStatus();
+      setTimeout(() => this._connect(), 1000); // 재연결
+    };
+    this.ws.onerror = () => { try { this.ws?.close(); } catch {} };
+  }
+  ensureSubscribe(topic) {
+    if (this.pendingTopics.has(topic)) return;
+    if (this.connected) {
+      this.ws?.send(JSON.stringify({ op: "subscribe", args: [topic] }));
+      this.pendingTopics.add(topic);
+    } else {
+      this.queue.push(topic);
+    }
+  }
+  addListener(topic, fn) {
+    this.ensureSubscribe(topic);
+    if (!this.handlers.has(topic)) this.handlers.set(topic, new Set());
+    this.handlers.get(topic).add(fn);
+    // off 함수 반환
+    return () => {
+      const set = this.handlers.get(topic);
+      if (set) set.delete(fn);
+    };
+  }
+}
+const wsHub = new WsHub();
+
+/* ─────────────────────────────────────────────────────────
+ * 시간/포맷 유틸
+ * ───────────────────────────────────────────────────────── */
 const KST_OFFSET_SEC = 9 * 3600;
 const DAY_SEC = 24 * 3600;
 
-// 일봉/1분봉 공통: 최신 MA100 하나만 빠르게 계산
 function calcLatestMAValue(bars, period = 100) {
   if (!Array.isArray(bars) || bars.length < period) return null;
   let sum = 0;
@@ -16,37 +95,25 @@ function calcLatestMAValue(bars, period = 100) {
   return sum / period;
 }
 
-// 마지막 바 기준 "KST 06:50" 세션 시작 시각(UTC초)
+// 마지막 바 기준 "KST 06:50" 세션 시작(UTC초)
 function getAnchorKst0650UtcSec(bars) {
   if (!bars?.length) return null;
   const lastUtc = bars[bars.length - 1].time;
   const kst = lastUtc + KST_OFFSET_SEC;
-  const SIX50 = 6 * 3600 + 50 * 60; // 06:50
-  const sessionStartKst =
-    Math.floor((kst - SIX50) / DAY_SEC) * DAY_SEC + SIX50;
-  return sessionStartKst - KST_OFFSET_SEC; // 다시 UTC로
+  const SIX50 = 6 * 3600 + 50 * 60;
+  const sessionStartKst = Math.floor((kst - SIX50) / DAY_SEC) * DAY_SEC + SIX50;
+  return sessionStartKst - KST_OFFSET_SEC; // 다시 UTC
 }
-// tsSec(UTC seconds) → "세션 anchor 날짜(YYYY-MM-DD, KST 06:50 기준)"를 돌려줌
+
+// 세션 키 (YYYY-MM-DD, 06:50 anchor)
 function sessionKeyKST_0650(tsSec) {
-  // KST로 옮겨서 06:50 오프셋을 뺀 뒤 day 경계로 내림
   const kst = tsSec + KST_OFFSET_SEC;
-  const sessionStartKst =
-    Math.floor((kst - (6 * 3600 + 50 * 60)) / DAY_SEC) * DAY_SEC +
-    (6 * 3600 + 50 * 60);
-  // 라벨은 보기 좋게 KST 날짜(YYYY-MM-DD)로
-  const d = new Date((sessionStartKst - KST_OFFSET_SEC) * 1000); // 다시 UTC 기준 Date
-  const yyyy = d.toLocaleString("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-  });
-  const mm = d.toLocaleString("ko-KR", {
-    timeZone: "Asia/Seoul",
-    month: "2-digit",
-  });
-  const dd = d.toLocaleString("ko-KR", {
-    timeZone: "Asia/Seoul",
-    day: "2-digit",
-  });
+  const SIX50 = 6 * 3600 + 50 * 60;
+  const sessionStartKst = Math.floor((kst - SIX50) / DAY_SEC) * DAY_SEC + SIX50;
+  const d = new Date((sessionStartKst - KST_OFFSET_SEC) * 1000);
+  const yyyy = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric" });
+  const mm = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit" });
+  const dd = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", day: "2-digit" });
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -65,25 +132,14 @@ const fmtKSTFull = (tsSec) =>
   }).format(tsSec * 1000);
 
 const fmtKSTMonth = (tsSec) =>
-  new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit" }).format(
-    tsSec * 1000
-  );
+  new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit" })
+    .format(tsSec * 1000);
 
 const fmtKSTHour = (tsSec) =>
-  new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    hour12: false,
-    hour: "2-digit",
-  }).format(tsSec * 1000);
+  new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour12: false, hour: "2-digit" })
+    .format(tsSec * 1000);
 
-// 마지막 바 기준 KST 00:00(anchor) → UTC초
-function getAnchorKstMidnightUtcSec(bars) {
-  if (!bars?.length) return null;
-  const lastUtc = bars[bars.length - 1].time;
-  const lastKst = lastUtc + KST_OFFSET_SEC;
-  const kstMidnight = Math.floor(lastKst / DAY_SEC) * DAY_SEC;
-  return kstMidnight - KST_OFFSET_SEC;
-}
+// KST 06:50 시작 ~ +24h 윈도우(UTC초)
 function getWindowRangeUtcFromBars(bars, offsetDays) {
   const anchor0650Utc = getAnchorKst0650UtcSec(bars);
   if (anchor0650Utc == null) return [0, 0];
@@ -105,7 +161,7 @@ function mergeBars(prev, bar) {
   return prev;
 }
 
-// MA100 계산(클라이언트)
+// MA100 시퀀스
 function calcSMA(bars, period = 100) {
   const out = [];
   let sum = 0;
@@ -131,8 +187,8 @@ function sliceWithBuffer(bars, start, end, buffer = 99) {
   return bars.slice(from, j);
 }
 
-/** ─────────────────────────────────────────────────────────
- * 시그널 도우미
+/* ─────────────────────────────────────────────────────────
+ * 시그널 API 도우미
  * ───────────────────────────────────────────────────────── */
 async function fetchSignals(symbol) {
   const url = `/api/signals?symbol=${symbol}&days=7`;
@@ -141,18 +197,16 @@ async function fetchSignals(symbol) {
   return Array.isArray(j?.signals) ? j.signals : [];
 }
 
-/** 시그널을 날짜별로 그룹 → (1,2,3…) 순번 부여 → 마커/노트 생성 */
 function buildSignalAnnotations(sigs) {
   const items = sigs
     .map((s) => {
       const ts = s.ts || s.time || s.timeSec;
       const timeSec = s.timeSec ? Number(s.timeSec) : Math.floor(new Date(ts).getTime() / 1000);
-      const sessionKey = sessionKeyKST_0650(timeSec); // ← 세션 기준 키
+      const sessionKey = sessionKeyKST_0650(timeSec);
       return { ...s, timeSec, sessionKey };
     })
     .sort((a, b) => a.timeSec - b.timeSec);
 
-  // 세션별로 순번(1,2,3…)
   const bySession = new Map();
   for (const s of items) {
     if (!bySession.has(s.sessionKey)) bySession.set(s.sessionKey, []);
@@ -161,14 +215,12 @@ function buildSignalAnnotations(sigs) {
 
   const annotated = [];
   for (const list of bySession.values()) {
-    // 세션 내부에서도 시간순 보장
     list.sort((a, b) => a.timeSec - b.timeSec).forEach((s, idx) => {
       annotated.push({ ...s, seq: idx + 1 });
     });
   }
   annotated.sort((a, b) => a.timeSec - b.timeSec);
 
-  // 마커 & 노트 생성
   const markers = [];
   const notes = [];
   for (const s of annotated) {
@@ -180,26 +232,10 @@ function buildSignalAnnotations(sigs) {
     let position = "aboveBar";
     let color = "#ffd166";
     let shape = "arrowDown";
-    if (isEntry && isLong) {
-      position = "belowBar";
-      color = "#2fe08d";
-      shape = "arrowUp";
-    }
-    if (isEntry && isShort) {
-      position = "aboveBar";
-      color = "#ff6b6b";
-      shape = "arrowDown";
-    }
-    if (isExit && isLong) {
-      position = "aboveBar";
-      color = "#2fe08d";
-      shape = "arrowDown";
-    }
-    if (isExit && isShort) {
-      position = "belowBar";
-      color = "#ff6b6b";
-      shape = "arrowUp";
-    }
+    if (isEntry && isLong) { position = "belowBar"; color = "#2fe08d"; shape = "arrowUp"; }
+    if (isEntry && isShort) { position = "aboveBar"; color = "#ff6b6b"; shape = "arrowDown"; }
+    if (isExit && isLong) { position = "aboveBar"; color = "#2fe08d"; shape = "arrowDown"; }
+    if (isExit && isShort) { position = "belowBar"; color = "#ff6b6b"; shape = "arrowUp"; }
 
     markers.push({ time: s.timeSec, position, color, shape, text: `#${s.seq}` });
     notes.push({
@@ -213,52 +249,66 @@ function buildSignalAnnotations(sigs) {
       reasons: Array.isArray(s.reasons) ? s.reasons : [],
     });
   }
-
   return { markers, notes };
 }
-function TickerCard({ symbol, price, ma100, connected, connecting }) {
-  const has = typeof price === 'number' && typeof ma100 === 'number' && ma100 !== 0;
+
+/* ─────────────────────────────────────────────────────────
+ * 티커 카드: 현재 인터벌(1분/D)에 맞는 MA100 기준으로 퍼센트 표시
+ * ───────────────────────────────────────────────────────── */
+function TickerCard({ symbol, interval, stats, connected }) {
+  // stats: { price1m, ma100_1m, priceD, ma100_D }
+  const price = interval === "D" ? stats?.priceD : stats?.price1m;
+  const ma100 = interval === "D" ? stats?.ma100_D : stats?.ma100_1m;
+
+  const has = typeof price === "number" && typeof ma100 === "number" && ma100 !== 0;
   const deltaPct = has ? ((price / ma100 - 1) * 100) : null;
   const up = deltaPct != null ? deltaPct >= 0 : null;
 
-  const connBadge = connecting ? "⏳" : (connected ? "✅" : "❌");
-
   return (
-    <div style={{ padding: "16px 18px", borderRadius: 14, background: "#1a1a1a",
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.35)" }}>
-      <div style={{ fontSize: 14, opacity: 0.9 }}>
-        {symbol} <span style={{ opacity: 0.7, marginLeft: 6 }}>연결: {connBadge}</span>
-      </div>
+    <div
+      style={{
+        padding: "16px 18px",
+        borderRadius: 14,
+        background: "#1a1a1a",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+      }}
+    >
+      <div style={{ fontSize: 14, opacity: 0.9 }}>{symbol}</div>
       <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
         {price != null ? price : "—"}
       </div>
-      <div style={{
-        marginTop: 6, fontSize: 13, fontWeight: 700,
-        color: up == null ? "#aaa" : (up ? "#2fe08d" : "#ff6b6b")
-      }}>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 13,
+          fontWeight: 700,
+          color: up == null ? "#aaa" : (up ? "#2fe08d" : "#ff6b6b"),
+        }}
+      >
         MA100 대비 {deltaPct != null ? `${deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(deltaPct).toFixed(2)}%` : "--"}
       </div>
     </div>
   );
 }
 
-
+/* ─────────────────────────────────────────────────────────
+ * 차트 패널
+ * ───────────────────────────────────────────────────────── */
 function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const maSeriesRef = useRef(null);
   const roRef = useRef(null);
-  const wsRef = useRef(null);
-  const allBarsRef = useRef([]); // 1분봉 원본 (10080)
-  const dailyBarsRef = useRef([]); // 일봉 원본
+  const allBarsRef = useRef([]);   // 1분봉
+  const dailyBarsRef = useRef([]); // 일봉
   const markersAllRef = useRef([]); // 7일치 마커 전체
-  const notesAllRef = useRef([]); // 7일치 노트 전체
-  const [notesView, setNotesView] = useState([]); // 현재 보여줄 노트
+  const notesAllRef = useRef([]);   // 7일치 노트 전체
+  const [notesView, setNotesView] = useState([]);
   const versionRef = useRef(0);
   const dayOffsetRef = useRef(dayOffset);
   useEffect(() => { dayOffsetRef.current = dayOffset; }, [dayOffset]);
-  // 마커+노트 적용
+
   function applyMarkersAndNotes(bars, dayOff, interval) {
     if (!seriesRef.current) return;
     const allM = markersAllRef.current || [];
@@ -281,18 +331,13 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
 
     const myVersion = ++versionRef.current;
 
-    // 정리
-    try {
-      wsRef.current?.close();
-    } catch {}
-    wsRef.current = null;
-    try {
-      roRef.current?.disconnect();
-    } catch {}
-    roRef.current = null;
-    try {
-      chartRef.current?.remove();
-    } catch {}
+    // cleanup 콜렉션(리스너 해제용)
+    const cleanups = [];
+    const lastBoundsRef = { current: null };
+
+    // 기존 리소스 정리
+    try { roRef.current?.disconnect(); } catch {}
+    try { chartRef.current?.remove(); } catch {}
     chartRef.current = null;
     seriesRef.current = null;
     maSeriesRef.current = null;
@@ -324,7 +369,9 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
       crosshair: { mode: 1 },
       localization: { timeFormatter: (t) => fmtKSTFull(getTs(t)) },
     });
+
     const MAX_1M_BARS = 43200;
+
     const candleSeries = chart.addCandlestickSeries({
       upColor: "#2fe08d",
       downColor: "#ff6b6b",
@@ -348,7 +395,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
     seriesRef.current = candleSeries;
     maSeriesRef.current = maSeries;
 
-    // 리사이즈
+    // 리사이즈 옵저버
     const ro = new ResizeObserver(() => {
       if (versionRef.current !== myVersion) return;
       if (!chartRef.current || !wrapRef.current) return;
@@ -358,15 +405,13 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
     ro.observe(el);
     roRef.current = ro;
 
-    // REST 초기 로드
     (async () => {
       try {
         const limit = globalInterval === "1" ? 10080 : 300;
         const restPath = `/api/klines?symbol=${symbol}&interval=${globalInterval}&limit=${limit}`;
         const resp = await fetch(restPath, { cache: "no-store" });
         const json = await resp.json();
-        if (!resp.ok || json?.retCode !== 0)
-          throw new Error(`bad response: ${resp.status}`);
+        if (!resp.ok || json?.retCode !== 0) throw new Error(`bad response: ${resp.status}`);
 
         const rows = Array.isArray(json?.list) ? json.list : [];
         const normalized = rows.map((r) => {
@@ -380,211 +425,141 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
 
         if (versionRef.current !== myVersion) return;
 
-        // 시그널 불러와서 번호부여 → 마커/노트 만들기
+        // 시그널 로드
         const sigs = await fetchSignals(symbol);
         const { markers, notes } = buildSignalAnnotations(sigs);
         markersAllRef.current = markers;
         notesAllRef.current = notes;
 
         if (globalInterval === "1") {
-  // ✅ [1분봉] 초기 REST 데이터 반영
-  allBarsRef.current = bars;
+          // ── 1분봉 초기 세팅
+          allBarsRef.current = bars;
+          const [start, end] = getWindowRangeUtcFromBars(bars, 0);
+          const priceSlice = bars.filter((b) => b.time >= start && b.time < end);
+          const forMa = sliceWithBuffer(bars, start, end, 99);
+          const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
 
-  const [start, end] = getWindowRangeUtcFromBars(bars, 0);
-  const priceSlice = bars.filter((b) => b.time >= start && b.time < end);
-  const forMa = sliceWithBuffer(bars, start, end, 99);
-  const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
+          if (priceSlice.length > 0) {
+            candleSeries.setData(priceSlice);
+            maSeries.setData(ma100);
+            const from = priceSlice[0].time;
+            const to = priceSlice[priceSlice.length - 1].time;
+            chartRef.current?.timeScale().setVisibleRange({ from, to });
 
-  if (priceSlice.length > 0) {
-    candleSeries.setData(priceSlice);
-    maSeries.setData(ma100);
-    const from = priceSlice[0].time;
-    const to   = priceSlice[priceSlice.length - 1].time;
-    chartRef.current?.timeScale().setVisibleRange({ from, to });
-  } else {
-    candleSeries.setData([]);
-    maSeries.setData([]);
-    chartRef.current?.timeScale().fitContent();
-  }
+            // 카드용 최신(항상 전체 1분봉 기준)
+            const lastCloseAll = bars.length ? bars[bars.length - 1].close : null;
+            const lastMaAll = calcLatestMAValue(bars, 100);
+            onStats?.(symbol, { price1m: lastCloseAll, ma100_1m: lastMaAll });
+          } else {
+            candleSeries.setData([]);
+            maSeries.setData([]);
+            chartRef.current?.timeScale().fitContent();
+          }
 
-  // ✅ 시그널(마커/노트) 1분 윈도우 적용
-  applyMarkersAndNotes(bars, 0, "1");
+          applyMarkersAndNotes(bars, 0, "1");
 
-  // ✅ 초기 통계(1분봉 기준, 최신 close/MA100) 카드로 올림 + WS 연결중 표시
-  const lastCloseAll = bars.length ? bars[bars.length - 1].close : null;
-  const lastMaAll    = calcLatestMAValue(bars, 100);
-  onStats?.(symbol, { price: lastCloseAll, ma100: lastMaAll, connecting: true, connected: false });
+          // bounds 계산
+          const hasData = (off) => {
+            const [s, e] = getWindowRangeUtcFromBars(bars, off);
+            if (!s && !e) return false;
+            return bars.some((b) => b.time >= s && b.time < e);
+          };
+          let min = 0, max = 0;
+          while (hasData(min - 1)) min -= 1;
+          while (hasData(max + 1)) max += 1;
+          onBounds?.(symbol, { min, max });
 
-  // ▼ dayOffset 이동 가능 범위 계산 후 부모에 보고
-  const hasData = (off) => {
-    const [s, e] = getWindowRangeUtcFromBars(bars, off);
-    if (!s && !e) return false;
-    return bars.some((b) => b.time >= s && b.time < e);
-  };
-  let min = 0, max = 0;
-  while (hasData(min - 1)) min -= 1;
-  while (hasData(max + 1)) max += 1;
-  onBounds?.(symbol, { min, max });
+          // ✅ 1분봉 WS 리스너 등록 (허브 사용)
+          const TOPIC_1M = `kline.1.${symbol}`;
+          const off1m = wsHub.addListener(TOPIC_1M, (d) => {
+            const bar = {
+              time: Math.floor(Number(d.start) / 1000),
+              open: +d.open, high: +d.high, low: +d.low, close: +d.close,
+            };
+            // 원본 머지 + 오래된 것 슬라이스
+            let arr = mergeBars(allBarsRef.current || [], bar);
+            if (arr.length > MAX_1M_BARS) arr = arr.slice(-MAX_1M_BARS);
+            allBarsRef.current = arr;
 
-  // ✅ [1분봉] WS 구독
-  const wsUrl = "wss://stream.bybit.com/v5/public/linear";
-  const TOPIC = `kline.1.${symbol}`; // Bybit v5: kline.<interval>.<symbol>
-  const ws = new WebSocket(wsUrl);
-  wsRef.current = ws;
+            // 현재 dayOffset 윈도우 갱신
+            const [wStart, wEnd] = getWindowRangeUtcFromBars(arr, dayOffsetRef.current);
+            const priceSliceWS = arr.filter((b) => b.time >= wStart && b.time < wEnd);
+            const forMaWS = sliceWithBuffer(arr, wStart, wEnd, 99);
+            const ma100WS = calcSMA(forMaWS, 100).filter((p) => p.time >= wStart && p.time < wEnd);
 
-  ws.onopen = () => {
-    if (versionRef.current !== myVersion) return;
-    ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
-    // 연결됨 ✅
-    onStats?.(symbol, { connecting: false, connected: true });
-  };
+            if (priceSliceWS.length) {
+              seriesRef.current?.setData(priceSliceWS);
+              maSeriesRef.current?.setData(ma100WS);
+            }
 
-  ws.onmessage = (e) => {
-    if (versionRef.current !== myVersion || !seriesRef.current) return;
-    try {
-      const msg = JSON.parse(e.data || "{}");
-      if (msg.topic === TOPIC && msg.data) {
-        const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-        const bar = {
-          time: Math.floor(Number(d.start) / 1000), // ms→s
-          open: +d.open,
-          high: +d.high,
-          low:  +d.low,
-          close:+d.close,
-        };
+            // 카드용 최신(항상 최신 1분봉 기반)
+            const lastClose = arr.length ? arr[arr.length - 1].close : null;
+            const lastMa = calcLatestMAValue(arr, 100);
+            onStats?.(symbol, { price1m: lastClose, ma100_1m: lastMa });
 
-        // 1) 원본 누적/머지 + 오래된 바 컷(메모리 보호)
-        const MAX_1M_BARS = 43200; // 30일치(분봉) 정도
-        let arr = mergeBars(allBarsRef.current || [], bar);
-        if (arr.length > MAX_1M_BARS) arr = arr.slice(-MAX_1M_BARS);
-        allBarsRef.current = arr;
+            // 마커/노트
+            applyMarkersAndNotes(arr, dayOffsetRef.current, "1");
 
-        // 2) 현재 dayOffset 윈도우 재계산 후 차트 반영
-        const [wStart, wEnd] = getWindowRangeUtcFromBars(allBarsRef.current, dayOffsetRef.current);
-        const priceSliceWS = allBarsRef.current.filter((b) => b.time >= wStart && b.time < wEnd);
-        const forMaWS = sliceWithBuffer(allBarsRef.current, wStart, wEnd, 99);
-        const ma100WS = calcSMA(forMaWS, 100).filter((p) => p.time >= wStart && p.time < wEnd);
+            // bounds 필요 시 갱신
+            const hasDataDyn = (off) => {
+              const [s, e] = getWindowRangeUtcFromBars(arr, off);
+              if (!s && !e) return false;
+              return arr.some((b) => b.time >= s && b.time < e);
+            };
+            let newMin = 0, newMax = 0;
+            while (hasDataDyn(newMin - 1)) newMin -= 1;
+            while (hasDataDyn(newMax + 1)) newMax += 1;
+            const nowBounds = `${newMin}:${newMax}`;
+            if (lastBoundsRef.current !== nowBounds) {
+              lastBoundsRef.current = nowBounds;
+              onBounds?.(symbol, { min: newMin, max: newMax });
+            }
+          });
+          cleanups.push(off1m);
 
-        if (priceSliceWS.length > 0) {
-          seriesRef.current.setData(priceSliceWS);
-          maSeriesRef.current?.setData(ma100WS);
-        }
-
-        // 3) 카드 통계 갱신(항상 최신 바/MA100 기준)
-        const lastCloseAll2 = arr.length ? arr[arr.length - 1].close : null;
-        const lastMaAll2    = calcLatestMAValue(arr, 100);
-        onStats?.(symbol, { price: lastCloseAll2, ma100: lastMaAll2 });
-
-        // 4) 시그널 다시 적용
-        applyMarkersAndNotes(allBarsRef.current, dayOffsetRef.current, "1");
-
-        // 5) 세션 경계 바뀌면 bounds 재산출 → 부모에 보고
-        const hasDataDyn = (off) => {
-          const [s, e] = getWindowRangeUtcFromBars(allBarsRef.current, off);
-          if (!s && !e) return false;
-          return allBarsRef.current.some((b) => b.time >= s && b.time < e);
-        };
-        let newMin = 0, newMax = 0;
-        while (hasDataDyn(newMin - 1)) newMin -= 1;
-        while (hasDataDyn(newMax + 1)) newMax += 1;
-        onBounds?.(symbol, { min: newMin, max: newMax });
-      }
-    } catch {}
-  };
-
-  ws.onclose = () => {
-    // 끊김 ❌
-    onStats?.(symbol, { connecting: false, connected: false });
-  };
-  ws.onerror = () => {
-    try { ws.close(); } catch {}
-  };
-}
- else {
-          // ✅ [일봉] 초기 REST 데이터 반영
+        } else {
+          // ── 일봉 초기 세팅
           dailyBarsRef.current = bars;
           candleSeries.setData(bars);
           maSeries.setData(calcSMA(bars, 100));
           chartRef.current?.timeScale().fitContent();
 
-          // ✅ 초기 통계(일봉 기준) 카드로 올림
+          // 카드: 일봉 기준
           const lastCloseD = bars.length ? bars[bars.length - 1].close : null;
-          const lastMaD    = calcLatestMAValue(bars, 100);
-          onStats?.(symbol, { price: lastCloseD, ma100: lastMaD });
+          const lastMaD = calcLatestMAValue(bars, 100);
+          onStats?.(symbol, { priceD: lastCloseD, ma100_D: lastMaD });
 
-          // ✅ WS 연결 상태: 연결 중 ⏳ 표시
-          onStats?.(symbol, { connecting: true, connected: false });
+          // ✅ 일봉 WS 리스너 등록
+          const TOPIC_1D = `kline.D.${symbol}`;
+          const off1d = wsHub.addListener(TOPIC_1D, (d) => {
+            const bar = {
+              time: Math.floor(Number(d.start) / 1000),
+              open: +d.open, high: +d.high, low: +d.low, close: +d.close,
+            };
+            dailyBarsRef.current = mergeBars(dailyBarsRef.current || [], bar);
+            seriesRef.current?.update(bar);
+            maSeriesRef.current?.setData(calcSMA(dailyBarsRef.current, 100));
 
-          // ✅ [일봉] WS 구독 설정
-          const wsUrl = "wss://stream.bybit.com/v5/public/linear";
-          const TOPIC = `kline.D.${symbol}`;
-          const ws = new WebSocket(wsUrl);
-          wsRef.current = ws;
+            // 카드: 일봉 기준
+            const lastClose = dailyBarsRef.current.length
+              ? dailyBarsRef.current[dailyBarsRef.current.length - 1].close
+              : null;
+            const lastMa = calcLatestMAValue(dailyBarsRef.current, 100);
+            onStats?.(symbol, { priceD: lastClose, ma100_D: lastMa });
 
-          ws.onopen = () => {
-            if (versionRef.current !== myVersion) return;
-            ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
-            // 연결됨 ✅
-            onStats?.(symbol, { connecting: false, connected: true });
-          };
-
-          ws.onmessage = (e) => {
-            if (versionRef.current !== myVersion || !seriesRef.current) return;
-            try {
-              const msg = JSON.parse(e.data || "{}");
-              if (msg.topic === TOPIC && msg.data) {
-                const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-                const bar = {
-                  time: Math.floor(Number(d.start) / 1000),
-                  open: +d.open,
-                  high: +d.high,
-                  low:  +d.low,
-                  close:+d.close,
-                };
-                // 최신 일봉 머지 + 차트/MA 갱신
-                dailyBarsRef.current = mergeBars(dailyBarsRef.current || [], bar);
-                seriesRef.current.update(bar);
-                maSeriesRef.current?.setData(calcSMA(dailyBarsRef.current, 100));
-
-                // ✅ 최신 통계(일봉 기준) 카드로 갱신
-                const lastCloseD2 = dailyBarsRef.current.length
-                  ? dailyBarsRef.current[dailyBarsRef.current.length - 1].close
-                  : null;
-                const lastMaD2 = calcLatestMAValue(dailyBarsRef.current, 100);
-                onStats?.(symbol, { price: lastCloseD2, ma100: lastMaD2 });
-              }
-            } catch {}
-          };
-
-          ws.onclose = () => {
-            // 끊김 ❌
-            onStats?.(symbol, { connecting: false, connected: false });
-          };
-          ws.onerror = () => {
-            try { ws.close(); } catch {}
-          };
-
-          // 일봉에선 bounds 리포트 불필요
+            // 일봉은 마커를 전체/세션없이 유지
+            applyMarkersAndNotes(dailyBarsRef.current, 0, "D");
+          });
+          cleanups.push(off1d);
         }
       } catch (e) {
         console.error("[REST] failed", e);
       }
     })();
 
-    // 1일봉만 WS
-
     return () => {
-      try {
-        wsRef.current?.close();
-      } catch {}
-      wsRef.current = null;
-      try {
-        roRef.current?.disconnect();
-      } catch {}
-      roRef.current = null;
-      try {
-        chart.remove();
-      } catch {}
+      try { roRef.current?.disconnect(); } catch {}
+      try { chart.remove(); } catch {}
       chartRef.current = null;
       seriesRef.current = null;
       maSeriesRef.current = null;
@@ -593,10 +568,12 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
       markersAllRef.current = [];
       notesAllRef.current = [];
       setNotesView([]);
+      // 허브에서 리스너만 해제(소켓은 계속 유지)
+      cleanups.forEach(fn => { try { fn(); } catch {} });
     };
-  }, [symbol, globalInterval, onBounds]);
+  }, [symbol, globalInterval, onBounds, onStats]);
 
-  // 1분봉에서 날짜 이동 시: 데이터/MA/마커/노트 재세팅
+  // 1분봉에서 날짜 이동 시 재세팅
   useEffect(() => {
     if (!seriesRef.current || globalInterval !== "1") return;
     const bars = allBarsRef.current || [];
@@ -606,21 +583,20 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
     const forMa = sliceWithBuffer(bars, start, end, 99);
     const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
     seriesRef.current.setData(priceSlice);
-     maSeriesRef.current?.setData(ma100);
-     if (priceSlice.length > 0) {
-       const from = priceSlice[0].time;
-       const to   = priceSlice[priceSlice.length - 1].time;
-       chartRef.current?.timeScale().setVisibleRange({ from, to });
-     } else {
-       chartRef.current?.timeScale().fitContent();
-     }
+    maSeriesRef.current?.setData(ma100);
+    if (priceSlice.length > 0) {
+      const from = priceSlice[0].time;
+      const to = priceSlice[priceSlice.length - 1].time;
+      chartRef.current?.timeScale().setVisibleRange({ from, to });
+    } else {
+      chartRef.current?.timeScale().fitContent();
+    }
     applyMarkersAndNotes(bars, dayOffset, "1");
   }, [dayOffset, globalInterval]);
 
   // 표시 범위 표기(1분봉일 때만)
   const [sUtc, eUtc] = useMemo(() => {
-    const bars =
-      globalInterval === "1" ? allBarsRef.current || [] : dailyBarsRef.current || [];
+    const bars = globalInterval === "1" ? allBarsRef.current || [] : dailyBarsRef.current || [];
     return globalInterval === "1" ? getWindowRangeUtcFromBars(bars, dayOffset) : [0, 0];
   }, [dayOffset, globalInterval]);
 
@@ -628,7 +604,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
     <div style={{ marginBottom: 28 }}>
       <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>
         {symbol} · {globalInterval === "1" ? "1분봉" : "1일봉"} · MA100 ·{" "}
-        <code>{globalInterval === "D" ? `kline.D.${symbol}` : "REST only"}</code>
+        <code>{globalInterval === "D" ? `kline.D.${symbol}` : "kline.1.${symbol}`"}</code>
       </div>
       <div
         ref={wrapRef}
@@ -664,56 +640,50 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
             {notesView.map((n) => {
-                const side = String(n.side || "").toUpperCase();
-                const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
-                const reasonsTxt = n.reasons?.length ? ` (${n.reasons.join(", ")})` : "";
+              const side = String(n.side || "").toUpperCase();
+              const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
+              const reasonsTxt = n.reasons?.length ? ` (${n.reasons.join(", ")})` : "";
               return (
-            <div
-              key={n.key}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                background: "#1b1b1b",
-                border: "1px solid #2a2a2a",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  // [seq] [kind] [side] [price] [time+reasons]
-                  gridTemplateColumns: "6ch 6ch 7ch 14ch 1fr",
-                  columnGap: 12,
-                  alignItems: "baseline",
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  // 숫자/문자 간격 일정하게
-                  fontVariantNumeric: "tabular-nums",
-                }}
-                title={[
-                  `#${n.seq}`,
-                  `${n.kind} ${side}`,
-                  (n.price),
-                  fmtKSTFull(n.timeSec),
-                  reasonsTxt,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              >
-                <b style={{ opacity: 0.95 }}>#{n.seq}</b>
-                <span style={{ opacity: 0.85 }}>{n.kind}</span>
-                <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
-                <span>{(n.price)}</span>
-
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontFamily: "inherit" }}>
-                  {fmtKSTFull(n.timeSec)}
-                  {reasonsTxt}
-                </span>
-              </div>
-            </div>
-          );
+                <div
+                  key={n.key}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    background: "#1b1b1b",
+                    border: "1px solid #2a2a2a",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "6ch 6ch 7ch 14ch 1fr",
+                      columnGap: 12,
+                      alignItems: "baseline",
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                    title={[
+                      `#${n.seq}`,
+                      `${n.kind} ${side}`,
+                      n.price,
+                      fmtKSTFull(n.timeSec),
+                      reasonsTxt,
+                    ].filter(Boolean).join(" · ")}
+                  >
+                    <b style={{ opacity: 0.95 }}>#{n.seq}</b>
+                    <span style={{ opacity: 0.85 }}>{n.kind}</span>
+                    <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
+                    <span>{n.price}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontFamily: "inherit" }}>
+                      {fmtKSTFull(n.timeSec)}{reasonsTxt}
+                    </span>
+                  </div>
+                </div>
+              );
             })}
           </div>
         )}
@@ -722,23 +692,23 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
   );
 }
 
-/** ─────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────
  * 페이지
  * ───────────────────────────────────────────────────────── */
 export default function Coin() {
-  // 공통 인터벌 (세 차트 동기)
   const [interval, setInterval_] = useState("1"); // "1" | "D"
-  const [dayOffset, setDayOffset] = useState(0); // 1분봉 전/다음날
+  const [dayOffset, setDayOffset] = useState(0);
 
- const [statsMap, setStatsMap] = useState({}); // { [symbol]: { price, ma100 } }
- const onStats = useCallback((symbol, stats) => {
-   setStatsMap(prev => ({ ...prev, [symbol]: { ...prev[symbol], ...stats } }));
- }, []);
-  // 왼쪽 카드용 심볼 세트
+  // 카드용 최신 수치 저장: 1분봉과 일봉을 모두 저장해두고, 표시만 interval에 따라 고름
+  const [statsMap, setStatsMap] = useState({}); // { [symbol]: { price1m, ma100_1m, priceD, ma100_D } }
+  const onStats = useCallback((symbol, stats) => {
+    setStatsMap(prev => ({ ...prev, [symbol]: { ...prev[symbol], ...stats } }));
+  }, []);
+
   const symbols = [
     { symbol: "BTCUSDT", market: "linear" },
     { symbol: "ETHUSDT", market: "linear" },
-    { symbol: "XAUTUSDT", market: "linear" }, // XAUTUSDT가 spot일 가능성 대비
+    { symbol: "XAUTUSDT", market: "linear" },
   ];
   const requiredSymbols = symbols.map((s) => s.symbol);
 
@@ -748,7 +718,7 @@ export default function Coin() {
     setPerSymbolBounds(prev => ({ ...prev, [symbol]: bounds }));
   }, []);
 
-  // 세 차트 모두에 유효한 공통 범위 + 준비 여부
+  // 세 차트 모두 공통 범위
   const { minOffset, maxOffset, boundsReady } = useMemo(() => {
     const haveAll = requiredSymbols.every((sym) => perSymbolBounds[sym]);
     if (!haveAll) return { minOffset: 0, maxOffset: 0, boundsReady: false };
@@ -757,8 +727,12 @@ export default function Coin() {
     const maxCommon = Math.min(...values.map((b) => b.max ?? 0));
     return { minOffset: minCommon, maxOffset: maxCommon, boundsReady: true };
   }, [perSymbolBounds, requiredSymbols]);
-
-  // 🔒 공통 범위가 바뀌거나 인터벌이 1→D/ D→1 전환될 때 dayOffset 자동 클램프
+  const [wsConnected, setWsConnected] = useState(false);
+    useEffect(() => {
+  const off = wsHub.onStatus(setWsConnected);  // 허브 연결 상태 구독
+  return () => off();
+}, []);
+  // 공통 범위 바뀌면 dayOffset 클램프
   useEffect(() => {
     if (interval !== "1" || !boundsReady) return;
     setDayOffset(d => Math.min(Math.max(d, minOffset), maxOffset));
@@ -766,6 +740,7 @@ export default function Coin() {
 
   const atMin = interval === "1" && boundsReady && dayOffset <= minOffset;
   const atMax = interval === "1" && boundsReady && dayOffset >= maxOffset;
+
   const disBtnStyle = (disabled) => ({
     padding: "8px 12px",
     borderRadius: 10,
@@ -780,11 +755,12 @@ export default function Coin() {
   return (
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
       <h1 style={{ color: "#00ffcc", marginBottom: 8 }}>멀티 차트 · 시그널 표시</h1>
-
+        <div style={{ marginBottom: 8, fontSize: 12, opacity: 0.8 }}>
+  WS 연결 상태: {wsConnected ? "✅ 연결됨" : "❌ 끊김 (자동 재연결 중)"}
+</div>
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24 }}>
         {/* 왼쪽: 티커 카드들 + 컨트롤 */}
         <div>
-          {/* 컨트롤 */}
           <div
             style={{
               position: "sticky",
@@ -835,9 +811,7 @@ export default function Coin() {
                 <div style={{ height: 10 }} />
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
-                    onClick={() =>
-                      setDayOffset((d) => Math.max(minOffset, d - 1))
-                    }
+                    onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
                     disabled={!boundsReady || atMin}
                     style={disBtnStyle(!boundsReady || atMin)}
                   >
@@ -857,9 +831,7 @@ export default function Coin() {
                     오늘
                   </button>
                   <button
-                    onClick={() =>
-                      setDayOffset((d) => Math.min(maxOffset, d + 1))
-                    }
+                    onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
                     disabled={!boundsReady || atMax}
                     style={disBtnStyle(!boundsReady || atMax)}
                   >
@@ -872,19 +844,15 @@ export default function Coin() {
 
           {/* 티커 카드 3개 */}
           <div style={{ display: "grid", gap: 12 }}>
-           {symbols.map((s) => {
-              const st = statsMap[s.symbol] || {};
-              return (
-                <TickerCard
-                  key={s.symbol}
-                  symbol={s.symbol}
-                  price={st.price}
-                  ma100={st.ma100}
-                  connected={!!st.connected}
-                  connecting={!!st.connecting}
-                />
-              );
-            })}
+            {symbols.map((s) => (
+              <TickerCard
+                key={s.symbol}
+                symbol={s.symbol}
+                interval={interval}
+                stats={statsMap[s.symbol]}
+                 connected={wsConnected}
+              />
+            ))}
           </div>
         </div>
 
