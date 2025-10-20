@@ -208,8 +208,6 @@ function TickerCard({ symbol, market = "linear" }) {
   const [connected, setConnected] = useState(false);
   const [price, setPrice] = useState(null);
   const [changePct, setChangePct] = useState(null);
-  const [mark, setMark] = useState(null);
-  const [funding, setFunding] = useState(null);
 
   useEffect(() => {
     const wsUrl =
@@ -231,8 +229,6 @@ function TickerCard({ symbol, market = "linear" }) {
           const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
           if (d?.lastPrice) setPrice(parseFloat(d.lastPrice));
           if (d?.price24hPcnt) setChangePct(parseFloat(d.price24hPcnt) * 100);
-          if (d?.markPrice) setMark(parseFloat(d.markPrice));
-          if (d?.fundingRate) setFunding(parseFloat(d.fundingRate) * 100);
         }
       } catch {}
     };
@@ -281,8 +277,6 @@ function TickerCard({ symbol, market = "linear" }) {
         24h {up ? "▲" : "▼"} {changePct != null ? `${Math.abs(changePct).toFixed(2)}%` : "--"}
       </div>
       <div style={{ fontSize: 12, lineHeight: 1.6, marginTop: 8, opacity: 0.9 }}>
-        <div>마크: {mark != null ? (mark) : "--"}</div>
-        {market === "linear" && <div>펀딩: {funding != null ? `${funding.toFixed(4)}%` : "--"}</div>}
         <div style={{ opacity: 0.7, marginTop: 6 }}>연결: {connected ? "✅" : "❌"}</div>
       </div>
     </div>
@@ -302,7 +296,8 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
   const notesAllRef = useRef([]); // 7일치 노트 전체
   const [notesView, setNotesView] = useState([]); // 현재 보여줄 노트
   const versionRef = useRef(0);
-
+  const dayOffsetRef = useRef(dayOffset);
+  useEffect(() => { dayOffsetRef.current = dayOffset; }, [dayOffset]);
   // 마커+노트 적용
   function applyMarkersAndNotes(bars, dayOff, interval) {
     if (!seriesRef.current) return;
@@ -369,7 +364,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
       crosshair: { mode: 1 },
       localization: { timeFormatter: (t) => fmtKSTFull(getTs(t)) },
     });
-
+    const MAX_1M_BARS = 43200;
     const candleSeries = chart.addCandlestickSeries({
       upColor: "#2fe08d",
       downColor: "#ff6b6b",
@@ -463,6 +458,72 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
           while (hasData(min - 1)) min -= 1;
           while (hasData(max + 1)) max += 1;
           onBounds?.(symbol, { min, max });
+        const wsUrl = "wss://stream.bybit.com/v5/public/linear";
+         const TOPIC = `kline.1.${symbol}`; // Bybit v5: kline.<interval>.<symbol>
+         const ws = new WebSocket(wsUrl);
+         wsRef.current = ws;
+
+         ws.onopen = () => {
+           if (versionRef.current !== myVersion) return;
+           ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
+         };
+         ws.onmessage = (e) => {
+           if (versionRef.current !== myVersion || !seriesRef.current) return;
+           try {
+             const msg = JSON.parse(e.data || "{}");
+             if (msg.topic === TOPIC && msg.data) {
+               const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+               const bar = {
+                 time: Math.floor(Number(d.start) / 1000), // ms→s
+               open: +d.open,
+               high: +d.high,
+               low:  +d.low,
+               close:+d.close,
+             };
+             // 1) 원본 누적/머지
+              let arr = mergeBars(allBarsRef.current || [], bar);
+                if (arr.length > MAX_1M_BARS) {
+                  // 앞쪽(오래된) 잘라내기 — O(1)로 끝나도록 slice 사용(shift는 O(n))
+                  arr = arr.slice(-MAX_1M_BARS);
+                }
+                allBarsRef.current = arr;
+
+             // 2) 현재 dayOffset 윈도우 재계산 후 반영
+             const [wStart, wEnd] = getWindowRangeUtcFromBars(allBarsRef.current, dayOffsetRef.current);
+             const priceSliceWS = (allBarsRef.current || []).filter((b) => b.time >= wStart && b.time < wEnd);
+             const forMaWS = sliceWithBuffer(allBarsRef.current, wStart, wEnd, 99);
+             const ma100WS = calcSMA(forMaWS, 100).filter((p) => p.time >= wStart && p.time < wEnd);
+
+             // 차트 업데이트
+              if (priceSliceWS.length > 0) {
+                seriesRef.current.setData(priceSliceWS);
+                maSeriesRef.current?.setData(ma100WS);
+              }
+
+              // 3) 마커/노트(시그널) 재적용
+               applyMarkersAndNotes(allBarsRef.current, dayOffsetRef.current, "1");
+
+              // 4) 세션 경계가 바뀌었으면 bounds 재산출
+              //    (새로운 날짜가 시작되면 max가 +1 될 수 있음)
+              const prevMax = max; // 클로저 캡처됨
+              const hasDataDyn = (off) => {
+                 const [s, e] = getWindowRangeUtcFromBars(allBarsRef.current, off);
+                 if (!s && !e) return false;
+                 return allBarsRef.current.some((b) => b.time >= s && b.time < e);
+               };
+               let newMin = 0, newMax = 0;
+               while (hasDataDyn(newMin - 1)) newMin -= 1;
+               while (hasDataDyn(newMax + 1)) newMax += 1;
+               if (newMin !== min || newMax !== prevMax) {
+                 onBounds?.(symbol, { min: newMin, max: newMax });
+               }
+             }
+           } catch {}
+         };
+         ws.onerror = () => {
+           try { ws.close(); } catch {}
+         };
+
         } else {
           // 일봉
           dailyBarsRef.current = bars;
