@@ -1,6 +1,7 @@
 // src/pages/Coin.jsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { createChart } from "lightweight-charts";
+import { useCallback } from "react";
 
 const KST_OFFSET_SEC = 9 * 3600;
 const DAY_SEC = 24 * 3600;
@@ -31,13 +32,6 @@ function sessionKeyKST_0650(tsSec) {
 
 const getTs = (t) =>
   typeof t === "number" ? t : t && typeof t.timestamp === "number" ? t.timestamp : 0;
-
-const fmtUSD = (v) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(v);
 
 const fmtKSTFull = (tsSec) =>
   new Intl.DateTimeFormat("ko-KR", {
@@ -149,7 +143,7 @@ function buildSignalAnnotations(sigs) {
   }
 
   const annotated = [];
-  for (const [_, list] of bySession.entries()) {
+  for (const list of bySession.values()) {
     // 세션 내부에서도 시간순 보장
     list.sort((a, b) => a.timeSec - b.timeSec).forEach((s, idx) => {
       annotated.push({ ...s, seq: idx + 1 });
@@ -274,7 +268,7 @@ function TickerCard({ symbol, market = "linear" }) {
     >
       <div style={{ fontSize: 14, opacity: 0.9 }}>{symbol}</div>
       <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
-        {price != null ? fmtUSD(price) : "—"}
+        {price != null ? (price) : "—"}
       </div>
       <div
         style={{
@@ -287,7 +281,7 @@ function TickerCard({ symbol, market = "linear" }) {
         24h {up ? "▲" : "▼"} {changePct != null ? `${Math.abs(changePct).toFixed(2)}%` : "--"}
       </div>
       <div style={{ fontSize: 12, lineHeight: 1.6, marginTop: 8, opacity: 0.9 }}>
-        <div>마크: {mark != null ? fmtUSD(mark) : "--"}</div>
+        <div>마크: {mark != null ? (mark) : "--"}</div>
         {market === "linear" && <div>펀딩: {funding != null ? `${funding.toFixed(4)}%` : "--"}</div>}
         <div style={{ opacity: 0.7, marginTop: 6 }}>연결: {connected ? "✅" : "❌"}</div>
       </div>
@@ -295,13 +289,6 @@ function TickerCard({ symbol, market = "linear" }) {
   );
 }
 
-/** ─────────────────────────────────────────────────────────
- * 차트 패널 (심볼 1개)
- * props: { symbol, globalInterval, dayOffset, onBounds }
- *  - 1분봉: REST 10080개 로드, WS 없음, 시그널=윈도우 필터
- *  - 1일봉: REST 300개 + WS 유지, 시그널=7일 전체
- *  - 시그널: 마커엔 #순번만, 아래 패널에 상세(reasons) 나열
- * ───────────────────────────────────────────────────────── */
 function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
@@ -463,6 +450,8 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
                maSeries.setData([]);
                chartRef.current?.timeScale().fitContent();
              }
+
+            applyMarkersAndNotes(bars, 0, "1");
           // ▼ dayOffset 이동 가능 범위 계산 후 부모에 전달
           const hasData = (off) => {
             const [s, e] = getWindowRangeUtcFromBars(bars, off);
@@ -480,6 +469,40 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
           candleSeries.setData(bars);
           maSeries.setData(calcSMA(bars, 100));
           chartRef.current?.timeScale().fitContent();
+          if (globalInterval === "D") {
+              const wsUrl = "wss://stream.bybit.com/v5/public/linear";
+              const TOPIC = `kline.D.${symbol}`;
+              const ws = new WebSocket(wsUrl);
+              wsRef.current = ws;
+
+              ws.onopen = () => {
+                if (versionRef.current !== myVersion) return;
+                ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
+              };
+              ws.onmessage = (e) => {
+                if (versionRef.current !== myVersion || !seriesRef.current) return;
+                try {
+                  const msg = JSON.parse(e.data || "{}");
+                  if (msg.topic === TOPIC && msg.data) {
+                    const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+                    const bar = {
+                      time: Math.floor(Number(d.start) / 1000),
+                      open: +d.open,
+                      high: +d.high,
+                      low: +d.low,
+                      close: +d.close,
+                    };
+                    dailyBarsRef.current = mergeBars(dailyBarsRef.current || [], bar);
+                    seriesRef.current.update(bar);
+                    maSeriesRef.current?.setData(calcSMA(dailyBarsRef.current, 100));
+                    applyMarkersAndNotes(dailyBarsRef.current, 0, "D");
+                  }
+                } catch {}
+              };
+              ws.onerror = () => {
+                try { ws.close(); } catch {}
+              };
+            }
 
           // 일봉에선 bounds 리포트 불필요
         }
@@ -489,44 +512,6 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
     })();
 
     // 1일봉만 WS
-    if (globalInterval === "D") {
-      const wsUrl = "wss://stream.bybit.com/v5/public/linear";
-      const TOPIC = `kline.D.${symbol}`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        if (versionRef.current !== myVersion) return;
-        ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
-      };
-      ws.onmessage = (e) => {
-        if (versionRef.current !== myVersion || !seriesRef.current) return;
-        try {
-          const msg = JSON.parse(e.data || "{}");
-          if (msg.topic === TOPIC && msg.data) {
-            const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-            const bar = {
-              time: Math.floor(Number(d.start) / 1000),
-              open: +d.open,
-              high: +d.high,
-              low: +d.low,
-              close: +d.close,
-            };
-            dailyBarsRef.current = mergeBars(dailyBarsRef.current || [], bar);
-            seriesRef.current.update(bar);
-            maSeriesRef.current?.setData(calcSMA(dailyBarsRef.current, 100));
-
-            // 마커/노트는 그대로(7일) 유지
-            applyMarkersAndNotes(dailyBarsRef.current, 0, "D");
-          }
-        } catch {}
-      };
-      ws.onerror = () => {
-        try {
-          ws.close();
-        } catch {}
-      };
-    }
 
     return () => {
       try {
@@ -549,7 +534,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
       notesAllRef.current = [];
       setNotesView([]);
     };
-  }, [symbol, globalInterval]);
+  }, [symbol, globalInterval, onBounds]);
 
   // 1분봉에서 날짜 이동 시: 데이터/MA/마커/노트 재세팅
   useEffect(() => {
@@ -660,7 +645,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
                 <b style={{ opacity: 0.95 }}>#{n.seq}</b>
                 <span style={{ opacity: 0.85 }}>{n.kind}</span>
                 <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
-                <span>{fmtUSD(n.price)}</span>
+                <span>{(n.price)}</span>
 
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontFamily: "inherit" }}>
                   {fmtKSTFull(n.timeSec)}
@@ -695,9 +680,9 @@ export default function Coin() {
 
   // 각 심볼 별 이동 가능 오프셋 범위 수집
   const [perSymbolBounds, setPerSymbolBounds] = useState({});
-  const onBounds = (symbol, bounds) => {
-    setPerSymbolBounds((prev) => ({ ...prev, [symbol]: bounds }));
-  };
+  const onBounds = useCallback((symbol, bounds) => {
+    setPerSymbolBounds(prev => ({ ...prev, [symbol]: bounds }));
+  }, []);
 
   // 세 차트 모두에 유효한 공통 범위 + 준비 여부
   const { minOffset, maxOffset, boundsReady } = useMemo(() => {
@@ -712,8 +697,7 @@ export default function Coin() {
   // 🔒 공통 범위가 바뀌거나 인터벌이 1→D/ D→1 전환될 때 dayOffset 자동 클램프
   useEffect(() => {
     if (interval !== "1" || !boundsReady) return;
-    if (dayOffset < minOffset) setDayOffset(minOffset);
-    else if (dayOffset > maxOffset) setDayOffset(maxOffset);
+    setDayOffset(d => Math.min(Math.max(d, minOffset), maxOffset));
   }, [interval, boundsReady, minOffset, maxOffset]);
 
   const atMin = interval === "1" && boundsReady && dayOffset <= minOffset;
