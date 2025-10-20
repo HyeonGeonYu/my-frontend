@@ -6,6 +6,26 @@ import { useCallback } from "react";
 const KST_OFFSET_SEC = 9 * 3600;
 const DAY_SEC = 24 * 3600;
 
+// 일봉/1분봉 공통: 최신 MA100 하나만 빠르게 계산
+function calcLatestMAValue(bars, period = 100) {
+  if (!Array.isArray(bars) || bars.length < period) return null;
+  let sum = 0;
+  for (let i = bars.length - period; i < bars.length; i++) {
+    sum += Number(bars[i].close ?? bars[i].c ?? bars[i].value ?? 0);
+  }
+  return sum / period;
+}
+
+// 마지막 바 기준 "KST 06:50" 세션 시작 시각(UTC초)
+function getAnchorKst0650UtcSec(bars) {
+  if (!bars?.length) return null;
+  const lastUtc = bars[bars.length - 1].time;
+  const kst = lastUtc + KST_OFFSET_SEC;
+  const SIX50 = 6 * 3600 + 50 * 60; // 06:50
+  const sessionStartKst =
+    Math.floor((kst - SIX50) / DAY_SEC) * DAY_SEC + SIX50;
+  return sessionStartKst - KST_OFFSET_SEC; // 다시 UTC로
+}
 // tsSec(UTC seconds) → "세션 anchor 날짜(YYYY-MM-DD, KST 06:50 기준)"를 돌려줌
 function sessionKeyKST_0650(tsSec) {
   // KST로 옮겨서 06:50 오프셋을 뺀 뒤 day 경계로 내림
@@ -64,13 +84,10 @@ function getAnchorKstMidnightUtcSec(bars) {
   const kstMidnight = Math.floor(lastKst / DAY_SEC) * DAY_SEC;
   return kstMidnight - KST_OFFSET_SEC;
 }
-// KST 06:50 시작 ~ +24h 윈도우(UTC초)
 function getWindowRangeUtcFromBars(bars, offsetDays) {
-  const anchorMidnightUtc = getAnchorKstMidnightUtcSec(bars);
-  if (anchorMidnightUtc == null) return [0, 0];
-  const startKst =
-    anchorMidnightUtc + KST_OFFSET_SEC + (6 * 3600 + 50 * 60) + offsetDays * DAY_SEC;
-  const startUtc = startKst - KST_OFFSET_SEC;
+  const anchor0650Utc = getAnchorKst0650UtcSec(bars);
+  if (anchor0650Utc == null) return [0, 0];
+  const startUtc = anchor0650Utc + offsetDays * DAY_SEC;
   return [startUtc, startUtc + DAY_SEC];
 }
 
@@ -199,91 +216,34 @@ function buildSignalAnnotations(sigs) {
 
   return { markers, notes };
 }
+function TickerCard({ symbol, price, ma100, connected, connecting }) {
+  const has = typeof price === 'number' && typeof ma100 === 'number' && ma100 !== 0;
+  const deltaPct = has ? ((price / ma100 - 1) * 100) : null;
+  const up = deltaPct != null ? deltaPct >= 0 : null;
 
-/** ─────────────────────────────────────────────────────────
- * 티커 카드 (WS)
- * props: { symbol, market: 'linear'|'spot' }
- * ───────────────────────────────────────────────────────── */
-function TickerCard({ symbol, market = "linear" }) {
-  const [connected, setConnected] = useState(false);
-  const [price, setPrice] = useState(null);
-  const [changePct, setChangePct] = useState(null);
-
-  useEffect(() => {
-    const wsUrl =
-      market === "spot"
-        ? "wss://stream.bybit.com/v5/public/spot"
-        : "wss://stream.bybit.com/v5/public/linear";
-    const topic = `tickers.${symbol}`;
-    let timer = null;
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      setConnected(true);
-      ws.send(JSON.stringify({ op: "subscribe", args: [topic] }));
-    };
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data || "{}");
-        if (msg.topic === topic && msg.data) {
-          const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-          if (d?.lastPrice) setPrice(parseFloat(d.lastPrice));
-          if (d?.price24hPcnt) setChangePct(parseFloat(d.price24hPcnt) * 100);
-        }
-      } catch {}
-    };
-    ws.onclose = () => {
-      setConnected(false);
-      timer = setTimeout(() => {
-        // 필요하면 자동 재접속 구현
-      }, 1000);
-    };
-    ws.onerror = () => {
-      try {
-        ws.close();
-      } catch {}
-    };
-    return () => {
-      if (timer) clearTimeout(timer);
-      try {
-        ws.close();
-      } catch {}
-    };
-  }, [symbol, market]);
-
-  const up = (changePct ?? 0) >= 0;
+  const connBadge = connecting ? "⏳" : (connected ? "✅" : "❌");
 
   return (
-    <div
-      style={{
-        padding: "16px 18px",
-        borderRadius: 14,
-        background: "#1a1a1a",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-      }}
-    >
-      <div style={{ fontSize: 14, opacity: 0.9 }}>{symbol}</div>
+    <div style={{ padding: "16px 18px", borderRadius: 14, background: "#1a1a1a",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.35)" }}>
+      <div style={{ fontSize: 14, opacity: 0.9 }}>
+        {symbol} <span style={{ opacity: 0.7, marginLeft: 6 }}>연결: {connBadge}</span>
+      </div>
       <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
-        {price != null ? (price) : "—"}
+        {price != null ? price : "—"}
       </div>
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 13,
-          fontWeight: 700,
-          color: up ? "#2fe08d" : "#ff6b6b",
-        }}
-      >
-        24h {up ? "▲" : "▼"} {changePct != null ? `${Math.abs(changePct).toFixed(2)}%` : "--"}
-      </div>
-      <div style={{ fontSize: 12, lineHeight: 1.6, marginTop: 8, opacity: 0.9 }}>
-        <div style={{ opacity: 0.7, marginTop: 6 }}>연결: {connected ? "✅" : "❌"}</div>
+      <div style={{
+        marginTop: 6, fontSize: 13, fontWeight: 700,
+        color: up == null ? "#aaa" : (up ? "#2fe08d" : "#ff6b6b")
+      }}>
+        MA100 대비 {deltaPct != null ? `${deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(deltaPct).toFixed(2)}%` : "--"}
       </div>
     </div>
   );
 }
 
-function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
+
+function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -427,143 +387,182 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds }) {
         notesAllRef.current = notes;
 
         if (globalInterval === "1") {
-          allBarsRef.current = bars;
-          const [start, end] = getWindowRangeUtcFromBars(bars, 0);
-          const priceSlice = bars.filter((b) => b.time >= start && b.time < end);
-          const forMa = sliceWithBuffer(bars, start, end, 99);
-          const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
+  // ✅ [1분봉] 초기 REST 데이터 반영
+  allBarsRef.current = bars;
 
-             if (priceSlice.length > 0) {
-               candleSeries.setData(priceSlice);
-               maSeries.setData(ma100);
-               const from = priceSlice[0].time;
-               const to   = priceSlice[priceSlice.length - 1].time;
-               chartRef.current?.timeScale().setVisibleRange({ from, to });
-             } else {
-               // 데이터가 없으면 visibleRange를 건드리지 않음
-               candleSeries.setData([]);
-               maSeries.setData([]);
-               chartRef.current?.timeScale().fitContent();
-             }
+  const [start, end] = getWindowRangeUtcFromBars(bars, 0);
+  const priceSlice = bars.filter((b) => b.time >= start && b.time < end);
+  const forMa = sliceWithBuffer(bars, start, end, 99);
+  const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
 
-            applyMarkersAndNotes(bars, 0, "1");
-          // ▼ dayOffset 이동 가능 범위 계산 후 부모에 전달
-          const hasData = (off) => {
-            const [s, e] = getWindowRangeUtcFromBars(bars, off);
-            if (!s && !e) return false;
-            return bars.some((b) => b.time >= s && b.time < e);
-          };
-          let min = 0,
-            max = 0;
-          while (hasData(min - 1)) min -= 1;
-          while (hasData(max + 1)) max += 1;
-          onBounds?.(symbol, { min, max });
-        const wsUrl = "wss://stream.bybit.com/v5/public/linear";
-         const TOPIC = `kline.1.${symbol}`; // Bybit v5: kline.<interval>.<symbol>
-         const ws = new WebSocket(wsUrl);
-         wsRef.current = ws;
+  if (priceSlice.length > 0) {
+    candleSeries.setData(priceSlice);
+    maSeries.setData(ma100);
+    const from = priceSlice[0].time;
+    const to   = priceSlice[priceSlice.length - 1].time;
+    chartRef.current?.timeScale().setVisibleRange({ from, to });
+  } else {
+    candleSeries.setData([]);
+    maSeries.setData([]);
+    chartRef.current?.timeScale().fitContent();
+  }
 
-         ws.onopen = () => {
-           if (versionRef.current !== myVersion) return;
-           ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
-         };
-         ws.onmessage = (e) => {
-           if (versionRef.current !== myVersion || !seriesRef.current) return;
-           try {
-             const msg = JSON.parse(e.data || "{}");
-             if (msg.topic === TOPIC && msg.data) {
-               const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-               const bar = {
-                 time: Math.floor(Number(d.start) / 1000), // ms→s
-               open: +d.open,
-               high: +d.high,
-               low:  +d.low,
-               close:+d.close,
-             };
-             // 1) 원본 누적/머지
-              let arr = mergeBars(allBarsRef.current || [], bar);
-                if (arr.length > MAX_1M_BARS) {
-                  // 앞쪽(오래된) 잘라내기 — O(1)로 끝나도록 slice 사용(shift는 O(n))
-                  arr = arr.slice(-MAX_1M_BARS);
-                }
-                allBarsRef.current = arr;
+  // ✅ 시그널(마커/노트) 1분 윈도우 적용
+  applyMarkersAndNotes(bars, 0, "1");
 
-             // 2) 현재 dayOffset 윈도우 재계산 후 반영
-             const [wStart, wEnd] = getWindowRangeUtcFromBars(allBarsRef.current, dayOffsetRef.current);
-             const priceSliceWS = (allBarsRef.current || []).filter((b) => b.time >= wStart && b.time < wEnd);
-             const forMaWS = sliceWithBuffer(allBarsRef.current, wStart, wEnd, 99);
-             const ma100WS = calcSMA(forMaWS, 100).filter((p) => p.time >= wStart && p.time < wEnd);
+  // ✅ 초기 통계(1분봉 기준, 최신 close/MA100) 카드로 올림 + WS 연결중 표시
+  const lastCloseAll = bars.length ? bars[bars.length - 1].close : null;
+  const lastMaAll    = calcLatestMAValue(bars, 100);
+  onStats?.(symbol, { price: lastCloseAll, ma100: lastMaAll, connecting: true, connected: false });
 
-             // 차트 업데이트
-              if (priceSliceWS.length > 0) {
-                seriesRef.current.setData(priceSliceWS);
-                maSeriesRef.current?.setData(ma100WS);
-              }
+  // ▼ dayOffset 이동 가능 범위 계산 후 부모에 보고
+  const hasData = (off) => {
+    const [s, e] = getWindowRangeUtcFromBars(bars, off);
+    if (!s && !e) return false;
+    return bars.some((b) => b.time >= s && b.time < e);
+  };
+  let min = 0, max = 0;
+  while (hasData(min - 1)) min -= 1;
+  while (hasData(max + 1)) max += 1;
+  onBounds?.(symbol, { min, max });
 
-              // 3) 마커/노트(시그널) 재적용
-               applyMarkersAndNotes(allBarsRef.current, dayOffsetRef.current, "1");
+  // ✅ [1분봉] WS 구독
+  const wsUrl = "wss://stream.bybit.com/v5/public/linear";
+  const TOPIC = `kline.1.${symbol}`; // Bybit v5: kline.<interval>.<symbol>
+  const ws = new WebSocket(wsUrl);
+  wsRef.current = ws;
 
-              // 4) 세션 경계가 바뀌었으면 bounds 재산출
-              //    (새로운 날짜가 시작되면 max가 +1 될 수 있음)
-              const prevMax = max; // 클로저 캡처됨
-              const hasDataDyn = (off) => {
-                 const [s, e] = getWindowRangeUtcFromBars(allBarsRef.current, off);
-                 if (!s && !e) return false;
-                 return allBarsRef.current.some((b) => b.time >= s && b.time < e);
-               };
-               let newMin = 0, newMax = 0;
-               while (hasDataDyn(newMin - 1)) newMin -= 1;
-               while (hasDataDyn(newMax + 1)) newMax += 1;
-               if (newMin !== min || newMax !== prevMax) {
-                 onBounds?.(symbol, { min: newMin, max: newMax });
-               }
-             }
-           } catch {}
-         };
-         ws.onerror = () => {
-           try { ws.close(); } catch {}
-         };
+  ws.onopen = () => {
+    if (versionRef.current !== myVersion) return;
+    ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
+    // 연결됨 ✅
+    onStats?.(symbol, { connecting: false, connected: true });
+  };
 
-        } else {
-          // 일봉
+  ws.onmessage = (e) => {
+    if (versionRef.current !== myVersion || !seriesRef.current) return;
+    try {
+      const msg = JSON.parse(e.data || "{}");
+      if (msg.topic === TOPIC && msg.data) {
+        const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+        const bar = {
+          time: Math.floor(Number(d.start) / 1000), // ms→s
+          open: +d.open,
+          high: +d.high,
+          low:  +d.low,
+          close:+d.close,
+        };
+
+        // 1) 원본 누적/머지 + 오래된 바 컷(메모리 보호)
+        const MAX_1M_BARS = 43200; // 30일치(분봉) 정도
+        let arr = mergeBars(allBarsRef.current || [], bar);
+        if (arr.length > MAX_1M_BARS) arr = arr.slice(-MAX_1M_BARS);
+        allBarsRef.current = arr;
+
+        // 2) 현재 dayOffset 윈도우 재계산 후 차트 반영
+        const [wStart, wEnd] = getWindowRangeUtcFromBars(allBarsRef.current, dayOffsetRef.current);
+        const priceSliceWS = allBarsRef.current.filter((b) => b.time >= wStart && b.time < wEnd);
+        const forMaWS = sliceWithBuffer(allBarsRef.current, wStart, wEnd, 99);
+        const ma100WS = calcSMA(forMaWS, 100).filter((p) => p.time >= wStart && p.time < wEnd);
+
+        if (priceSliceWS.length > 0) {
+          seriesRef.current.setData(priceSliceWS);
+          maSeriesRef.current?.setData(ma100WS);
+        }
+
+        // 3) 카드 통계 갱신(항상 최신 바/MA100 기준)
+        const lastCloseAll2 = arr.length ? arr[arr.length - 1].close : null;
+        const lastMaAll2    = calcLatestMAValue(arr, 100);
+        onStats?.(symbol, { price: lastCloseAll2, ma100: lastMaAll2 });
+
+        // 4) 시그널 다시 적용
+        applyMarkersAndNotes(allBarsRef.current, dayOffsetRef.current, "1");
+
+        // 5) 세션 경계 바뀌면 bounds 재산출 → 부모에 보고
+        const hasDataDyn = (off) => {
+          const [s, e] = getWindowRangeUtcFromBars(allBarsRef.current, off);
+          if (!s && !e) return false;
+          return allBarsRef.current.some((b) => b.time >= s && b.time < e);
+        };
+        let newMin = 0, newMax = 0;
+        while (hasDataDyn(newMin - 1)) newMin -= 1;
+        while (hasDataDyn(newMax + 1)) newMax += 1;
+        onBounds?.(symbol, { min: newMin, max: newMax });
+      }
+    } catch {}
+  };
+
+  ws.onclose = () => {
+    // 끊김 ❌
+    onStats?.(symbol, { connecting: false, connected: false });
+  };
+  ws.onerror = () => {
+    try { ws.close(); } catch {}
+  };
+}
+ else {
+          // ✅ [일봉] 초기 REST 데이터 반영
           dailyBarsRef.current = bars;
           candleSeries.setData(bars);
           maSeries.setData(calcSMA(bars, 100));
           chartRef.current?.timeScale().fitContent();
-          if (globalInterval === "D") {
-              const wsUrl = "wss://stream.bybit.com/v5/public/linear";
-              const TOPIC = `kline.D.${symbol}`;
-              const ws = new WebSocket(wsUrl);
-              wsRef.current = ws;
 
-              ws.onopen = () => {
-                if (versionRef.current !== myVersion) return;
-                ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
-              };
-              ws.onmessage = (e) => {
-                if (versionRef.current !== myVersion || !seriesRef.current) return;
-                try {
-                  const msg = JSON.parse(e.data || "{}");
-                  if (msg.topic === TOPIC && msg.data) {
-                    const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-                    const bar = {
-                      time: Math.floor(Number(d.start) / 1000),
-                      open: +d.open,
-                      high: +d.high,
-                      low: +d.low,
-                      close: +d.close,
-                    };
-                    dailyBarsRef.current = mergeBars(dailyBarsRef.current || [], bar);
-                    seriesRef.current.update(bar);
-                    maSeriesRef.current?.setData(calcSMA(dailyBarsRef.current, 100));
-                    applyMarkersAndNotes(dailyBarsRef.current, 0, "D");
-                  }
-                } catch {}
-              };
-              ws.onerror = () => {
-                try { ws.close(); } catch {}
-              };
-            }
+          // ✅ 초기 통계(일봉 기준) 카드로 올림
+          const lastCloseD = bars.length ? bars[bars.length - 1].close : null;
+          const lastMaD    = calcLatestMAValue(bars, 100);
+          onStats?.(symbol, { price: lastCloseD, ma100: lastMaD });
+
+          // ✅ WS 연결 상태: 연결 중 ⏳ 표시
+          onStats?.(symbol, { connecting: true, connected: false });
+
+          // ✅ [일봉] WS 구독 설정
+          const wsUrl = "wss://stream.bybit.com/v5/public/linear";
+          const TOPIC = `kline.D.${symbol}`;
+          const ws = new WebSocket(wsUrl);
+          wsRef.current = ws;
+
+          ws.onopen = () => {
+            if (versionRef.current !== myVersion) return;
+            ws.send(JSON.stringify({ op: "subscribe", args: [TOPIC] }));
+            // 연결됨 ✅
+            onStats?.(symbol, { connecting: false, connected: true });
+          };
+
+          ws.onmessage = (e) => {
+            if (versionRef.current !== myVersion || !seriesRef.current) return;
+            try {
+              const msg = JSON.parse(e.data || "{}");
+              if (msg.topic === TOPIC && msg.data) {
+                const d = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+                const bar = {
+                  time: Math.floor(Number(d.start) / 1000),
+                  open: +d.open,
+                  high: +d.high,
+                  low:  +d.low,
+                  close:+d.close,
+                };
+                // 최신 일봉 머지 + 차트/MA 갱신
+                dailyBarsRef.current = mergeBars(dailyBarsRef.current || [], bar);
+                seriesRef.current.update(bar);
+                maSeriesRef.current?.setData(calcSMA(dailyBarsRef.current, 100));
+
+                // ✅ 최신 통계(일봉 기준) 카드로 갱신
+                const lastCloseD2 = dailyBarsRef.current.length
+                  ? dailyBarsRef.current[dailyBarsRef.current.length - 1].close
+                  : null;
+                const lastMaD2 = calcLatestMAValue(dailyBarsRef.current, 100);
+                onStats?.(symbol, { price: lastCloseD2, ma100: lastMaD2 });
+              }
+            } catch {}
+          };
+
+          ws.onclose = () => {
+            // 끊김 ❌
+            onStats?.(symbol, { connecting: false, connected: false });
+          };
+          ws.onerror = () => {
+            try { ws.close(); } catch {}
+          };
 
           // 일봉에선 bounds 리포트 불필요
         }
@@ -731,6 +730,10 @@ export default function Coin() {
   const [interval, setInterval_] = useState("1"); // "1" | "D"
   const [dayOffset, setDayOffset] = useState(0); // 1분봉 전/다음날
 
+ const [statsMap, setStatsMap] = useState({}); // { [symbol]: { price, ma100 } }
+ const onStats = useCallback((symbol, stats) => {
+   setStatsMap(prev => ({ ...prev, [symbol]: { ...prev[symbol], ...stats } }));
+ }, []);
   // 왼쪽 카드용 심볼 세트
   const symbols = [
     { symbol: "BTCUSDT", market: "linear" },
@@ -869,9 +872,19 @@ export default function Coin() {
 
           {/* 티커 카드 3개 */}
           <div style={{ display: "grid", gap: 12 }}>
-            {symbols.map((s) => (
-              <TickerCard key={s.symbol} symbol={s.symbol} market={s.market} />
-            ))}
+           {symbols.map((s) => {
+              const st = statsMap[s.symbol] || {};
+              return (
+                <TickerCard
+                  key={s.symbol}
+                  symbol={s.symbol}
+                  price={st.price}
+                  ma100={st.ma100}
+                  connected={!!st.connected}
+                  connecting={!!st.connecting}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -882,18 +895,21 @@ export default function Coin() {
             globalInterval={interval}
             dayOffset={dayOffset}
             onBounds={onBounds}
+            onStats={onStats}
           />
           <ChartPanel
             symbol="ETHUSDT"
             globalInterval={interval}
             dayOffset={dayOffset}
             onBounds={onBounds}
+            onStats={onStats}
           />
           <ChartPanel
             symbol="XAUTUSDT"
             globalInterval={interval}
             dayOffset={dayOffset}
             onBounds={onBounds}
+            onStats={onStats}
           />
         </div>
       </div>
