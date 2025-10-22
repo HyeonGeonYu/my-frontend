@@ -95,6 +95,19 @@ function calcLatestMAValue(bars, period = 100) {
   return sum / period;
 }
 
+// 숫자 3자리 콤마
+const fmtComma = (n, digits = 1) =>
+  (typeof n === "number" && Number.isFinite(n))
+    ? n.toLocaleString("en-US", { maximumFractionDigits: digits, minimumFractionDigits: digits })
+    : "—";
+// 퍼센트 표시(양/음 기호 포함 여부 선택)
+const fmtPct = (f, digits = 2, signed = false) => {
+  if (f == null || !Number.isFinite(f)) return "—";
+  const v = (typeof f === "number" ? f : Number(f)) * 100;
+  const s = v.toFixed(digits);
+  return signed ? `${v >= 0 ? "+" : ""}${s}%` : `${s}%`;
+};
+
 // 마지막 바 기준 "KST 06:50" 세션 시작(UTC초)
 function getAnchorKst0650UtcSec(bars) {
   if (!bars?.length) return null;
@@ -197,6 +210,15 @@ async function fetchSignals(symbol) {
   return Array.isArray(j?.signals) ? j.signals : [];
 }
 
+// ⬇️ 심볼별 임계치/설정(진입/모멘텀/청산/크로스)을 가져오는 API (백엔드 제공 전제)
+async function fetchThresholdMeta(symbol) {
+  const url = `/api/thresholds?symbol=${symbol}`; // 예: { ma_threshold:0.018, momentum_threshold:0.006, exit_threshold:0.0005, target_cross:10, closes_num:10080 }
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return null;
+  const j = await res.json();
+  return j || null;
+}
+
 function buildSignalAnnotations(sigs) {
   const items = sigs
     .map((s) => {
@@ -255,14 +277,28 @@ function buildSignalAnnotations(sigs) {
 /* ─────────────────────────────────────────────────────────
  * 티커 카드: 현재 인터벌(1분/D)에 맞는 MA100 기준으로 퍼센트 표시
  * ───────────────────────────────────────────────────────── */
-function TickerCard({ symbol, interval, stats, connected }) {
-  // stats: { price1m, ma100_1m, priceD, ma100_D }
+function TickerCard({ symbol, interval, stats, meta, connected }) {
+  // stats: { price1m, ma100_1m, chg3mPct, priceD, ma100_D }
+  // meta : { ma_threshold, momentum_threshold, exit_threshold, target_cross, closes_num }
   const price = interval === "D" ? stats?.priceD : stats?.price1m;
   const ma100 = interval === "D" ? stats?.ma100_D : stats?.ma100_1m;
+  const chg3mPct = interval === "D" ? null : stats?.chg3mPct; // 1분봉에서만 의미
 
   const has = typeof price === "number" && typeof ma100 === "number" && ma100 !== 0;
-  const deltaPct = has ? ((price / ma100 - 1) * 100) : null;
+  const deltaPct = has ? (price / ma100 - 1) : null;
   const up = deltaPct != null ? deltaPct >= 0 : null;
+
+  // 임계치가 있으면 목표가 계산(MA100 기준)
+  const thr = meta?.ma_threshold ?? null;            // fraction (e.g. 0.018)
+  const momThr = meta?.momentum_threshold ?? null;   // fraction (e.g. 0.006)
+  const exitThr = meta?.exit_threshold ?? null;      // fraction (e.g. 0.0005)
+  const tCross = meta?.target_cross ?? null;
+  const closesNum = meta?.closes_num ?? null;
+
+  const maLower = has && thr != null ? ma100 * (1 - thr) : null;
+  const maUpper = has && thr != null ? ma100 * (1 + thr) : null;
+  const exitLower = has && exitThr != null ? ma100 * (1 - exitThr) : null;
+  const exitUpper = has && exitThr != null ? ma100 * (1 + exitThr) : null;
 
   return (
     <div
@@ -274,8 +310,8 @@ function TickerCard({ symbol, interval, stats, connected }) {
       }}
     >
       <div style={{ fontSize: 14, opacity: 0.9 }}>{symbol}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
-        {price != null ? price : "—"}
+        <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
+            {price != null ? fmtComma(price, 1) : "—"}
       </div>
       <div
         style={{
@@ -285,8 +321,30 @@ function TickerCard({ symbol, interval, stats, connected }) {
           color: up == null ? "#aaa" : (up ? "#2fe08d" : "#ff6b6b"),
         }}
       >
-        MA100 대비 {deltaPct != null ? `${deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(deltaPct).toFixed(2)}%` : "--"}
+        MA100 대비 {deltaPct != null ? `${deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(deltaPct * 100).toFixed(2)}%` : "--"}
       </div>
+      <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.6, opacity: 0.9 }}>
+        {/* • 진입목표 : <lower> / <upper> ([±thr%]) */}
+        <div>
+          • 진입목표 : {maLower != null ? fmtComma(maLower, 1) : "—"} / {maUpper != null ? fmtComma(maUpper, 1) : "—"}{" "}
+          ({thr != null ? `[±${(thr * 100).toFixed(2)}%]` : "[—]"})
+        </div>
+        {/* • 급등락목표 : momThr% ( 3분전대비 👉[+x.xx%]👈 ) */}
+        <div>
+          • 급등락목표 : {momThr != null ? (momThr * 100).toFixed(3) + "%" : "—"}{" "}
+          ({chg3mPct != null ? ` 3분전대비 👉[${chg3mPct >= 0 ? "+" : ""}${chg3mPct.toFixed(3)}%]👈` : " 3분전대비 —"})
+        </div>
+        {/* • 30분내 청산기준 : <upper>/<lower> <exit%> */}
+        <div>
+          • 30분내 청산기준 : {exitUpper != null ? fmtComma(exitUpper, 1) : "—"}/{exitLower != null ? fmtComma(exitLower, 1) : "—"}{" "}
+          {exitThr != null ? `${(exitThr * 100).toFixed(3)}%` : "—"}
+        </div>
+        {/* • 목표 크로스: n회 / m 분 */}
+        <div>
+          • 목표 크로스: {tCross != null ? tCross : "—"}회 / {closesNum != null ? closesNum : "—"} 분
+        </div>
+      </div>
+
     </div>
   );
 }
@@ -407,7 +465,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
 
     (async () => {
       try {
-        const limit = globalInterval === "1" ? 10080 : 300;
+        const limit = globalInterval === "1" ? 10080 : 1000;
         const restPath = `/api/klines?symbol=${symbol}&interval=${globalInterval}&limit=${limit}`;
         const resp = await fetch(restPath, { cache: "no-store" });
         const json = await resp.json();
@@ -447,9 +505,11 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
             chartRef.current?.timeScale().setVisibleRange({ from, to });
 
             // 카드용 최신(항상 전체 1분봉 기준)
-            const lastCloseAll = bars.length ? bars[bars.length - 1].close : null;
-            const lastMaAll = calcLatestMAValue(bars, 100);
-            onStats?.(symbol, { price1m: lastCloseAll, ma100_1m: lastMaAll });
+              const lastCloseAll = bars.length ? bars[bars.length - 1].close : null;
+              const lastMaAll = calcLatestMAValue(bars, 100);
+              const prev3 = bars.length >= 3 ? bars[bars.length - 3].close : null;
+              const chg3mPct = (prev3 && lastCloseAll != null) ? ((lastCloseAll - prev3) / prev3 * 100) : null;
+              onStats?.(symbol, { price1m: lastCloseAll, ma100_1m: lastMaAll, chg3mPct });
           } else {
             candleSeries.setData([]);
             maSeries.setData([]);
@@ -493,9 +553,14 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
             }
 
             // 카드용 최신(항상 최신 1분봉 기반)
-            const lastClose = arr.length ? arr[arr.length - 1].close : null;
-            const lastMa = calcLatestMAValue(arr, 100);
-            onStats?.(symbol, { price1m: lastClose, ma100_1m: lastMa });
+              // 카드용 최신(항상 최신 1분봉 기반) + 3분전 대비
+           const lastClose = arr.length ? arr[arr.length - 1].close : null;
+           const lastMa = calcLatestMAValue(arr, 100);
+           const prev3m = arr.length >= 3 ? arr[arr.length - 3].close : null;
+           const chg3m = (prev3m && lastClose != null) ? ((lastClose - prev3m) / prev3m * 100) : null;
+           onStats?.(symbol, { price1m: lastClose, ma100_1m: lastMa, chg3mPct: chg3m });
+
+
 
             // 마커/노트
             applyMarkersAndNotes(arr, dayOffsetRef.current, "1");
@@ -604,7 +669,7 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats }) {
     <div style={{ marginBottom: 28 }}>
       <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>
         {symbol} · {globalInterval === "1" ? "1분봉" : "1일봉"} · MA100 ·{" "}
-        <code>{globalInterval === "D" ? `kline.D.${symbol}` : "kline.1.${symbol}`"}</code>
+        <code>{globalInterval === "D" ? `kline.D.${symbol}` : `kline.1.${symbol}`}</code>
       </div>
       <div
         ref={wrapRef}
@@ -704,7 +769,23 @@ export default function Coin() {
   const onStats = useCallback((symbol, stats) => {
     setStatsMap(prev => ({ ...prev, [symbol]: { ...prev[symbol], ...stats } }));
   }, []);
-
+  // 심볼별 메타 임계치들 저장
+  const [metaMap, setMetaMap] = useState({}); // { [symbol]: { ma_threshold, momentum_threshold, exit_threshold, target_cross, closes_num } }
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        // 최초 로드 + 간단 재로딩(원하면 setInterval 추가)
+        const results = await Promise.all(symbols.map(s => fetchThresholdMeta(s.symbol).catch(() => null)));
+        if (!alive) return;
+        const merged = {};
+        results.forEach((m, i) => { if (m) merged[symbols[i].symbol] = m; });
+        setMetaMap(prev => ({ ...prev, ...merged }));
+      } catch {}
+    })();
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 초기 1회 (필요 시 폴링 추가)
   const symbols = [
     { symbol: "BTCUSDT", market: "linear" },
     { symbol: "ETHUSDT", market: "linear" },
@@ -849,8 +930,9 @@ export default function Coin() {
                 key={s.symbol}
                 symbol={s.symbol}
                 interval={interval}
-                stats={statsMap[s.symbol]}
-                 connected={wsConnected}
+               stats={statsMap[s.symbol]}
+               meta={metaMap[s.symbol]}
+               connected={wsConnected}
               />
             ))}
           </div>
