@@ -16,25 +16,47 @@ function toNumberOrNull(s: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Stream(OpenPctLog)에서 (sym, name) 일치하는 가장 최근 new(0~1 fraction) 찾기 */
-async function getLatestNewFracFromStream(redis: Redis, symbol: string, name: string, searchBack = 200) {
-  // Upstash SDK: xrevrange(key, end, start, { count }) -> Array<[id, Record<string,string>]>
-  const entries = await (redis as any).xrevrange("OpenPctLog", "+", "-", { count: searchBack });
-  if (!Array.isArray(entries)) return null;
+function kvArrayToObject(arr: any[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (let i = 0; i + 1 < arr.length; i += 2) {
+    const k = String(arr[i]);
+    const v = arr[i + 1];
+    out[k] = typeof v === "string" ? v : v == null ? "" : String(v);
+  }
+  return out;
+}
 
-  for (const entry of entries) {
-    // entry 형태: [id, { field: value, ... }]
-    const rec = Array.isArray(entry) ? entry[1] : entry?.value || entry;
-    if (!rec) continue;
+function normalizeXRev(entries: any[]): Array<{ id: string; fields: Record<string, string> }> {
+  const out: Array<{ id: string; fields: Record<string, string> }> = [];
+  for (const [id, payload] of Object.entries(entries)) {
+      if (!payload) continue;
+      if (Array.isArray(payload)) {
+        out.push({ id, fields: kvArrayToObject(payload) });
+      } else if (typeof payload === "object") {
+        const fields: Record<string, string> = {};
+        for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
+          fields[k] = typeof v === "string" ? v : v == null ? "" : String(v);
+        }
+        out.push({ id, fields });
+      }
+    }
+  return out;
+}
 
-    const sym = rec.sym ?? rec.SYM ?? rec.symbol;
-    const nm = rec.name ?? rec.NAME;
-    if (String(sym).toUpperCase() !== symbol) continue;
-    if (String(nm) !== name) continue;
+/** Stream(OpenPctLog)에서 (sym 매칭) 항목 중 가장 최근의 new(0~1 fraction) */
+async function getLatestFracBySymbol(redis: Redis, symbol: string, searchBack = 500) {
+  const raw = await (redis as any).xrevrange("OpenPctLog", "+", "-", { count: searchBack });
 
-    const raw = rec.new ?? rec.NEW;
-    const v = toNumberOrNull(raw);
-    if (v != null) return v; // 0~1 fraction
+  const items = normalizeXRev(raw);
+  const wantSym = symbol.toUpperCase();
+
+  for (const it of items) {
+    const f = it.fields || {};
+    const sym = String(f.sym ?? f.SYM ?? f.symbol ?? "").toUpperCase();
+    if (sym !== wantSym) continue;
+
+    const v = toNumberOrNull(f.new ?? f.NEW);
+    if (v != null) return { value: v, id: it.id };
   }
   return null;
 }
@@ -52,21 +74,22 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     const { searchParams } = new URL(req.url);
     const symbolParam = (searchParams.get("symbol") || "").toUpperCase().trim();
+    const debug = searchParams.get("debug") === "1";
     if (!symbolParam) return json({ retCode: -1, retMsg: "symbol required" }, 400);
 
-    // 최신 MA threshold (Stream에서 name="MA threshold")
-    const ma_threshold = await getLatestNewFracFromStream(redis, symbolParam, "MA threshold", 200);
+    // 최신 임계치(new, 0~1) — name은 고려하지 않음
+    const found = await getLatestFracBySymbol(redis, symbolParam, 500);
+    const ma_threshold = found?.value ?? null;
 
-    // momentum_threshold: 로그가 없다면 ma/3 규칙 적용
+    // momentum_threshold: 별도 로그를 보지 않고 ma/3 규칙
     const momentum_threshold =
       ma_threshold == null ? null : Number.isFinite(ma_threshold) ? ma_threshold / 3 : null;
 
-    // 서버 기본값들 (봇 설정과 맞춰주세요)
+    // 서버 기본값(봇 설정과 맞춰주세요)
     const exit_threshold = 0.0005; // 0.05%
     const target_cross = 10;
     const closes_num = 10080;
 
-    // 프론트 fetchThresholdMeta에서 그대로 사용하도록 평평한 객체로 반환
     return json({
       symbol: symbolParam,
       ma_threshold,
@@ -74,6 +97,7 @@ export default async function handler(req: Request): Promise<Response> {
       exit_threshold,
       target_cross,
       closes_num,
+      ...(debug ? { _debug: { streamKey: "OpenPctLog", foundId: found?.id || null } } : {}),
     });
   } catch (e: any) {
     return json({ retCode: -1, retMsg: e?.message || "server error" }, 500);
