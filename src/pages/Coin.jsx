@@ -45,7 +45,7 @@ function TickerCard({ symbol, interval, stats, meta }) {
        <div style={{ fontSize: 12, opacity: 0.85 }}>
          진입&nbsp;{thrPct != null ? `±${thrPct}%` : "—"}
          <span style={{ opacity: 0.6 }}>&nbsp;·&nbsp;</span>
-         급등락&nbsp;±{momThr != null ? (momThr * 100).toFixed(3) + "%" : "—"}
+         급변&nbsp;{momThr != null ? (momThr * 100).toFixed(3) + "%" : "—"}
        </div>
      </div>
      <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
@@ -105,7 +105,8 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
 
 
   // 하루 범위 렌더(실데이터 + 미래 빈칸)
-  const renderDayWindow = useCallback((arrAll) => {
+  const renderDayWindow = useCallback((arrAll, resetRange = false) => {
+      if (!chartRef.current || !seriesRef.current) return;
     const [start, end] = getDayWindowByOffset(dayOffsetRef.current);
 
     const real = (arrAll || []).filter((b) => b.time >= start && b.time < end);
@@ -134,7 +135,16 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
      maLowerSeriesRef.current?.setData([]);
    }
 
-    chartRef.current?.timeScale().setVisibleRange({ from: start, to: end - 60 });
+    if (resetRange) {
+  try {
+    const ts = chartRef.current?.timeScale?.();
+    if (ts && start && end) {
+      ts.setVisibleRange({ from: start, to: end - 60 });
+    }
+  } catch (e) {
+    console.warn("setVisibleRange failed:", e);
+  }
+}
     const applyMarkersAndNotes = (barsReal) => {
     const m = (markersAllRef.current || []).filter(x => x.time >= start && x.time < end);
     const n = (notesAllRef.current || []).filter(x => x.timeSec >= start && x.timeSec < end);
@@ -243,7 +253,8 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
           allBarsRef.current = bars;
 
           // 초기 렌더(고정: 06:50~익일 06:50, 미래 빈칸 포함)
-          renderDayWindow(allBarsRef.current);
+          renderDayWindow(allBarsRef.current, false);
+
 
           // 카드 수치
           const lastCloseAll = bars.length ? bars[bars.length - 1].close : null;
@@ -266,7 +277,8 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
             if (arr.length > MAX_1M_BARS) arr = arr.slice(-MAX_1M_BARS);
             allBarsRef.current = arr;
 
-            renderDayWindow(allBarsRef.current);
+            renderDayWindow(allBarsRef.current, true);
+
 
             // 카드 수치
             const lastClose = arr.length ? arr[arr.length - 1].close : null;
@@ -325,7 +337,10 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
   // 전날/다음날 버튼으로만 이동 (드래그/휠 차단)
   useEffect(() => {
     if (!seriesRef.current || globalInterval !== "1") return;
-    renderDayWindow(allBarsRef.current || []);
+
+    if (chartRef.current && allBarsRef.current?.length) {
+  renderDayWindow(allBarsRef.current, true);
+}
   }, [dayOffset, globalInterval, renderDayWindow]);
   return (
     <div style={{ marginBottom: 28 }}>
