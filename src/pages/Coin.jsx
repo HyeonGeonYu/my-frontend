@@ -4,7 +4,7 @@ import { createChart } from "lightweight-charts";
 
 // 공통 유틸 가져오기
 import {
-  fmtComma, fmtKSTFull, fmtKSTHour, fmtKSTMonth, getTs,
+ fmtComma, fmtKSTFull, fmtKSTHour, fmtKSTMonth, fmtKSTHMS, getTs,
   sliceWithBuffer, calcSMA, calcLatestMAValue, mergeBars,
   fetchAllKlines, fetchSignals, buildSignalAnnotations, wsHub,
   next0650EndBoundaryUtcSec, genMinutePlaceholders,
@@ -348,7 +348,6 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
         {symbol}
       </div>
       <div ref={wrapRef} style={{ width: "100%", height: CHART_HEIGHT, borderRadius: 12, overflow: "hidden", background: "#111" }} />
-      {/* 시그널 설명 패널 (옵션) */}
 <div style={{ marginTop: 10, background: "#161616", border: "1px solid #262626", borderRadius: 12, padding: "10px 12px" }}>
        {/* 헤더 + 토글 버튼 */}
        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -371,19 +370,24 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>표시 구간에 시그널 없음</div>
        ) : notesCollapsed ? (
          // 접힘 상태: 아무 시그널도 표시하지 않음
-         <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>접힘</div>
+         <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}></div>
        ) : (
          <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
            {notesView.map((n) => {
-              const side = String(n.side || "").toUpperCase();
-              const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
-              const reasonsTxt = n.reasons?.length ? ` (${n.reasons.join(", ")})` : "";
+               const side = String(n.side || "").toUpperCase();           // LONG | SHORT
+                 const kind = String(n.kind || "").toUpperCase();           // ENTRY | EXIT
+                 const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
+                 const priceTxt = n.price != null ? fmtComma(n.price) : "—";
+                 const timeTxt = n.timeSec ? fmtKSTHMS(n.timeSec) : "";
+                 const reasonsTxt = n.reasons?.length ? `${n.reasons.join(", ")}` : "";
+
               return (
                 <div key={n.key} style={{ padding: "8px 10px", borderRadius: 10, background: "#1b1b1b", border: "1px solid #2a2a2a" }}>
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "6ch 6ch 7ch 14ch 1fr",
+                      gridTemplateColumns: "6ch 9ch 8ch 9ch 14ch 1fr",
+
                       columnGap: 12,
                       alignItems: "baseline",
                       fontSize: 12,
@@ -393,15 +397,29 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
                       textOverflow: "ellipsis",
                       fontVariantNumeric: "tabular-nums",
                     }}
-                    title={[`#${n.seq}`, `${n.kind} ${side}`, n.price, fmtKSTFull(n.timeSec), reasonsTxt].filter(Boolean).join(" · ")}
+                    title={[
+                      `#${n.seq}`,
+                      timeTxt,
+                      side,
+                      kind,
+                      priceTxt,
+                      fmtKSTFull(n.timeSec), // 툴팁엔 전체 일시 유지
+                      reasonsTxt
+                    ].filter(Boolean).join(" · ")}
                   >
                     <b style={{ opacity: 0.95 }}>#{n.seq}</b>
-                    <span style={{ opacity: 0.85 }}>{n.kind}</span>
-                    <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
-                    <span>{n.price}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontFamily: "inherit" }}>
-                      {fmtKSTFull(n.timeSec)}{reasonsTxt}
-                    </span>
+                      {/* 시간(HH:MM:SS) */}
+       <span>{timeTxt}</span>
+       {/* 롱/숏 */}
+       <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
+       {/* 엔트리/엑시트 */}
+       <span style={{ opacity: 0.85 }}>{kind}</span>
+       {/* 가격(콤마) */}
+       <span>{priceTxt}</span>
+       {/* 이유(있을 때만 보임) */}
+       <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontFamily: "inherit", opacity: reasonsTxt ? 0.9 : 0.6 }}>
+         {reasonsTxt || "—"}
+       </span>
                   </div>
                 </div>
               );

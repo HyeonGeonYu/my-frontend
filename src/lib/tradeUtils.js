@@ -27,6 +27,11 @@ export const fmtKSTHour = (sec) => {
   return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 };
 
+export const fmtKSTHMS = (sec) => {
+  const d = _toDateKST(sec);
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`;
+};
+
 export const fmtKSTMonth = (sec) => {
   const d = _toDateKST(sec);
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
@@ -210,8 +215,20 @@ export function buildSignalAnnotations(sigs) {
     if (isExit && isLong) { position = "aboveBar"; color = "#2fe08d"; shape = "arrowDown"; }
     if (isExit && isShort) { position = "belowBar"; color = "#ff6b6b"; shape = "arrowUp"; }
 
-    markers.push({ time: s.timeSec, position, color, shape, text: `#${s.seq}` });
-    notes.push({
+
+    const shortLabel =
+     isLong ? (isEntry ? "진입 L" : "청산 L")
+            : (isEntry ? "진입 S" : "청산 S");
+
+    markers.push({
+        time: s.timeSec,
+        position,
+        color,
+        shape,
+        text: `#${s.seq} ${shortLabel}`, // ← "#1 Ex S" 형식
+        size: 2
+      });
+      notes.push({
       key: `${s.sessionKey}#${s.seq}`,
       timeSec: s.timeSec,
       sessionKey: s.sessionKey,
