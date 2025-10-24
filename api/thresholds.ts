@@ -87,7 +87,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     // 서버 기본값(봇 설정과 맞춰주세요)
     const exit_threshold = 0.0005; // 0.05%
-    const target_cross = 10;
+    const target_cross = 5;
     const closes_num = 10080;
 
     return json({
