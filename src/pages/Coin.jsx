@@ -153,7 +153,8 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
   };
     applyMarkersAndNotes(real);
 }, [getDayWindowByOffset, thr]);
-    const CHART_HEIGHT = 420;
+    const CHART_HEIGHT = 320;
+    const CHART_WIDTH = 800 ;
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -173,10 +174,11 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
     setNotesView([]);
 
     // 차트 생성 (드래그/휠 비활성 → 날짜는 버튼으로만 이동)
-    const width = Math.max(320, el.clientWidth || 0);
+     const width = CHART_WIDTH;
     const chart = createChart(el, {
       width,
       height: CHART_HEIGHT,
+        autoSize: false,
       layout: { background: { color: "#111" }, textColor: "#ddd" },
       grid: { vertLines: { color: "rgba(255,255,255,0.06)" }, horzLines: { color: "rgba(255,255,255,0.06)" } },
       timeScale: {
@@ -225,14 +227,8 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
     maLowerSeriesRef.current = maLowerSeries;
 
     // 리사이즈 옵저버
-    const ro = new ResizeObserver(() => {
-      if (versionRef.current !== myVersion) return;
-      if (!chartRef.current || !wrapRef.current) return;
-      const w = Math.max(320, wrapRef.current.clientWidth || 0);
-      chartRef.current.applyOptions({ width: w });
-    });
-    ro.observe(el);
-    roRef.current = ro;
+      roRef.current = null;
+
 
     const MAX_1M_BARS = 43200;
 
@@ -347,12 +343,22 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
       <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>
         {symbol}
       </div>
-      <div ref={wrapRef} style={{ width: "100%", height: CHART_HEIGHT, borderRadius: 12, overflow: "hidden", background: "#111" }} />
-<div style={{ marginTop: 10, background: "#161616", border: "1px solid #262626", borderRadius: 12, padding: "10px 12px" }}>
-       {/* 헤더 + 토글 버튼 */}
+      <div ref={wrapRef} style={{ width: CHART_WIDTH, height: CHART_HEIGHT, borderRadius: 12, overflow: "hidden", background: "#111" }} />
+        <div
+            style={{
+              marginTop: 10,
+              background: "#161616",
+              border: "1px solid #262626",
+              borderRadius: 12,
+              padding: "10px 12px",
+              width: CHART_WIDTH,           // ✅ 차트와 동일 폭(px)
+              boxSizing: "border-box"       // ✅ 보더로 인해 2px 커지는 것 방지
+            }}
+          >
+        {/* 헤더 + 토글 버튼 */}
        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
          <div style={{ fontWeight: 700, fontSize: 13, opacity: 0.9 }}>
-           {symbol} · 시그널 설명 {notesView.length ? `(${notesView.length})` : ""}
+           {symbol} · 시그널 설명 ({notesView.length})
          </div>
          <button
            onClick={() => setNotesCollapsed((v) => !v)}
@@ -366,13 +372,14 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
          </button>
        </div>
 
-{notesView.length === 0 ? (
-         <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>표시 구간에 시그널 없음</div>
-       ) : notesCollapsed ? (
-         // 접힘 상태: 아무 시그널도 표시하지 않음
-         <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}></div>
-       ) : (
-         <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+        {notesCollapsed ? (
+           // 접힘 상태: 아무것도 표시하지 않음 (개수는 헤더에만)
+           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}></div>
+         ) : notesView.length === 0 ? (
+           // 펼쳤는데 시그널이 없을 때만 메시지 노출
+           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>시그널 없음</div>
+         ) : (
+           <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
            {notesView.map((n) => {
                const side = String(n.side || "").toUpperCase();           // LONG | SHORT
                  const kind = String(n.kind || "").toUpperCase();           // ENTRY | EXIT
