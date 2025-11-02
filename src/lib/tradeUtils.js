@@ -357,3 +357,49 @@ class WsHub {
 }
 
 export const wsHub = new WsHub();
+
+// === 평가/자산 계산 유틸 ===
+export function lastPriceFromStats(stats) {
+  if (!stats) return null;
+  if (typeof stats.price1m === "number") return stats.price1m;
+  if (typeof stats.priceD  === "number") return stats.priceD;
+  return null;
+}
+
+export function calcSidePnl(side, qty, avg, px) {
+  if (!qty || !avg || !px) return { pnl: 0, pnlPct: null };
+  const pnl = side === "LONG" ? (px - avg) * qty : (avg - px) * qty;
+  const pnlPct = (px / avg - 1) * (side === "LONG" ? 100 : -100);
+  return { pnl, pnlPct };
+}
+
+export function buildPositionRows(asset, statsBySymbol) {
+  const rows = [];
+  let pnlSum = 0;
+
+  const positions = (asset && asset.positions) ? asset.positions : {};
+  for (const sym of Object.keys(positions)) {
+    const pos = positions[sym] || {};
+    const px = lastPriceFromStats(statsBySymbol?.[sym]);
+
+    for (const side of ["LONG", "SHORT"]) {
+      const s = pos[side];
+      if (!s || !px) continue;
+      const qty = +s.qty || 0;
+      const avg = +s.avg_price || 0;
+      if (qty <= 0 || avg <= 0) continue;
+
+      const { pnl, pnlPct } = calcSidePnl(side, qty, avg, px);
+      pnlSum += pnl;
+      rows.push({ sym, side, qty, avg, px, pnl, pnlPct });
+    }
+  }
+  return { rows, pnlSum };
+}
+
+export function calcEquityUSDT(asset, statsBySymbol) {
+  const wallet = +(asset?.wallet?.USDT ?? 0);
+  const { pnlSum } = buildPositionRows(asset, statsBySymbol);
+  return wallet + pnlSum;
+}
+

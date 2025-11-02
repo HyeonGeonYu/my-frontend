@@ -1,8 +1,7 @@
-// src/pages/Coin.jsx
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { createChart } from "lightweight-charts";
+import AssetPanel from "../components/AssetPanel";
 
-// 공통 유틸 가져오기
 import {
  fmtComma, fmtKSTFull, fmtKSTHour, fmtKSTMonth, fmtKSTHMS, getTs,
   sliceWithBuffer, calcSMA, calcLatestMAValue, mergeBars,
@@ -10,9 +9,6 @@ import {
   next0650EndBoundaryUtcSec, genMinutePlaceholders,
 } from "../lib/tradeUtils";
 
-/* ─────────────────────────────────────────────────────────
- * TickerCard
- * ───────────────────────────────────────────────────────── */
 function TickerCard({ symbol, interval, stats, meta }) {
   const price = interval === "D" ? stats?.priceD : stats?.price1m;
   const ma100 = interval === "D" ? stats?.ma100_D : stats?.ma100_1m;
@@ -51,12 +47,17 @@ function TickerCard({ symbol, interval, stats, meta }) {
      <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
        {price != null ? fmtComma(price, 1) : "—"}
      </div>
-      <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: up == null ? "#aaa" : (up ? "#2fe08d" : "#ff6b6b") }}>
-        MA100 대비 {deltaPct != null ? `${deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(deltaPct * 100).toFixed(2)}%` : "--"}
-      </div>
+      <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "baseline", gap: 10 }}>
+       <span style={{ color: up == null ? "#aaa" : (up ? "#2fe08d" : "#ff6b6b") }}>
+         MA100 대비 {deltaPct != null ? `${deltaPct >= 0 ? "▲" : "▼"} ${Math.abs(deltaPct * 100).toFixed(2)}%` : "--"}
+       </span>
+       <span style={{ opacity: 0.6 }}>·</span>
+       <span style={{ color: chg3mPct == null ? "#aaa" : (chg3mPct >= 0 ? "#2fe08d" : "#ff6b6b") }}>
+         3분전 {chg3mPct != null ? `${chg3mPct >= 0 ? "+" : ""}${chg3mPct.toFixed(3)}%` : "—"}
+       </span>
+     </div>
       <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.6, opacity: 0.9 }}>
         <div>• 진입목표 : {maLower != null ? fmtComma(maLower, 1) : "—"} / {maUpper != null ? fmtComma(maUpper, 1) : "—"} </div>
-        <div>• 3분전대비 : {chg3mPct != null ? `${chg3mPct >= 0 ? "+" : ""}${chg3mPct.toFixed(3)}%` : "—"}</div>
         <div>• 30분내 청산 : {exitUpper != null ? fmtComma(exitUpper, 1) : "—"}/{exitLower != null ? fmtComma(exitLower, 1) : "—"} ({exitThr != null ? `${(exitThr * 100).toFixed(3)}%` : "—"})</div>
 <div>
           • 목표 크로스: {tCross != null ? tCross : "—"}회 /{" "}
@@ -119,8 +120,6 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
 
     const forMa = sliceWithBuffer(arrAll, start, end, 99);
     const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
-
-
 
     seriesRef.current?.setData(priceSlice);
     maSeriesRef.current?.setData(ma100);
@@ -470,6 +469,23 @@ export default function Coin() {
   const [interval, setInterval_] = useState("1"); // "1" | "D"
   const [dayOffset, setDayOffset] = useState(0);
 
+  // ① 자산 불러오기 (예: /api/asset → redis의 HGETALL 가공 응답)
+  const [asset, setAsset] = useState({ wallet: { USDT: 0 }, positions: {} });
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/asset", { cache: "no-store" });
+        const j = res.ok ? await res.json() : null;
+        if (!alive || !j) return;
+        // j 구조: { wallet: { USDT: number }, positions: { BTCUSDT: {LONG|SHORT}, ... } }
+        setAsset(j.asset);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, []);
+  // 원하면 주기적 갱신(setInterval)이나 SSE/WS로 동기화 가능
+
   const [statsMap, setStatsMap] = useState({});
   const onStats = useCallback((symbol, stats) => {
     setStatsMap((prev) => ({ ...prev, [symbol]: { ...prev[symbol], ...stats } }));
@@ -530,19 +546,27 @@ export default function Coin() {
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24 }}>
         {/* 왼쪽: 티커 카드들 + 컨트롤 */}
-        <div>
-          <div
-            style={{
-              position: "sticky",
-              top: 12,
-              zIndex: 5,
-              padding: "14px 16px",
-              borderRadius: 14,
-              background: "#1a1a1a",
-              marginBottom: 14,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-            }}
-          >
+      <div>
+        <div
+           style={{
+             position: "sticky",
+             top: 12,
+             zIndex: 5,
+             display: "flex",
+             flexDirection: "column",
+             gap: 1,
+           }}
+         >
+           <AssetPanel asset={asset} statsBySymbol={statsMap} />
+           <div
+             style={{
+               padding: "14px 16px",
+               borderRadius: 14,
+               background: "#1a1a1a",
+               marginBottom: 14,
+               boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+             }}
+           >
            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>보기 설정</div>
           {interval === "1" && (
@@ -597,7 +621,7 @@ export default function Coin() {
               </>
             )}
           </div>
-
+        </div>
           {/* 티커 카드들 */}
           <div style={{ display: "grid", gap: 12 }}>
             {SYMBOLS.map((s) => (
