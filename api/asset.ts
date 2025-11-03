@@ -25,22 +25,41 @@ async function hscanTyped(
 }
 
 /** positions 필드(JSON 문자열 또는 "[]") 파싱 → null | {LONG,SHORT} */
-function parsePositionVal(s: unknown): any | null {
+function parsePositionVal(s: unknown): { LONG: any | null; SHORT: any | null } | null {
   if (s == null) return null;
+
+  // 1) 이미 객체로 역직렬화된 경우 (Upstash 자동 JSON 파싱)
+  if (typeof s === "object") {
+    const obj = s as any;
+    const LONG = obj?.LONG ?? null;
+    const SHORT = obj?.SHORT ?? null;
+
+    const isEmpty = (v: any) => v == null || (typeof v === "object" && Object.keys(v).length === 0);
+    if (isEmpty(LONG) && isEmpty(SHORT)) return null;
+    return { LONG, SHORT };
+  }
+
+  // 2) 문자열인 경우만 JSON.parse
   if (typeof s !== "string") return null;
   const trimmed = s.trim();
   if (!trimmed || trimmed === "[]") return null;
+
   try {
     const obj = JSON.parse(trimmed);
-    // 안전 가드: {LONG?, SHORT?} 형태 보장
     if (obj && typeof obj === "object") {
-      const LONG = obj.LONG ?? null;
-      const SHORT = obj.SHORT ?? null;
+      const LONG = (obj as any).LONG ?? null;
+      const SHORT = (obj as any).SHORT ?? null;
+
+      const isEmpty = (v: any) => v == null || (typeof v === "object" && Object.keys(v).length === 0);
+      if (isEmpty(LONG) && isEmpty(SHORT)) return null;
+
       return { LONG, SHORT };
     }
   } catch {}
   return null;
 }
+
+
 
 /* --------------------------- handler --------------------------- */
 export default async function handler(req: Request): Promise<Response> {

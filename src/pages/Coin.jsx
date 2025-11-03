@@ -543,7 +543,10 @@ export default function Coin() {
   });
 
   return (
+
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
+       <AssetPanel asset={asset} statsBySymbol={statsMap} />
+
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24 }}>
         {/* 왼쪽: 티커 카드들 + 컨트롤 */}
       <div>
@@ -557,7 +560,6 @@ export default function Coin() {
              gap: 1,
            }}
          >
-           <AssetPanel asset={asset} statsBySymbol={statsMap} />
            <div
              style={{
                padding: "14px 16px",
