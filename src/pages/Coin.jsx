@@ -70,6 +70,7 @@ function TickerCard({ symbol, interval, stats, meta }) {
   );
 }
 
+
 /* ─────────────────────────────────────────────────────────
  * ChartPanel (1분봉: 7일 고정 06:50~06:50, 미래 빈칸 + WS)
  * ───────────────────────────────────────────────────────── */
@@ -486,6 +487,24 @@ export default function Coin() {
   }, []);
   // 원하면 주기적 갱신(setInterval)이나 SSE/WS로 동기화 가능
 
+
+// 페이지 컴포넌트 내부 상단에 추가
+const [configState, setConfigState] = useState(null);
+
+useEffect(() => {
+  let alive = true;
+  (async () => {
+    try {
+      const r = await fetch("/api/config", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (alive) setConfigState(j);
+    } catch {}
+  })();
+  return () => { alive = false; };
+}, []);
+
+
   const [statsMap, setStatsMap] = useState({});
   const onStats = useCallback((symbol, stats) => {
     setStatsMap((prev) => ({ ...prev, [symbol]: { ...prev[symbol], ...stats } }));
@@ -545,7 +564,7 @@ export default function Coin() {
   return (
 
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
-       <AssetPanel asset={asset} statsBySymbol={statsMap} />
+       <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState} />
 
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24 }}>
         {/* 왼쪽: 티커 카드들 + 컨트롤 */}
