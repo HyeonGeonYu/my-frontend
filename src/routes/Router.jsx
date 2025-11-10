@@ -7,6 +7,7 @@ import Commodity from "../pages/Commodity";
 import KoreaStock from "../pages/KoreaStock";
 import UsStock from "../pages/UsStock";
 import Coin from "../pages/Coin";
+import Cfd from "../pages/Cfd";
 import Archive from "../pages/Archive";
 import Others from "../pages/Others";
 import Layout from "../components/Layout";
@@ -42,6 +43,7 @@ function AppRouter() {
           <Route path="/koreastock" element={<KoreaStock />} />
           <Route path="/usstock" element={<UsStock />} />
           <Route path="/coin" element={<Coin />} />
+          <Route path="/cfd" element={<Cfd />} />
           <Route path="/archive" element={<Archive />} />
           <Route path="/others" element={<Others />} />
         </Route>
@@ -58,6 +60,7 @@ const navItems = [
   { path: "/koreastock", label: "국내 개별주", emoji: "📊🇰🇷" },
   { path: "/usstock", label: "해외 개별주", emoji: "📊🇺🇸" },
   { path: "/coin", label: "코인", emoji: "🪙" },
+  { path: "/cfd", label: "CFD", emoji: "💹" },
   { path: "/archive", label: "아카이브", emoji: "🗂️" },
   { path: "/others", label: "기타", emoji: "🔧" },
 ];
