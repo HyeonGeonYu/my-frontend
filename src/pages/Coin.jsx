@@ -23,7 +23,6 @@ function TickerCard({ symbol, interval, stats, meta }) {
   const exitThr = meta?.exit_threshold ?? null;
   const tCross = meta?.target_cross ?? null;
   const closesNum = meta?.closes_num ?? null;
-
   const maLower = has && thr != null ? ma100 * (1 - thr) : null;
   const maUpper = has && thr != null ? ma100 * (1 + thr) : null;
   const exitLower = has && exitThr != null ? ma100 * (1 - exitThr) : null;
@@ -69,12 +68,50 @@ function TickerCard({ symbol, interval, stats, meta }) {
     </div>
   );
 }
+// "YYYY-MM-DD HH:MM:SS" 를 KST(+09:00) 기준 초단위로
+function parseKstToEpochSec(s) {
+  if (!s) return NaN;
+  // 공백을 T로 바꾸고 KST 오프셋 추가
+  const iso = s.includes("T") ? s : s.replace(" ", "T");
+  const withTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}+09:00`;
+  const t = Date.parse(withTz);
+  return Number.isFinite(t) ? Math.floor(t / 1000) : NaN;
+}
+
+// cross_times -> lightweight-charts markers
+function buildCrossMarkers(crossTimesArr, fromSec, toSec) {
+  if (!Array.isArray(crossTimesArr) || crossTimesArr.length === 0) return [];
+  const MARKER_COLOR = "#a78bfa"; // 라일락(보라). 어두운 배경에서 선명함
+
+  const items = crossTimesArr
+    .map((c, idx) => ({
+      idx: idx + 1,
+      dir: String(c.dir || "").toUpperCase(),
+      ts: c.time ? parseKstToEpochSec(String(c.time)) : NaN,
+    }))
+    .filter(x => Number.isFinite(x.ts))
+    .sort((a, b) => a.ts - b.ts);
+
+  const out = [];
+  for (const it of items) {
+    if (it.ts < fromSec || it.ts >= toSec) continue;
+    out.push({
+      time: it.ts,
+      position: it.dir === "UP" ? "aboveBar" : "belowBar", // 위치는 유지
+      shape: "circle",
+      color: MARKER_COLOR, // ✅ 단일 색상
+      text: String(it.idx),
+    });
+  }
+  return out;
+}
+
 
 
 /* ─────────────────────────────────────────────────────────
  * ChartPanel (1분봉: 7일 고정 06:50~06:50, 미래 빈칸 + WS)
  * ───────────────────────────────────────────────────────── */
-function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr }) {
+function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr, crossTimes }) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -82,7 +119,6 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
   const maUpperSeriesRef = useRef(null);
  const maLowerSeriesRef = useRef(null);
   const roRef = useRef(null);
-
   const allBarsRef = useRef([]);    // 1분봉 전체
   const dailyBarsRef = useRef([]);  // 일봉 전체
   const markersAllRef = useRef([]);
@@ -112,12 +148,16 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
     const [start, end] = getDayWindowByOffset(dayOffsetRef.current);
 
     const real = (arrAll || []).filter((b) => b.time >= start && b.time < end);
-
+// ✅ 앞쪽(윈도우 시작~첫 실데이터 직전)도 빈 캔들로 채우기
+  const firstRealTime = real.length ? real[0].time : end;
+  const prefixEnd = Math.min(firstRealTime, end);
+  const prefixPlaceholders =
+    prefixEnd > start ? genMinutePlaceholders(start, prefixEnd) : [];
     // 미래 구간을 빈 캔들(whitespace)로 채움 (차트 끝까지 꽉 차게)
     const nowSec = Math.floor(Date.now() / 1000);
     const placeStart = Math.max(nowSec + 60, (real.at(-1)?.time ?? start) + 60);
     const placeholders = placeStart < end ? genMinutePlaceholders(placeStart, end) : [];
-    const priceSlice = real.concat(placeholders);
+    const priceSlice = prefixPlaceholders.concat(real, placeholders);
 
     const forMa = sliceWithBuffer(arrAll, start, end, 99);
     const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
@@ -146,13 +186,28 @@ function ChartPanel({ symbol, globalInterval, dayOffset, onBounds, onStats, thr 
   }
 }
     const applyMarkersAndNotes = (barsReal) => {
-    const m = (markersAllRef.current || []).filter(x => x.time >= start && x.time < end);
-    const n = (notesAllRef.current || []).filter(x => x.timeSec >= start && x.timeSec < end);
-    seriesRef.current.setMarkers(m);
-    setNotesView(n);
-  };
+  const base = (markersAllRef.current || []).filter(x => x.time >= start && x.time < end);
+  const cross = buildCrossMarkers(crossTimes || [], start, end);
+  // ✅ 시간 오름차순 정렬 (동시간대일 때 위치/텍스트로 2차 정렬)
+  const m = [...base, ...cross].sort((a, b) => {
+    if (a.time !== b.time) return a.time - b.time;
+    // 동일 time이면 위치 우선순위(아래→위)나 텍스트 번호로 정렬
+    const posOrder = { belowBar: 0, inBar: 1, aboveBar: 2 };
+    const pa = posOrder[a.position] ?? 1;
+    const pb = posOrder[b.position] ?? 1;
+    if (pa !== pb) return pa - pb;
+    // text가 숫자라면 숫자 기준
+    const na = Number(a.text), nb = Number(b.text);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+    return String(a.text || "").localeCompare(String(b.text || ""));
+  });
+
+  const n = (notesAllRef.current || []).filter(x => x.timeSec >= start && x.timeSec < end);
+  seriesRef.current.setMarkers(m);
+  setNotesView(n);
+};
     applyMarkersAndNotes(real);
-}, [getDayWindowByOffset, thr]);
+}, [getDayWindowByOffset, thr, crossTimes]);
     const CHART_HEIGHT = 320;
     const CHART_WIDTH = 800 ;
   useEffect(() => {
@@ -260,7 +315,8 @@ mouseWheel: false,       // 휠 스크롤은 여전히 끔
           onStats?.(symbol, { price1m: lastCloseAll, ma100_1m: lastMaAll, chg3mPct });
 
           // bounds: 날짜 이동을 버튼으로만 하므로 0으로 고정
-          onBounds?.(symbol, { min: -6, max: 0 }); // 최근 7일: 오늘(0) ~ 6일 전(-6)
+          const WINDOW_DAYS = 7;
+        onBounds?.(symbol, { min: -WINDOW_DAYS, max: 0 });
 
           // WS 리스너(미마감도 반영)
           const TOPIC_1M = `kline.1.${symbol}`;
@@ -524,7 +580,6 @@ useEffect(() => {
     })();
     return () => { alive = false; };
   }, []);
-
   const requiredSymbols = SYMBOLS.map((s) => s.symbol);
 
   // 고정 윈도우 정책이므로 bounds는 0으로 고정(버튼 이동만 허용)
@@ -560,7 +615,6 @@ useEffect(() => {
     opacity: disabled ? 0.5 : 1,
     cursor: disabled ? "not-allowed" : "pointer",
   });
-
   return (
 
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
@@ -650,12 +704,11 @@ useEffect(() => {
             ))}
           </div>
         </div>
-
         {/* 오른쪽: 차트들 */}
         <div>
-          <ChartPanel symbol="BTCUSDT" globalInterval={interval} dayOffset={dayOffset} onBounds={onBounds} onStats={onStats} thr={metaMap["BTCUSDT"]?.ma_threshold} />
-          <ChartPanel symbol="ETHUSDT" globalInterval={interval} dayOffset={dayOffset} onBounds={onBounds} onStats={onStats} thr={metaMap["ETHUSDT"]?.ma_threshold} />
-           <ChartPanel symbol="XAUTUSDT" globalInterval={interval} dayOffset={dayOffset} onBounds={onBounds} onStats={onStats} thr={metaMap["XAUTUSDT"]?.ma_threshold} />
+          <ChartPanel symbol="BTCUSDT" globalInterval={interval} dayOffset={dayOffset} onBounds={onBounds} onStats={onStats} thr={metaMap["BTCUSDT"]?.ma_threshold} crossTimes={metaMap["BTCUSDT"]?.cross_times} />
+          <ChartPanel symbol="ETHUSDT" globalInterval={interval} dayOffset={dayOffset} onBounds={onBounds} onStats={onStats} thr={metaMap["ETHUSDT"]?.ma_threshold} crossTimes={metaMap["ETHUSDT"]?.cross_times}  />
+           <ChartPanel symbol="XAUTUSDT" globalInterval={interval} dayOffset={dayOffset} onBounds={onBounds} onStats={onStats} thr={metaMap["XAUTUSDT"]?.ma_threshold} crossTimes={metaMap["XAUTUSDT"]?.cross_times}  />
         </div>
       </div>
     </div>

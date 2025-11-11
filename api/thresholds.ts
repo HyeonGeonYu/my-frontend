@@ -1,6 +1,7 @@
 // project/api/thresholds.ts
 export const config = { runtime: "edge" };
 import { Redis } from "@upstash/redis";
+import { loadTradingConfig } from "./tradingConfig"; // 경로는 프로젝트 구조에 맞게
 
 /* ------------------------- utils ------------------------- */
 function json(payload: unknown, status = 200): Response {
@@ -21,7 +22,12 @@ function kvArrayToObject(arr: any[]): Record<string, string> {
   for (let i = 0; i + 1 < arr.length; i += 2) {
     const k = String(arr[i]);
     const v = arr[i + 1];
-    out[k] = typeof v === "string" ? v : v == null ? "" : String(v);
+    out[k] =
+    v == null
+      ? ""
+      : typeof v === "string"
+        ? v
+        : (() => { try { return JSON.stringify(v); } catch { return String(v); } })();
   }
   return out;
 }
@@ -29,24 +35,101 @@ function kvArrayToObject(arr: any[]): Record<string, string> {
 function normalizeXRev(entries: any[]): Array<{ id: string; fields: Record<string, string> }> {
   const out: Array<{ id: string; fields: Record<string, string> }> = [];
   for (const [id, payload] of Object.entries(entries)) {
-      if (!payload) continue;
-      if (Array.isArray(payload)) {
-        out.push({ id, fields: kvArrayToObject(payload) });
-      } else if (typeof payload === "object") {
-        const fields: Record<string, string> = {};
-        for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
-          fields[k] = typeof v === "string" ? v : v == null ? "" : String(v);
-        }
-        out.push({ id, fields });
+    if (!payload) continue;
+    if (Array.isArray(payload)) {
+      out.push({ id, fields: kvArrayToObject(payload) });
+    } else if (typeof payload === "object") {
+      const fields: Record<string, string> = {};
+      for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
+       fields[k] =
+         v == null
+           ? ""
+           : typeof v === "string"
+             ? v
+             : (() => {
+                 try {
+                   return JSON.stringify(v);
+                 } catch {
+                   return String(v);
+                 }
+               })();
       }
+      out.push({ id, fields });
     }
+  }
   return out;
 }
 
-/** Stream(OpenPctLog)에서 (sym 매칭) 항목 중 가장 최근의 new(0~1 fraction) */
-async function getLatestFracBySymbol(redis: Redis, symbol: string, searchBack = 500) {
-  const raw = await (redis as any).xrevrange("OpenPctLog", "+", "-", { count: searchBack });
+/* ---------- cross_times 정규화 (문자열/튜플/객체 배열 모두 지원) ---------- */
+type CrossItem = { dir: string; time: string; price: number; bid: number; ask: number };
 
+function toNum(n: any): number {
+  const v = typeof n === "string" ? Number(n) : (n as number);
+  return Number.isFinite(v) ? v : NaN;
+}
+
+function    normalizeCrossTimes(input: any): CrossItem[] | null {
+  if (input == null || input === "") return null;
+
+  let v: any = input;
+
+  // 문자열이면 JSON 파싱 시도
+  if (typeof v === "string") {
+    try { v = JSON.parse(v); }
+    catch { return null; }
+  }
+
+  // 튜플 배열: [(dir, time, price, bid, ask), ...]
+  if (Array.isArray(v) && v.length && Array.isArray(v[0])) {
+    const out: CrossItem[] = [];
+    for (const t of v) {
+      const [d, ts, p, b, a] = t as any[];
+      const price = toNum(p), bid = toNum(b), ask = toNum(a);
+      if (!ts || !Number.isFinite(price) || !Number.isFinite(bid) || !Number.isFinite(ask)) continue;
+      out.push({ dir: String(d || "").toUpperCase(), time: String(ts), price, bid, ask });
+    }
+    return out.length ? out : null;
+  }
+
+  // 객체 배열: [{dir,time,price,bid,ask}, ...]
+  if (Array.isArray(v)) {
+    const out: CrossItem[] = [];
+    for (const it of v) {
+      if (!it) continue;
+      const dir = String(it.dir ?? it.direction ?? "").toUpperCase();
+      const time = String(it.time ?? it.ts ?? "");
+      const price = toNum(it.price);
+      const bid = toNum(it.bid);
+      const ask = toNum(it.ask);
+      if (!time || !Number.isFinite(price) || !Number.isFinite(bid) || !Number.isFinite(ask)) continue;
+      out.push({ dir, time, price, bid, ask });
+    }
+    return out.length ? out : null;
+  }
+
+  return null;
+}
+// 안전 미리보기: 문자열이면 앞부분만, 객체/배열이면 JSON으로 시도
+function preview(v: any, max = 300) {
+  try {
+    if (typeof v === "string") return v.length > max ? v.slice(0, max) + "…(trunc)" : v;
+    if (v && typeof v === "object") {
+      const s = JSON.stringify(v);
+      return s.length > max ? s.slice(0, max) + "…(trunc)" : s;
+    }
+    return String(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/** Stream(OpenPctLog)에서 (sym 매칭) 항목 중 가장 최근의 new(0~1 fraction) + fields */
+async function getLatestFracBySymbol(
+  redis: Redis,
+  symbol: string,
+  searchBack = 500
+): Promise<{ value: number; id: string; fields: Record<string, string> } | null> {
+  const raw = await (redis as any).xrevrange("OpenPctLog", "+", "-", { count: searchBack });
   const items = normalizeXRev(raw);
   const wantSym = symbol.toUpperCase();
 
@@ -56,7 +139,7 @@ async function getLatestFracBySymbol(redis: Redis, symbol: string, searchBack = 
     if (sym !== wantSym) continue;
 
     const v = toNumberOrNull(f.new ?? f.NEW);
-    if (v != null) return { value: v, id: it.id };
+    if (v != null) return { value: v, id: it.id, fields: f };
   }
   return null;
 }
@@ -75,20 +158,43 @@ export default async function handler(req: Request): Promise<Response> {
     const { searchParams } = new URL(req.url);
     const symbolParam = (searchParams.get("symbol") || "").toUpperCase().trim();
     const debug = searchParams.get("debug") === "1";
+    const crossLimitParam = parseInt(searchParams.get("cross_limit") || "0", 10);
+    const crossLimit = isNaN(crossLimitParam) ? 0 : crossLimitParam; // 0이면 제한 없음
+
     if (!symbolParam) return json({ retCode: -1, retMsg: "symbol required" }, 400);
 
-    // 최신 임계치(new, 0~1) — name은 고려하지 않음
+    // 1) trading:config 로드 (nullable 유지)
+    const cfg = await loadTradingConfig(redis);
+
+    // 2) 최근 임계치(new, 0~1) — name은 고려하지 않음
     const found = await getLatestFracBySymbol(redis, symbolParam, 500);
     const ma_threshold = found?.value ?? null;
 
-    // momentum_threshold: 별도 로그를 보지 않고 ma/3 규칙
+    // 3) momentum_threshold: ma/3 규칙
     const momentum_threshold =
       ma_threshold == null ? null : Number.isFinite(ma_threshold) ? ma_threshold / 3 : null;
 
-    // 서버 기본값(봇 설정과 맞춰주세요)
-    const exit_threshold = 0.0005; // 0.05%
-    const target_cross = 5;
-    const closes_num = 10080;
+    // 4) cross_times 파싱 (없으면 null)
+    let cross_times: CrossItem[] | null = null;
+    if (found?.fields) {
+      const rawCross =
+        found.fields.cross_times ??
+        found.fields.CROSS_TIMES ??
+        found.fields.crossTimes ??
+        found.fields.crosstimes;
+
+
+      cross_times = normalizeCrossTimes(rawCross);
+      // 필요 시 최근 N개 제한
+      if (cross_times && crossLimit > 0 && cross_times.length > crossLimit) {
+        cross_times = cross_times.slice(-crossLimit);
+      }
+    }
+
+    // 5) 공용 설정 그대로 사용 (값 없으면 null 그대로)
+    const exit_threshold = cfg.default_exit_ma_threshold;
+    const target_cross = cfg.target_cross;
+    const closes_num = cfg.closes_num;
 
     return json({
       symbol: symbolParam,
@@ -97,7 +203,8 @@ export default async function handler(req: Request): Promise<Response> {
       exit_threshold,
       target_cross,
       closes_num,
-      ...(debug ? { _debug: { streamKey: "OpenPctLog", foundId: found?.id || null } } : {}),
+      cross_times, // 차트 마커용
+      ...(debug ? { _debug: { streamKey: "OpenPctLog", foundId: found?.id || null, crossLimit: crossLimit || null } } : {}),
     });
   } catch (e: any) {
     return json({ retCode: -1, retMsg: e?.message || "server error" }, 500);
