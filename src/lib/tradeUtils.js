@@ -169,11 +169,14 @@ export async function fetchAllKlines(symbol, interval, keep) {
 /* ──────────────────────────────
  * 시그널 어노테이션 (옵션)
  * ────────────────────────────── */
-export async function fetchSignals(symbol) {
-  const res = await fetch(`/api/signals?symbol=${symbol}&days=7`, { cache: "no-store" });
+export async function fetchSignals(symbol, name = "bybit") {
+  const sp = new URLSearchParams({ symbol, days: "7", name });
+  const res = await fetch(`/api/signals?${sp.toString()}`, { cache: "no-store" });
   const j = await res.json().catch(() => ({}));
   return Array.isArray(j?.signals) ? j.signals : [];
 }
+
+
 
 export function buildSignalAnnotations(sigs) {
   const items = (Array.isArray(sigs) ? sigs : [])
@@ -257,10 +260,12 @@ export function sessionKeyKST_0650(tsSec) {
 /* ──────────────────────────────
  * 최소 WS 허브 (Bybit public linear)
  * ────────────────────────────── */
-const WS_URL = "wss://stream.bybit.com/v5/public/linear";
-
+/* ──────────────────────────────
+ * 최소 WS 허브 (URL 주입형, Bybit/내서버 공용)
+ * ────────────────────────────── */
 class WsHub {
-  constructor() {
+  constructor(url) {
+    this.url = url;
     this.ws = null;
     this.connected = false;
     this.pendingTopics = new Set();
@@ -283,19 +288,23 @@ class WsHub {
 
   _connect() {
     if (this.ws) return;
-    const ws = new WebSocket(WS_URL);
+
+    const ws = new WebSocket(this.url);
     this.ws = ws;
 
     ws.onopen = () => {
       this.connected = true;
       this._emitStatus();
+
+      // flush queued topics
       if (this.queue.length) {
         const args = [...new Set(this.queue)];
-        ws.send(JSON.stringify({ op: "subscribe", args }));
+        try { ws.send(JSON.stringify({ op: "subscribe", args })); } catch {}
         args.forEach((t) => this.pendingTopics.add(t));
         this.queue = [];
       }
-      // keep-alive ping
+
+      // keep-alive ping (Bybit는 ping/pong 지원, 내 서버는 무시해도 OK)
       try { clearInterval(this._pingTimer); } catch {}
       this._pingTimer = setInterval(() => {
         try { this.ws?.send(JSON.stringify({ op: "ping" })); } catch {}
@@ -305,12 +314,22 @@ class WsHub {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data || "{}");
+
+        // bybit pong or server ack
         if (msg.op === "pong") return;
+        if (msg.op && msg.op !== "pong") return;
+
         const topic = msg?.topic;
         if (!topic) return;
+
         const set = this.handlers.get(topic);
         if (!set || set.size === 0) return;
-        const payload = Array.isArray(msg.data) ? msg.data[msg.data.length - 1] : msg.data;
+
+        // bybit는 data 배열일 수 있음 / 내 서버도 배열일 수 있음
+        const payload = Array.isArray(msg.data)
+          ? (msg.data[msg.data.length - 1] ?? msg.data[0])
+          : msg.data;
+
         set.forEach((fn) => { try { fn(payload); } catch {} });
       } catch {}
     };
@@ -339,11 +358,24 @@ class WsHub {
     }
   }
 
+  subscribe(topics) {
+    const arr = Array.isArray(topics) ? topics : [topics];
+    arr.forEach((t) => this.ensureSubscribe(t));
+  }
+
+  unsubscribe(topics) {
+    const arr = Array.isArray(topics) ? topics : [topics];
+    arr.forEach((t) => {
+      this.pendingTopics.delete(t);
+      try { this.ws?.send(JSON.stringify({ op: "unsubscribe", args: [t] })); } catch {}
+    });
+  }
+
   addListener(topic, fn) {
     this.ensureSubscribe(topic);
     if (!this.handlers.has(topic)) this.handlers.set(topic, new Set());
     this.handlers.get(topic).add(fn);
-    // off 함수
+
     return () => {
       const set = this.handlers.get(topic);
       if (set) set.delete(fn);
@@ -356,7 +388,26 @@ class WsHub {
   }
 }
 
-export const wsHub = new WsHub();
+/* ✅ URL별 허브 캐시: "하나의 wsHub"처럼 쓰되, 내부는 URL마다 따로 연결 */
+const _hubCache = new Map();
+
+/**
+ * getWsHub(url)
+ * - 같은 url이면 같은 허브 인스턴스를 반환(연결/구독 공유)
+ * - 다른 url이면 다른 허브 인스턴스(coin/bybit vs cfd/내서버)로 분리
+ */
+export function getWsHub(url) {
+  const key = String(url || "");
+  if (!key) throw new Error("getWsHub(url) requires url");
+  if (_hubCache.has(key)) return _hubCache.get(key);
+  const hub = new WsHub(key);
+  _hubCache.set(key, hub);
+  return hub;
+}
+
+/* 기존 코드 호환: coin이 wsHub를 그대로 import해도 동작 */
+export const wsHub = getWsHub("wss://stream.bybit.com/v5/public/linear");
+
 
 // === 평가/자산 계산 유틸 ===
 export function lastPriceFromStats(stats) {

@@ -21,7 +21,6 @@ function lastNDaysKST(n: number): string[] {
 
   for (let i = n - 1; i >= 0; i--) {
     const t = kstMidnight - i * DAY_MS;
-    // 여기서는 추가 보정 없이 UTC getter만 사용
     const d = new Date(t);
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -31,16 +30,15 @@ function lastNDaysKST(n: number): string[] {
   return out;
 }
 
-
 function enumerateDaysKST(fromYmd: string, toYmd: string): string[] {
   const start = new Date(`${fromYmd}T00:00:00+09:00`).getTime();
-  const end   = new Date(`${toYmd}T00:00:00+09:00`).getTime();
+  const end = new Date(`${toYmd}T00:00:00+09:00`).getTime();
   const a = Math.min(start, end);
   const b = Math.max(start, end);
   const out: string[] = [];
 
   for (let t = a; t <= b; t += DAY_MS) {
-    const d = new Date(t); // 추가 보정 X
+    const d = new Date(t);
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, "0");
     const dd = String(d.getUTCDate()).padStart(2, "0");
@@ -48,7 +46,6 @@ function enumerateDaysKST(fromYmd: string, toYmd: string): string[] {
   }
   return out;
 }
-
 
 /** Upstash HSCAN 결과를 [cursor, array]로 정규화 */
 type HScanTuple = readonly [number | string, string[]];
@@ -67,17 +64,23 @@ async function hscanTyped(
 /** "SIG {...}" 같은 로그 라인에서 JSON 부분만 뽑아내기 */
 function stripSigPrefixAndExtractJson(s: string): string {
   const trimmed = s.trim();
-  // 1) 앞에 "SIG" (대소문자 무관) + 공백/콜론 허용
   const noPrefix = trimmed.replace(/^\s*sig\s*[: ]\s*/i, "");
   if (noPrefix.startsWith("{") || noPrefix.startsWith("[")) return noPrefix;
 
-  // 2) 중괄호 범위로 재시도 (로그 앞뒤 텍스트 제거)
   const first = trimmed.indexOf("{");
   const last = trimmed.lastIndexOf("}");
   if (first !== -1 && last !== -1 && last > first) {
     return trimmed.slice(first, last + 1);
   }
-  return trimmed; // 최후의 수단
+  return trimmed;
+}
+
+/** name을 받아 signal key 만들기 */
+function signalKey(name: string): string {
+  const n = (name || "bybit").trim().toLowerCase();
+  // 안전장치(원하면 완화/강화 가능)
+  if (!/^[a-z0-9_-]{1,32}$/.test(n)) throw new Error("Invalid name");
+  return `trading:${n}:signal`;
 }
 
 /* --------------------------- handler --------------------------- */
@@ -89,14 +92,17 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const redis = new Redis({ url, token });
-  const key = "trading:signal";
 
   try {
     const { searchParams } = new URL(req.url);
 
+    // ✅ 추가: name 파라미터로 key 결정 (기본값 bybit)
+    const nameParam = searchParams.get("name") || "bybit";
+    const key = signalKey(nameParam);
+
     const symbolParam = searchParams.get("symbol") || undefined; // e.g., BTCUSDT
-    const sideParam = searchParams.get("side") || undefined;     // LONG | SHORT
-    const kindParam = searchParams.get("kind") || undefined;     // ENTRY | EXIT
+    const sideParam = searchParams.get("side") || undefined; // LONG | SHORT
+    const kindParam = searchParams.get("kind") || undefined; // ENTRY | EXIT
 
     const from = searchParams.get("from") || undefined;
     const to = searchParams.get("to") || undefined;
@@ -142,18 +148,15 @@ export default async function handler(req: Request): Promise<Response> {
               const cleaned = stripSigPrefixAndExtractJson(valueStrRaw);
               obj = JSON.parse(cleaned);
             } else if (typeof valueStrRaw === "object") {
-              // Upstash가 object로 반환할 때 보호
               obj = JSON.parse(JSON.stringify(valueStrRaw));
             } else {
               continue;
             }
 
-            // 대문자 통일 필터
             if (wantSymbol && String(obj.symbol || "").toUpperCase() !== wantSymbol) continue;
             if (wantSide && String(obj.side || "").toUpperCase() !== wantSide) continue;
             if (wantKind && String(obj.kind || "").toUpperCase() !== wantKind) continue;
 
-            // timeSec도 미리 계산(프론트 마커용)
             const ts = String(obj.ts || "");
             const timeSec = ts ? Math.floor(new Date(ts).getTime() / 1000) : undefined;
             signals.push({ ...obj, timeSec, _field: field });
@@ -164,7 +167,6 @@ export default async function handler(req: Request): Promise<Response> {
       } while (cursor !== 0);
     }
 
-    // 시간순 정렬
     signals.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
     const result = limit > 0 ? signals.slice(-limit) : signals;
 
@@ -173,6 +175,7 @@ export default async function handler(req: Request): Promise<Response> {
       signals: result,
       _debug: {
         key,
+        name: nameParam,
         mode: from || to ? "range" : "lastNDays",
         from: from || null,
         to: to || null,
@@ -188,6 +191,9 @@ export default async function handler(req: Request): Promise<Response> {
       },
     });
   } catch (e: any) {
-    return json({ retCode: -1, retMsg: e?.message || "server error" }, 500);
+    const msg = e?.message || "server error";
+    // Invalid name은 400으로
+    const status = msg === "Invalid name" ? 400 : 500;
+    return json({ retCode: -1, retMsg: msg }, status);
   }
 }
