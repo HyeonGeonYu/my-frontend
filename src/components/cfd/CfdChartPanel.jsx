@@ -212,7 +212,7 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
   const maSeriesRef = useRef(null);
   const maUpperSeriesRef = useRef(null);
   const maLowerSeriesRef = useRef(null);
-
+const markersAllRef = useRef([]); // ✅ 시그널 마커 저장
   const rowsRef = useRef([]);
   const allRealCandlesRef = useRef([]); // ✅ 연속 real 캔들(placeholder 제외) - MA/ENV 계산용
 
@@ -378,9 +378,11 @@ useEffect(() => setNotesCollapsed(true), [sessionKey]);
     (async () => {
       try {
           const sigs = await fetchSignals(symbol, "mt5_signal").catch(() => []);
-const { markers, notes } = buildSignalAnnotations(sigs);
+        const { markers, notes } = buildSignalAnnotations(sigs);
+        setNotesView(notes);
 
-setNotesView(notes);
+        markersAllRef.current = markers || []; // ✅ 저장
+
         const rows = await fetchPagedCandles(symbol, "1", TARGET_CANDLE_COUNT);
         if (!alive) return;
 
@@ -521,17 +523,18 @@ setNotesView(notes);
 
     // ✅ crossTimes markers (coin과 동일: KST 문자열 -> epochSec -> 세션 범위 필터)
     const arr = Array.isArray(crossTimes) ? crossTimes : [];
-    const cross = buildCrossMarkers(arr, start, end).slice(0, 10);
+    const base = (markersAllRef.current || []).filter((x) => x.time >= start && x.time < end);
+        const cross = buildCrossMarkers(arr, start, end);
 
-    if (DEBUG_CROSS) {
-      console.log(`[CFD:${symbol}] crossTimes(raw)`, arr);
-      console.log(`[CFD:${symbol}] session window`, { sessionKey, start, end });
-      console.log(`[CFD:${symbol}] cross markers(final)`, cross);
-    }
+        const merged = [...base, ...cross].sort((a, b) => {
+          if (a.time !== b.time) return a.time - b.time;
+          return String(a.text || "").localeCompare(String(b.text || ""));
+        });
 
-    if (typeof candleSeries.setMarkers === "function") {
-      candleSeries.setMarkers(cross);
-    }
+        if (typeof candleSeries.setMarkers === "function") {
+          candleSeries.setMarkers(merged);
+        }
+
 
     // ✅ visible range 고정 (06:50~06:50)
     try {
