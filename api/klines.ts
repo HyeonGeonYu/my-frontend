@@ -109,38 +109,43 @@ async function fetchBybitKlinesPaged(params: {
       : floorCurBarStartMs(nowMs + (interval === "1" ? SKEW_MS_1M : 0), interval) - 1;
 
   const step = stepMs(interval);
-  const startMsTarget = endMs0 - (keep - 1) * step;
 
   let curEnd = endMs0;
-  const minStart = Math.max(0, startMsTarget);
   const out: KlineRow[] = [];
   let pages = 0;
 
-  while (pages < pagesBudget && curEnd >= minStart && out.length < keep) {
+  while (pages < pagesBudget && out.length < keep) {
     if (Date.now() >= routeDeadlineAt) break;
 
     const approxSpan = (PER_CALL_LIMIT - 1) * step;
-    const curStart = Math.max(minStart, curEnd - approxSpan);
+    const curStart = Math.max(0, curEnd - approxSpan);
 
     const chunk = await fetchBybitKlinesOnce({
-      symbol, interval, start: curStart, end: curEnd, limit: PER_CALL_LIMIT,
+      symbol,
+      interval,
+      start: curStart,
+      end: curEnd,
+      limit: PER_CALL_LIMIT,
     });
 
     pages++;
     if (!chunk.length) break;
 
-    const filtered = chunk.filter((b) => b.time * 1000 >= minStart && b.time * 1000 <= curEnd);
-    if (!filtered.length) {
-      curEnd = curStart - 1;
-      continue;
-    }
+    // end 범위까지만 반영(안전)
+    const filtered = chunk.filter((b) => b.time * 1000 <= curEnd);
+    if (!filtered.length) break;
 
     out.push(...filtered);
 
+    // ✅ 다음 커서는 "이번에 받은 가장 오래된 봉 - step"
     const oldestMs = filtered[0].time * 1000;
     curEnd = oldestMs - step;
+
+    // 더 과거로 갈 수 없으면 종료
+    if (curEnd <= 0) break;
   }
 
+  // 정렬 + 중복 제거
   out.sort((a, b) => a.time - b.time);
   const dedup: KlineRow[] = [];
   const seen = new Set<number>();
@@ -151,14 +156,14 @@ async function fetchBybitKlinesPaged(params: {
     }
   }
 
-  let nextCursorEndMs: number | null = null;
-if (dedup.length > 0) {
-  const oldestMs = dedup[0].time * 1000;     // 가장 오래된 봉(초->ms)
-  const step = stepMs(interval);
-  nextCursorEndMs = Math.max(0, oldestMs - step);
+  // ✅ 핵심: 뭘 받았으면 nextCursor는 계속 준다
+  const nextCursorEndMs = dedup.length ? curEnd : null;
+  return { rows: dedup.slice(-keep), nextCursorEndMs };
 }
-return { rows: dedup, nextCursorEndMs };
-}
+
+
+
+
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startedAt = Date.now();
