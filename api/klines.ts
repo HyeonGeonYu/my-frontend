@@ -1,6 +1,4 @@
 // project/api/klines.ts
-export const config = { runtime: "edge" };
-
 /**
  * Bybit v5 Kline Proxy (no Redis)
  * - GET /api/klines?symbol=BTCUSDT&interval=1&limit=10080
