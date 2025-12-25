@@ -1,4 +1,4 @@
-// project/api/tradingConfig.ts
+// api/tradingConfig.ts
 import { Redis } from "@upstash/redis";
 
 const DEFAULT_NAMESPACE = "bybit";

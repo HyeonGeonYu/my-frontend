@@ -50,6 +50,7 @@
     ]
   },
   "devDependencies": {
+    "@vercel/node": "^5.5.16",
     "react-scripts": "^5.0.1"
   }
 }

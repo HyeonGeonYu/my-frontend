@@ -1,4 +1,4 @@
-// project/api/signals.ts
+// api/signals.ts
 export const config = { runtime: "edge" };
 import { Redis } from "@upstash/redis";
 

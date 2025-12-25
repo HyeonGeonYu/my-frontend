@@ -132,39 +132,45 @@ export function mergeBars(arr, bar) {
  * REST 누적 로딩 (/api/klines 프록시 사용)
  * ────────────────────────────── */
 export async function fetchAllKlines(symbol, interval, keep) {
-  const perPages = 3; // 호출당 페이지 수 (작게 유지)
-  let cursor;
+  const CHUNK = 1000;
+  let cursor = null;
   const acc = [];
-  const softDeadline = Date.now() + 12_000; // 12초 제한
 
   while (acc.length < keep) {
     const sp = new URLSearchParams({
       symbol,
       interval,
-      limit: String(keep),
-      pages: String(perPages),
+      limit: String(Math.min(CHUNK, keep - acc.length)),
+      pages: "1",
     });
     if (cursor) sp.set("cursor", String(cursor));
 
     const resp = await fetch(`/api/klines?${sp.toString()}`, { cache: "no-store" });
-    const json = await resp.json();
+    const raw = await resp.text();
+    let json = {};
+    try { json = JSON.parse(raw); } catch {}
+
     if (!resp.ok || json?.retCode !== 0) {
-      throw new Error(`klines bad response: ${resp.status} ${json?.retMsg || ""}`);
+      throw new Error(`klines bad response: ${resp.status} ${json?.retMsg || raw.slice(0, 200)}`);
     }
 
     const rows = Array.isArray(json?.list) ? json.list : [];
     for (const r of rows) {
       let t = Number(r.time);
-      if (t > 1e12) t = Math.floor(t / 1000); // ms->sec 안전화
+      if (t > 1e12) t = Math.floor(t / 1000);
       acc.push({ time: t, open: +r.open, high: +r.high, low: +r.low, close: +r.close });
     }
 
     cursor = json?.nextCursor ?? null;
-    if (!cursor || acc.length >= keep || Date.now() >= softDeadline) break;
+
+    // ✅ 더 과거가 없으면 종료
+    if (!cursor || rows.length === 0) break;
   }
+
   acc.sort((a, b) => a.time - b.time);
   return acc.slice(-keep);
 }
+
 
 /* ──────────────────────────────
  * 시그널 어노테이션 (옵션)

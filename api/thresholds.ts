@@ -1,4 +1,4 @@
-// project/api/thresholds.ts
+// api/thresholds.ts
 export const config = { runtime: "edge" };
 
 import { Redis } from "@upstash/redis";

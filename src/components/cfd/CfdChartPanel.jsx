@@ -1,16 +1,25 @@
 // src/components/cfd/CfdChartPanel.jsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createChart } from "lightweight-charts";
-import { getWsHub, mergeBars, fmtKSTFull, fmtKSTHour, fmtKSTHMS, fmtComma, getTs } from "../../lib/tradeUtils";
+import {
+  getWsHub,
+  mergeBars,
+  fmtKSTFull,
+  fmtKSTHour,
+  fmtKSTHMS,
+  fmtComma,
+  getTs,
+} from "../../lib/tradeUtils";
 import { fetchSignals, buildSignalAnnotations } from "../../lib/tradeUtils";
 
 const API_BASE = "https://api.hyeongeonnoil.com";
 const PAGE_LIMIT = 1000;
-const TARGET_CANDLE_COUNT = 10000;
+
+// ✅ 8일치(버퍼 포함) 로딩
+const TARGET_CANDLE_COUNT = 8 * 1440;
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000; // UTC → KST
 const SESSION_START_MIN = 6 * 60 + 50; // KST 06:50
-const DEBUG_CROSS = false;
 
 /* ------------------------- helpers ------------------------- */
 
@@ -35,7 +44,7 @@ function getSessionKeyFromUtcMs(msUtc) {
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-// "YYYY-MM-DD HH:MM:SS" 를 KST(+09:00) 기준 초단위로 (coin과 동일)
+// "YYYY-MM-DD HH:MM:SS" 를 KST(+09:00) 기준 초단위
 function parseKstToEpochSec(s) {
   if (!s) return NaN;
   const iso = s.includes("T") ? s : s.replace(" ", "T");
@@ -44,7 +53,7 @@ function parseKstToEpochSec(s) {
   return Number.isFinite(t) ? Math.floor(t / 1000) : NaN;
 }
 
-// cross_times -> lightweight-charts markers (coin과 동일 + dir 반영)
+// cross_times -> markers
 function buildCrossMarkers(crossTimesArr, fromSec, toSec) {
   if (!Array.isArray(crossTimesArr) || crossTimesArr.length === 0) return [];
   const MARKER_COLOR = "#a78bfa";
@@ -72,8 +81,8 @@ function buildCrossMarkers(crossTimesArr, fromSec, toSec) {
   return out;
 }
 
-// sessionKey("YYYY-MM-DD") -> 해당 세션의 시작/끝 (UTC epoch sec)
-// 세션 시작: KST 06:50 = UTC 전날 21:50
+// sessionKey("YYYY-MM-DD") -> 해당 세션의 시작/끝 (UTC sec)
+// 세션 시작: KST 06:50
 function getSessionWindowUtcSec(sessionKey) {
   if (!sessionKey) return [NaN, NaN];
 
@@ -89,11 +98,9 @@ function getSessionWindowUtcSec(sessionKey) {
   return [start, end];
 }
 
-// rows(list) -> sessionGroups(세션별 candle 배열) + sessionStats
-// ✅ chart time은 UTC epoch sec로 통일 (coin 방식과 맞춤)
+// rows(list) -> sessionGroups
 function groupBySessionKstWithGaps(rows) {
   const groups = {};
-  const stats = {};
 
   for (const row of rows) {
     const [msUtc, o, h, l, c] = row;
@@ -102,20 +109,16 @@ function groupBySessionKstWithGaps(rows) {
     const timeSec = Math.floor(msUtc / 1000);
 
     if (!groups[sessionKey]) groups[sessionKey] = [];
-    if (!stats[sessionKey]) stats[sessionKey] = { total: 0, real: 0 };
-
-    stats[sessionKey].total++;
 
     if (o == null || h == null || l == null || c == null) {
       groups[sessionKey].push({ time: timeSec }); // whitespace
     } else {
       groups[sessionKey].push({ time: timeSec, open: o, high: h, low: l, close: c });
-      stats[sessionKey].real++;
     }
   }
 
   for (const k of Object.keys(groups)) groups[k].sort((a, b) => a.time - b.time);
-  return { groups, stats };
+  return groups;
 }
 
 function calcSMAFromCandles(candles, win = 100) {
@@ -192,7 +195,7 @@ async function fetchPagedCandles(symbol, interval, targetCount) {
   return allRows;
 }
 
-// ✅ coin의 sliceWithBuffer 개념(세션 시작 전 99개 캔들 버퍼를 MA 계산용으로 붙임)
+// ✅ coin의 sliceWithBuffer(세션 시작 전 99개 캔들 버퍼)
 function sliceWithBuffer(all, start, end, bufferBars = 99) {
   if (!Array.isArray(all) || !all.length) return [];
   const inRange = all.filter((b) => b.time >= start && b.time < end);
@@ -202,7 +205,15 @@ function sliceWithBuffer(all, start, end, bufferBars = 99) {
 }
 
 /* ------------------------- Component ------------------------- */
-export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onStats, onSessionKeys }) {
+export default function CfdChartPanel({
+  symbol,
+  sessionKey, // 레거시 입력(부모)
+  thr,
+  crossTimes,
+  onStats,
+  onSessionKeys,
+  onBounds,
+}) {
   const wsHub = useMemo(() => getWsHub("wss://api.hyeongeonnoil.com/ws"), []);
 
   const wrapRef = useRef(null);
@@ -212,54 +223,41 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
   const maUpperSeriesRef = useRef(null);
   const maLowerSeriesRef = useRef(null);
 
-  const markersAllRef = useRef([]); // ✅ 시그널 마커 저장
+  const markersAllRef = useRef([]);
   const rowsRef = useRef([]);
-  const allRealCandlesRef = useRef([]); // ✅ 연속 real 캔들(placeholder 제외) - MA/ENV 계산용
+  const allRealCandlesRef = useRef([]);
 
   const [sessionGroups, setSessionGroups] = useState({});
-  const [sessionStats, setSessionStats] = useState({});
 
-  // ✅ coin UI용 (시그널 설명)
+  // ✅ 부모 sessionKey가 꼬이거나 groups에 없을 때도 “최근 세션”으로 fallback
+  const [effectiveSessionKey, setEffectiveSessionKey] = useState(sessionKey || "");
+
+  // UI notes
   const [notesView, setNotesView] = useState([]);
   const [notesCollapsed, setNotesCollapsed] = useState(true);
-  useEffect(() => setNotesCollapsed(true), [sessionKey]);
+  useEffect(() => setNotesCollapsed(true), [sessionKey, effectiveSessionKey]);
 
-  // ✅ sessionGroups 변경 “이후”에만 부모로 세션키 보고 (React 경고 방지)
+  // ✅ sessionGroups -> 최근 7개만 부모로 전달 + bounds도 -6..0로 고정
   const lastKeysSigRef = useRef("");
   useEffect(() => {
-    if (typeof onSessionKeys !== "function") return;
     const keys = Object.keys(sessionGroups || {}).sort();
-    const sig = keys.join("|");
-    if (sig === lastKeysSigRef.current) return;
-    lastKeysSigRef.current = sig;
-    onSessionKeys(symbol, keys);
-  }, [sessionGroups, onSessionKeys, symbol]);
+    if (!keys.length) return;
 
-  // ✅ (원복) 선택된 세션(06:50~06:50)을 1분 단위 placeholder로 "연속 time축"으로 만든다
-  const selectedCandles = useMemo(() => {
-    if (!sessionKey) return [];
+    const last7 = keys.slice(-7);
+    const sig = last7.join("|");
 
-    const raw = sessionGroups?.[sessionKey] || [];
-    const [start, end] = getSessionWindowUtcSec(sessionKey);
-    if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
-
-    const real = raw
-      .filter((c) => c && c.time >= start && c.time < end && c.open != null)
-      .sort((a, b) => a.time - b.time);
-
-    const filled = [];
-    let ri = 0;
-    for (let t = start; t < end; t += 60) {
-      const r = real[ri];
-      if (r && Math.floor(r.time / 60) * 60 === t) {
-        filled.push(r);
-        ri++;
-      } else {
-        filled.push({ time: t }); // whitespace
-      }
+    if (typeof onSessionKeys === "function" && sig !== lastKeysSigRef.current) {
+      lastKeysSigRef.current = sig;
+      onSessionKeys(symbol, last7);
     }
-    return filled;
-  }, [sessionGroups, sessionKey]);
+
+    if (typeof onBounds === "function") {
+      onBounds(symbol, { min: -6, max: 0 });
+    }
+
+    const want = sessionKey && keys.includes(sessionKey) ? sessionKey : last7[last7.length - 1];
+    setEffectiveSessionKey(want);
+  }, [sessionGroups, onSessionKeys, onBounds, symbol, sessionKey]);
 
   const pushStatsUp = useCallback(() => {
     if (typeof onStats !== "function") return;
@@ -270,7 +268,7 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
   const CHART_HEIGHT = 320;
   const CHART_WIDTH = 800;
 
-  /* ------------------------- chart init (coin 느낌) ------------------------- */
+  /* ------------------------- chart init ------------------------- */
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -380,15 +378,13 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
         const sigs = await fetchSignals(symbol, "mt5_signal").catch(() => []);
         const { markers, notes } = buildSignalAnnotations(sigs);
         setNotesView(notes);
-
-        markersAllRef.current = markers || []; // ✅ 저장
+        markersAllRef.current = markers || [];
 
         const rows = await fetchPagedCandles(symbol, "1", TARGET_CANDLE_COUNT);
         if (!alive) return;
 
         rowsRef.current = rows;
 
-        // ✅ 연속 real 캔들(placeholder 제외) 구성 (MA/ENV 버퍼용)
         allRealCandlesRef.current = (rows || [])
           .filter((r) => r && r[1] != null && r[2] != null && r[3] != null && r[4] != null)
           .map((r) => ({
@@ -400,9 +396,8 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
           }))
           .sort((a, b) => a.time - b.time);
 
-        const { groups, stats } = groupBySessionKstWithGaps(rows);
+        const groups = groupBySessionKstWithGaps(rows);
         setSessionGroups(groups);
-        setSessionStats(stats);
 
         pushStatsUp();
       } catch {
@@ -414,6 +409,32 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
       alive = false;
     };
   }, [symbol, pushStatsUp]);
+
+  /* ------------------------- selected candles ------------------------- */
+  const selectedCandles = useMemo(() => {
+    if (!effectiveSessionKey) return [];
+
+    const raw = sessionGroups?.[effectiveSessionKey] || [];
+    const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+
+    const real = raw
+      .filter((c) => c && c.time >= start && c.time < end && c.open != null)
+      .sort((a, b) => a.time - b.time);
+
+    const filled = [];
+    let ri = 0;
+    for (let t = start; t < end; t += 60) {
+      const r = real[ri];
+      if (r && Math.floor(r.time / 60) * 60 === t) {
+        filled.push(r);
+        ri++;
+      } else {
+        filled.push({ time: t }); // whitespace
+      }
+    }
+    return filled;
+  }, [sessionGroups, effectiveSessionKey]);
 
   /* ------------------------- WS via wsHub ------------------------- */
   useEffect(() => {
@@ -453,7 +474,6 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
       }
       rowsRef.current = nextRows;
 
-      // ✅ 연속 real 캔들 갱신 (MA/ENV 버퍼용)
       allRealCandlesRef.current = (nextRows || [])
         .filter((r) => r && r[1] != null && r[2] != null && r[3] != null && r[4] != null)
         .map((r) => ({
@@ -499,20 +519,17 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
     const maLower = maLowerSeriesRef.current;
 
     if (!candleSeries || !maSeries || !maUpper || !maLower) return;
-    if (!sessionKey) return;
+    if (!effectiveSessionKey) return;
 
-    const candles = selectedCandles || [];
-    candleSeries.setData(candles); // ✅ placeholder 포함
+    candleSeries.setData(selectedCandles || []);
 
-    const [start, end] = getSessionWindowUtcSec(sessionKey);
+    const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
     if (!Number.isFinite(start) || !Number.isFinite(end)) return;
 
-    // ✅ MA는 "세션 밖 99개 버퍼 + 세션 구간 real"로 계산 → 세션 초반 비는 현상 해결
     const forMa = sliceWithBuffer(allRealCandlesRef.current || [], start, end, 99);
     const ma100 = calcSMAFromCandles(forMa, 100).filter((p) => p.time >= start && p.time < end);
     maSeries.setData(ma100);
 
-    // ✅ ENV (thr 밴드)
     if (typeof thr === "number" && isFinite(thr) && thr > 0) {
       maUpper.setData(ma100.map((p) => ({ time: p.time, value: p.value * (1 + thr) })));
       maLower.setData(ma100.map((p) => ({ time: p.time, value: p.value * (1 - thr) })));
@@ -521,7 +538,6 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
       maLower.setData([]);
     }
 
-    // ✅ crossTimes markers (coin과 동일: KST 문자열 -> epochSec -> 세션 범위 필터)
     const arr = Array.isArray(crossTimes) ? crossTimes : [];
     const base = (markersAllRef.current || []).filter((x) => x.time >= start && x.time < end);
     const cross = buildCrossMarkers(arr, start, end);
@@ -534,22 +550,27 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
     if (typeof candleSeries.setMarkers === "function") {
       candleSeries.setMarkers(merged);
     }
-  }, [selectedCandles, thr, crossTimes, sessionKey, symbol]);
+  }, [selectedCandles, thr, crossTimes, effectiveSessionKey]);
 
-  /* ------------------------- (변경) visible range는 sessionKey 바뀔 때만 ------------------------- */
+  /* ------------------------- visible range ------------------------- */
   useEffect(() => {
-    if (!sessionKey) return;
-    const [start, end] = getSessionWindowUtcSec(sessionKey);
+    if (!effectiveSessionKey) return;
+    const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
     if (!Number.isFinite(start) || !Number.isFinite(end)) return;
 
     try {
       chartRef.current?.timeScale?.()?.setVisibleRange({ from: start, to: end - 60 });
     } catch {}
-  }, [sessionKey, symbol]);
+  }, [effectiveSessionKey, symbol]);
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>{symbol}</div>
+      <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>
+        {symbol}
+        <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.65 }}>
+          (show: {effectiveSessionKey || "—"} / loaded: {TARGET_CANDLE_COUNT})
+        </span>
+      </div>
 
       <div
         ref={wrapRef}
