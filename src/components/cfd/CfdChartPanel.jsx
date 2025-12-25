@@ -4,7 +4,6 @@ import { createChart } from "lightweight-charts";
 import { getWsHub, mergeBars, fmtKSTFull, fmtKSTHour, fmtKSTHMS, fmtComma, getTs } from "../../lib/tradeUtils";
 import { fetchSignals, buildSignalAnnotations } from "../../lib/tradeUtils";
 
-
 const API_BASE = "https://api.hyeongeonnoil.com";
 const PAGE_LIMIT = 1000;
 const TARGET_CANDLE_COUNT = 10000;
@@ -212,16 +211,18 @@ export default function CfdChartPanel({ symbol, sessionKey, thr, crossTimes, onS
   const maSeriesRef = useRef(null);
   const maUpperSeriesRef = useRef(null);
   const maLowerSeriesRef = useRef(null);
-const markersAllRef = useRef([]); // ✅ 시그널 마커 저장
+
+  const markersAllRef = useRef([]); // ✅ 시그널 마커 저장
   const rowsRef = useRef([]);
   const allRealCandlesRef = useRef([]); // ✅ 연속 real 캔들(placeholder 제외) - MA/ENV 계산용
 
   const [sessionGroups, setSessionGroups] = useState({});
   const [sessionStats, setSessionStats] = useState({});
-// ✅ coin UI용 (시그널 설명)
-const [notesView, setNotesView] = useState([]);
-const [notesCollapsed, setNotesCollapsed] = useState(true);
-useEffect(() => setNotesCollapsed(true), [sessionKey]);
+
+  // ✅ coin UI용 (시그널 설명)
+  const [notesView, setNotesView] = useState([]);
+  const [notesCollapsed, setNotesCollapsed] = useState(true);
+  useEffect(() => setNotesCollapsed(true), [sessionKey]);
 
   // ✅ sessionGroups 변경 “이후”에만 부모로 세션키 보고 (React 경고 방지)
   const lastKeysSigRef = useRef("");
@@ -234,7 +235,7 @@ useEffect(() => setNotesCollapsed(true), [sessionKey]);
     onSessionKeys(symbol, keys);
   }, [sessionGroups, onSessionKeys, symbol]);
 
-  // ✅ 선택된 세션(06:50~06:50)을 1분 단위 placeholder로 "연속 time축"으로 만든다
+  // ✅ (원복) 선택된 세션(06:50~06:50)을 1분 단위 placeholder로 "연속 time축"으로 만든다
   const selectedCandles = useMemo(() => {
     if (!sessionKey) return [];
 
@@ -372,12 +373,11 @@ useEffect(() => setNotesCollapsed(true), [sessionKey]);
 
   /* ------------------------- initial REST load ------------------------- */
   useEffect(() => {
-
     let alive = true;
 
     (async () => {
       try {
-          const sigs = await fetchSignals(symbol, "mt5_signal").catch(() => []);
+        const sigs = await fetchSignals(symbol, "mt5_signal").catch(() => []);
         const { markers, notes } = buildSignalAnnotations(sigs);
         setNotesView(notes);
 
@@ -491,7 +491,7 @@ useEffect(() => setNotesCollapsed(true), [sessionKey]);
     };
   }, [wsHub, symbol, onStats, pushStatsUp]);
 
-  /* ------------------------- draw (candles + MA + env + markers + fixed range) ------------------------- */
+  /* ------------------------- draw (candles + MA + env + markers) ------------------------- */
   useEffect(() => {
     const candleSeries = seriesRef.current;
     const maSeries = maSeriesRef.current;
@@ -524,25 +524,28 @@ useEffect(() => setNotesCollapsed(true), [sessionKey]);
     // ✅ crossTimes markers (coin과 동일: KST 문자열 -> epochSec -> 세션 범위 필터)
     const arr = Array.isArray(crossTimes) ? crossTimes : [];
     const base = (markersAllRef.current || []).filter((x) => x.time >= start && x.time < end);
-        const cross = buildCrossMarkers(arr, start, end);
+    const cross = buildCrossMarkers(arr, start, end);
 
-        const merged = [...base, ...cross].sort((a, b) => {
-          if (a.time !== b.time) return a.time - b.time;
-          return String(a.text || "").localeCompare(String(b.text || ""));
-        });
+    const merged = [...base, ...cross].sort((a, b) => {
+      if (a.time !== b.time) return a.time - b.time;
+      return String(a.text || "").localeCompare(String(b.text || ""));
+    });
 
-        if (typeof candleSeries.setMarkers === "function") {
-          candleSeries.setMarkers(merged);
-        }
+    if (typeof candleSeries.setMarkers === "function") {
+      candleSeries.setMarkers(merged);
+    }
+  }, [selectedCandles, thr, crossTimes, sessionKey, symbol]);
 
+  /* ------------------------- (변경) visible range는 sessionKey 바뀔 때만 ------------------------- */
+  useEffect(() => {
+    if (!sessionKey) return;
+    const [start, end] = getSessionWindowUtcSec(sessionKey);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
 
-    // ✅ visible range 고정 (06:50~06:50)
     try {
       chartRef.current?.timeScale?.()?.setVisibleRange({ from: start, to: end - 60 });
     } catch {}
-  }, [selectedCandles, thr, crossTimes, sessionKey, symbol]);
-
-  const curStats = sessionStats?.[sessionKey] || null;
+  }, [sessionKey, symbol]);
 
   return (
     <div style={{ marginBottom: 28 }}>
@@ -560,104 +563,103 @@ useEffect(() => setNotesCollapsed(true), [sessionKey]);
       />
 
       <div
-  style={{
-    marginTop: 10,
-    background: "#161616",
-    border: "1px solid #262626",
-    borderRadius: 12,
-    padding: "10px 12px",
-    width: CHART_WIDTH,
-    boxSizing: "border-box",
-  }}
->
-  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-    <div style={{ fontWeight: 700, fontSize: 13, opacity: 0.9 }}>
-      {symbol} · 시그널 설명 ({notesView.length})
-    </div>
-
-    <button
-      onClick={() => setNotesCollapsed((v) => !v)}
-      style={{
-        padding: "6px 10px",
-        borderRadius: 8,
-        border: "1px solid #2a2a2a",
-        background: "#1f1f1f",
-        color: "#ddd",
-        fontSize: 12,
-        cursor: "pointer",
-      }}
-      title={notesCollapsed ? "펼치기" : "접기"}
-    >
-      {notesCollapsed ? "펼치기 ⌄" : "접기 ⌃"}
-    </button>
-  </div>
-
-  {notesCollapsed ? (
-    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }} />
-  ) : notesView.length === 0 ? (
-    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>시그널 없음</div>
-  ) : (
-    <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-      {notesView.map((n) => {
-        const side = String(n.side || "").toUpperCase();
-        const kind = String(n.kind || "").toUpperCase();
-        const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
-
-        const priceTxt = n.price != null ? fmtComma(n.price) : "—";
-        const timeTxt = n.timeSec ? fmtKSTHMS(n.timeSec) : "";
-        const reasonsTxt = n.reasons?.length ? `${n.reasons.join(", ")}` : "";
-
-        return (
-          <div
-            key={n.key}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              background: "#1b1b1b",
-              border: "1px solid #2a2a2a",
-            }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "6ch 9ch 8ch 9ch 14ch 1fr",
-                columnGap: 12,
-                alignItems: "baseline",
-                fontSize: 12,
-                lineHeight: 1.5,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                fontVariantNumeric: "tabular-nums",
-              }}
-              title={[
-                `#${n.seq}`,
-                timeTxt,
-                side,
-                kind,
-                priceTxt,
-                fmtKSTFull(n.timeSec),
-                reasonsTxt,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            >
-              <b style={{ opacity: 0.95 }}>#{n.seq}</b>
-              <span>{timeTxt}</span>
-              <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
-              <span style={{ opacity: 0.85 }}>{kind}</span>
-              <span>{priceTxt}</span>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", opacity: reasonsTxt ? 0.9 : 0.6 }}>
-                {reasonsTxt || "—"}
-              </span>
-            </div>
+        style={{
+          marginTop: 10,
+          background: "#161616",
+          border: "1px solid #262626",
+          borderRadius: 12,
+          padding: "10px 12px",
+          width: CHART_WIDTH,
+          boxSizing: "border-box",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: 13, opacity: 0.9 }}>
+            {symbol} · 시그널 설명 ({notesView.length})
           </div>
-        );
-      })}
-    </div>
-  )}
-</div>
 
+          <button
+            onClick={() => setNotesCollapsed((v) => !v)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #2a2a2a",
+              background: "#1f1f1f",
+              color: "#ddd",
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+            title={notesCollapsed ? "펼치기" : "접기"}
+          >
+            {notesCollapsed ? "펼치기 ⌄" : "접기 ⌃"}
+          </button>
+        </div>
+
+        {notesCollapsed ? (
+          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }} />
+        ) : notesView.length === 0 ? (
+          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>시그널 없음</div>
+        ) : (
+          <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+            {notesView.map((n) => {
+              const side = String(n.side || "").toUpperCase();
+              const kind = String(n.kind || "").toUpperCase();
+              const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
+
+              const priceTxt = n.price != null ? fmtComma(n.price) : "—";
+              const timeTxt = n.timeSec ? fmtKSTHMS(n.timeSec) : "";
+              const reasonsTxt = n.reasons?.length ? `${n.reasons.join(", ")}` : "";
+
+              return (
+                <div
+                  key={n.key}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    background: "#1b1b1b",
+                    border: "1px solid #2a2a2a",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "6ch 9ch 8ch 9ch 14ch 1fr",
+                      columnGap: 12,
+                      alignItems: "baseline",
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                    title={[
+                      `#${n.seq}`,
+                      timeTxt,
+                      side,
+                      kind,
+                      priceTxt,
+                      fmtKSTFull(n.timeSec),
+                      reasonsTxt,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  >
+                    <b style={{ opacity: 0.95 }}>#{n.seq}</b>
+                    <span>{timeTxt}</span>
+                    <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
+                    <span style={{ opacity: 0.85 }}>{kind}</span>
+                    <span>{priceTxt}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", opacity: reasonsTxt ? 0.9 : 0.6 }}>
+                      {reasonsTxt || "—"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
