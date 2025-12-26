@@ -21,7 +21,6 @@ import {
   fmtComma,
 } from "../../lib/tradeUtils";
 
-
 const API_BASE = "https://api.bybit.com";
 const PAGE_LIMIT = 1000;
 
@@ -69,11 +68,14 @@ async function fetchPagedCandlesBybit(symbol, interval, targetCount) {
   let allRows = [];
   let endMs = Date.now(); // 최신부터 과거로 땡김
 
+  // 중복/무한루프 방지: endMs가 더 이상 줄지 않으면 중단
+  let prevEndMs = null;
+
   while (allRows.length < targetCount) {
     const url = new URL("/v5/market/kline", API_BASE);
     url.searchParams.set("category", "linear"); // BTCUSDT/ETHUSDT 선물 기준
     url.searchParams.set("symbol", symbol.toUpperCase());
-    url.searchParams.set("interval", String(interval)); // "1"
+    url.searchParams.set("interval", String(interval)); // "1" or "D"
     url.searchParams.set("limit", String(PAGE_LIMIT));
     url.searchParams.set("end", String(endMs)); // ms
 
@@ -81,12 +83,11 @@ async function fetchPagedCandlesBybit(symbol, interval, targetCount) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-    if (data.retCode !== 0) throw new Error(`API error (${data.retCode}): ${data.retMsg}`);
+    if (data?.retCode !== 0) throw new Error(`API error (${data?.retCode}): ${data?.retMsg}`);
 
     const rows = data?.result?.list || [];
     if (!rows.length) break;
 
-    // rows: 보통 최신→과거 순으로 옴. (정렬은 우리가 마지막에 할 거라 상관없음)
     allRows = allRows.concat(rows);
 
     // 다음 end 갱신: 이번에 받은 것 중 "가장 오래된 startTime - 1ms"
@@ -97,8 +98,11 @@ async function fetchPagedCandlesBybit(symbol, interval, targetCount) {
     }
     if (!Number.isFinite(minTs)) break;
 
+    prevEndMs = endMs;
     endMs = minTs - 1;
+
     if (endMs <= 0) break;
+    if (prevEndMs != null && endMs >= prevEndMs) break; // 안전장치
   }
 
   // 정렬 + 목표 개수만 자르기
@@ -106,7 +110,6 @@ async function fetchPagedCandlesBybit(symbol, interval, targetCount) {
   if (allRows.length > targetCount) allRows = allRows.slice(allRows.length - targetCount);
   return allRows;
 }
-
 
 function rowsToBars(rows) {
   return (rows || [])
@@ -120,7 +123,6 @@ function rowsToBars(rows) {
     }))
     .sort((a, b) => a.time - b.time);
 }
-
 
 export default function ChartPanel({
   symbol,
@@ -149,10 +151,13 @@ export default function ChartPanel({
 
   const versionRef = useRef(0);
   const dayOffsetRef = useRef(dayOffset);
-const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).current;
+
+  const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).current;
 
   useEffect(() => setNotesCollapsed(true), [dayOffset]);
-  useEffect(() => { dayOffsetRef.current = dayOffset; }, [dayOffset]);
+  useEffect(() => {
+    dayOffsetRef.current = dayOffset;
+  }, [dayOffset]);
 
   const getDayWindowByOffset = useCallback((offsetDays = 0) => {
     const end = next0650EndBoundaryUtcSec() + offsetDays * 86400;
@@ -223,7 +228,9 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
     const myVersion = ++versionRef.current;
     const cleanups = [];
 
-    try { chartRef.current?.remove(); } catch {}
+    try {
+      chartRef.current?.remove();
+    } catch {}
     chartRef.current = null;
     seriesRef.current = null;
     maSeriesRef.current = null;
@@ -266,6 +273,7 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
       wickUpColor: "#2fe08d",
       wickDownColor: "#ff6b6b",
     });
+
     const maSeries = chart.addLineSeries({ lineWidth: 2, priceLineVisible: false, lastValueVisible: true, color: "#ffd166" });
     const maUpperSeries = chart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false, color: "#9ca3af" });
     const maLowerSeries = chart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false, color: "#9ca3af" });
@@ -285,17 +293,18 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
 
     (async () => {
       try {
-          const rows = await fetchPagedCandlesBybit(symbol, "1", TARGET_1M_COUNT);
-  const bars = rowsToBars(rows);
-        if (versionRef.current !== myVersion) return;
-
+        // signals (공통)
         const sigs = await fetchSignals(symbol, signalName || "bybit").catch(() => []);
         const { markers, notes } = buildSignalAnnotations(sigs);
-
         markersAllRef.current = markers;
         notesAllRef.current = notes;
 
         if (globalInterval === "1") {
+          // ✅ 1분봉: 8일치
+          const rows = await fetchPagedCandlesBybit(symbol, "1", TARGET_1M_COUNT);
+          const bars = rowsToBars(rows);
+          if (versionRef.current !== myVersion) return;
+
           allBarsRef.current = bars;
           renderDayWindow(allBarsRef.current, false);
 
@@ -309,6 +318,15 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
           onBounds?.(symbol, { min: -7, max: 0 });
 
           const TOPIC_1M = `kline.1.${symbol}`;
+          try {
+            wsHub.subscribe?.([TOPIC_1M]);
+          } catch {}
+          cleanups.push(() => {
+            try {
+              wsHub.unsubscribe?.([TOPIC_1M]);
+            } catch {}
+          });
+
           const off1m = wsHub.addListener(TOPIC_1M, (d) => {
             const bar = {
               time: Math.floor(Number(d.start) / 1000),
@@ -335,6 +353,11 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
 
           cleanups.push(off1m);
         } else {
+          // ✅ 일봉
+          const rows = await fetchPagedCandlesBybit(symbol, "D", 1000);
+          const bars = rowsToBars(rows);
+          if (versionRef.current !== myVersion) return;
+
           dailyBarsRef.current = bars;
           candleSeries.setData(bars);
           maSeries.setData(calcSMA(bars, 100));
@@ -345,6 +368,15 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
           onStats?.(symbol, { priceD: lastCloseD, ma100_D: lastMaD });
 
           const TOPIC_1D = `kline.D.${symbol}`;
+          try {
+            wsHub.subscribe?.([TOPIC_1D]);
+          } catch {}
+          cleanups.push(() => {
+            try {
+              wsHub.unsubscribe?.([TOPIC_1D]);
+            } catch {}
+          });
+
           const off1d = wsHub.addListener(TOPIC_1D, (d) => {
             const bar = {
               time: Math.floor(Number(d.start) / 1000),
@@ -371,8 +403,14 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
     })();
 
     return () => {
-      cleanups.forEach((fn) => { try { fn(); } catch {} });
-      try { chart.remove(); } catch {}
+      cleanups.forEach((fn) => {
+        try {
+          fn();
+        } catch {}
+      });
+      try {
+        chart.remove();
+      } catch {}
     };
   }, [symbol, globalInterval, signalName, onBounds, onStats, renderDayWindow]);
 
@@ -444,7 +482,15 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
               const reasonsTxt = n.reasons?.length ? `${n.reasons.join(", ")}` : "";
 
               return (
-                <div key={n.key} style={{ padding: "8px 10px", borderRadius: 10, background: "#1b1b1b", border: "1px solid #2a2a2a" }}>
+                <div
+                  key={n.key}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    background: "#1b1b1b",
+                    border: "1px solid #2a2a2a",
+                  }}
+                >
                   <div
                     style={{
                       display: "grid",
@@ -466,14 +512,22 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
                       priceTxt,
                       fmtKSTFull(n.timeSec),
                       reasonsTxt,
-                    ].filter(Boolean).join(" · ")}
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   >
                     <b style={{ opacity: 0.95 }}>#{n.seq}</b>
                     <span>{timeTxt}</span>
                     <span style={{ color: sideColor, fontWeight: 700 }}>{side}</span>
                     <span style={{ opacity: 0.85 }}>{kind}</span>
                     <span>{priceTxt}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", opacity: reasonsTxt ? 0.9 : 0.6 }}>
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        opacity: reasonsTxt ? 0.9 : 0.6,
+                      }}
+                    >
                       {reasonsTxt || "—"}
                     </span>
                   </div>
