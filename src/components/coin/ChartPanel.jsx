@@ -13,7 +13,6 @@ import {
   calcSMA,
   calcLatestMAValue,
   mergeBars,
-  fetchAllKlines,
   fetchSignals,
   buildSignalAnnotations,
   getWsHub,
@@ -21,6 +20,13 @@ import {
   genMinutePlaceholders,
   fmtComma,
 } from "../../lib/tradeUtils";
+
+
+const API_BASE = "https://api.bybit.com";
+const PAGE_LIMIT = 1000;
+
+// ✅ 8일치(버퍼 포함) 로딩 (1분봉 기준)
+const TARGET_1M_COUNT = 8 * 1440;
 
 // "YYYY-MM-DD HH:MM:SS" 를 KST(+09:00) 기준 초단위로
 function parseKstToEpochSec(s) {
@@ -58,6 +64,63 @@ function buildCrossMarkers(crossTimesArr, fromSec, toSec) {
   }
   return out;
 }
+
+async function fetchPagedCandlesBybit(symbol, interval, targetCount) {
+  let allRows = [];
+  let endMs = Date.now(); // 최신부터 과거로 땡김
+
+  while (allRows.length < targetCount) {
+    const url = new URL("/v5/market/kline", API_BASE);
+    url.searchParams.set("category", "linear"); // BTCUSDT/ETHUSDT 선물 기준
+    url.searchParams.set("symbol", symbol.toUpperCase());
+    url.searchParams.set("interval", String(interval)); // "1"
+    url.searchParams.set("limit", String(PAGE_LIMIT));
+    url.searchParams.set("end", String(endMs)); // ms
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    if (data.retCode !== 0) throw new Error(`API error (${data.retCode}): ${data.retMsg}`);
+
+    const rows = data?.result?.list || [];
+    if (!rows.length) break;
+
+    // rows: 보통 최신→과거 순으로 옴. (정렬은 우리가 마지막에 할 거라 상관없음)
+    allRows = allRows.concat(rows);
+
+    // 다음 end 갱신: 이번에 받은 것 중 "가장 오래된 startTime - 1ms"
+    let minTs = Infinity;
+    for (const r of rows) {
+      const ts = Number(r?.[0]);
+      if (Number.isFinite(ts) && ts < minTs) minTs = ts;
+    }
+    if (!Number.isFinite(minTs)) break;
+
+    endMs = minTs - 1;
+    if (endMs <= 0) break;
+  }
+
+  // 정렬 + 목표 개수만 자르기
+  allRows.sort((a, b) => Number(a[0]) - Number(b[0]));
+  if (allRows.length > targetCount) allRows = allRows.slice(allRows.length - targetCount);
+  return allRows;
+}
+
+
+function rowsToBars(rows) {
+  return (rows || [])
+    .filter((r) => r && r[0] != null && r[1] != null && r[2] != null && r[3] != null && r[4] != null)
+    .map((r) => ({
+      time: Math.floor(Number(r[0]) / 1000), // ms -> sec
+      open: Number(r[1]),
+      high: Number(r[2]),
+      low: Number(r[3]),
+      close: Number(r[4]),
+    }))
+    .sort((a, b) => a.time - b.time);
+}
+
 
 export default function ChartPanel({
   symbol,
@@ -222,8 +285,8 @@ const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).curren
 
     (async () => {
       try {
-        const limit = globalInterval === "1" ? 8 * 1440 : 1000;
-        const bars = await fetchAllKlines(symbol, globalInterval, limit);
+          const rows = await fetchPagedCandlesBybit(symbol, "1", TARGET_1M_COUNT);
+  const bars = rowsToBars(rows);
         if (versionRef.current !== myVersion) return;
 
         const sigs = await fetchSignals(symbol, signalName || "bybit").catch(() => []);
