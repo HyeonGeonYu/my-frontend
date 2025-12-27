@@ -234,6 +234,19 @@ export default function CfdChartPanel({
 
   // UI notes
   const [notesView, setNotesView] = useState([]);
+  const visibleNotes = useMemo(() => {
+    if (!effectiveSessionKey) return [];
+    const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+
+    return (notesView || [])
+      .filter((n) => {
+        const t = Number(n?.timeSec);
+        return Number.isFinite(t) && t >= start && t < end;
+      })
+      .sort((a, b) => Number(a?.timeSec || 0) - Number(b?.timeSec || 0));
+  }, [notesView, effectiveSessionKey]);
+
   const [notesCollapsed, setNotesCollapsed] = useState(true);
   useEffect(() => setNotesCollapsed(true), [sessionKey, effectiveSessionKey]);
 
@@ -596,7 +609,7 @@ export default function CfdChartPanel({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 700, fontSize: 13, opacity: 0.9 }}>
-            {symbol} · 시그널 설명 ({notesView.length})
+            {symbol} · 시그널 설명 ({visibleNotes.length})
           </div>
 
           <button
@@ -618,11 +631,11 @@ export default function CfdChartPanel({
 
         {notesCollapsed ? (
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }} />
-        ) : notesView.length === 0 ? (
+        ) : visibleNotes.length === 0 ? (
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>시그널 없음</div>
         ) : (
           <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-            {notesView.map((n) => {
+            {visibleNotes.map((n) => {
               const side = String(n.side || "").toUpperCase();
               const kind = String(n.kind || "").toUpperCase();
               const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";

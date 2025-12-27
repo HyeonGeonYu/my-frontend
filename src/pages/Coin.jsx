@@ -222,7 +222,7 @@ export default function Coin() {
     return () => {
       alive = false;
     };
-  }, [symbolsConfig, symbolsReady]);
+  }, [symbolsConfig, symbolsReady,signalName]);
 
   /* ------------------------- bounds (dayOffset clamp) ------------------------- */
   const requiredSymbols = useMemo(

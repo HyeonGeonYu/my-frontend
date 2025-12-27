@@ -412,7 +412,7 @@ export default function ChartPanel({
         chart.remove();
       } catch {}
     };
-  }, [symbol, globalInterval, signalName, onBounds, onStats, renderDayWindow]);
+  }, [wsHub, symbol, globalInterval, signalName, onBounds, onStats, renderDayWindow]);
 
   useEffect(() => {
     if (!seriesRef.current || globalInterval !== "1") return;

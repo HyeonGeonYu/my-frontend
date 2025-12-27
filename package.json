@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@vercel/node": "^5.5.16",
+    "baseline-browser-mapping": "^2.9.11",
     "react-scripts": "^5.0.1"
   }
 }
