@@ -460,10 +460,20 @@ export default function CfdChartPanel({
     } catch {}
 
     const offT = wsHub.addListener?.(tTopic, (d) => {
-      const last = Number(d?.lastPrice ?? d?.last ?? d?.price);
-      if (!Number.isFinite(last)) return;
-      onStats?.(symbol, { price: last });
-    });
+  const bid = Number(d?.bid1Price ?? d?.bid);
+  const ask = Number(d?.ask1Price ?? d?.ask);
+
+  const mid =
+    Number.isFinite(bid) && Number.isFinite(ask) ? (bid + ask) / 2 : NaN;
+
+  const last = Number(d?.lastPrice ?? d?.last ?? d?.price);
+
+  const px = Number.isFinite(mid) ? mid : last;
+  if (!Number.isFinite(px)) return;
+
+  onStats?.(symbol, { price: px });
+});
+
 
     const offK = wsHub.addListener?.(kTopic, (d) => {
       const rawStart = Number(d?.start);

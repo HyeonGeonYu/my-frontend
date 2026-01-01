@@ -20,11 +20,9 @@ function selectedDayLabel(offsetDays = 0) {
 }
 
 /* ------------------------- threshold meta ------------------------- */
-async function fetchThresholdMeta(symbol, name) {
+async function fetchThresholdMeta(symbol, ns) {
   const qs = new URLSearchParams({ symbol: String(symbol || "") });
-  if (name) qs.set("name", String(name));
-  // 필요하면 cross_limit도 같이 걸 수 있음 (예: 10)
-  // qs.set("cross_limit", "10");
+  if (ns) qs.set("name", String(ns)); // 기존 API가 name 파라미터 받는다면 유지
 
   const url = `/api/thresholds?${qs.toString()}`;
   const res = await fetch(url, { cache: "no-store" });
@@ -32,22 +30,17 @@ async function fetchThresholdMeta(symbol, name) {
   return (await res.json()) || null;
 }
 
-
 /* ------------------------- symbols 추출 유틸 ------------------------- */
-// ✅ /api/config 응답 구조가 달라도 symbols를 최대한 찾아서 뽑아냄
 function extractSymbolsFromConfig(cfgRaw) {
-  // /api/config 이 {config:{...}} 또는 {...} 둘 다 대응
   const root = cfgRaw?.config ?? cfgRaw;
   if (!root) return [];
 
   const normalize = (raw) => {
-    // "BTCUSDT,ETHUSDT" 같은 문자열 지원
     if (typeof raw === "string") {
       raw = raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
     }
     if (!Array.isArray(raw)) return [];
 
-    // ["BTCUSDT"] or [{symbol:"BTCUSDT"}] or [{name:"BTCUSDT"}] 등 대응
     const out = [];
     for (const it of raw) {
       if (it == null) continue;
@@ -90,11 +83,9 @@ function extractSymbolsFromConfig(cfgRaw) {
     return normalize(raw);
   };
 
-  // 1) 루트에서 먼저 찾기
   let symbols = pickFrom(root);
   if (symbols.length) return symbols;
 
-  // 2) 흔한 하위 키들에서 찾기
   const candidates = [
     root.bybit,
     root.mt5,
@@ -111,7 +102,6 @@ function extractSymbolsFromConfig(cfgRaw) {
     if (symbols.length) return symbols;
   }
 
-  // 3) 재귀적으로 훑어서 찾기 (마지막 수단)
   const seen = new Set();
   const stack = [root];
   while (stack.length) {
@@ -135,23 +125,6 @@ export default function Coin() {
   const [interval, setInterval_] = useState("1");
   const [dayOffset, setDayOffset] = useState(0);
 
-  /* ------------------------- asset ------------------------- */
-  const [asset, setAsset] = useState({ wallet: { USDT: 0 }, positions: {} });
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/asset", { cache: "no-store" });
-        const j = res.ok ? await res.json() : null;
-        if (!alive || !j) return;
-        setAsset(j.asset);
-      } catch {}
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   /* ------------------------- config ------------------------- */
   const [configState, setConfigState] = useState(null);
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -163,7 +136,6 @@ export default function Coin() {
         const r = await fetch("/api/config", { cache: "no-store" });
         if (!r.ok) return;
         const j = await r.json();
-
         if (alive) setConfigState(j?.config ?? j);
       } catch {
       } finally {
@@ -175,11 +147,35 @@ export default function Coin() {
     };
   }, []);
 
-  const signalName = useMemo(() => {
-    return configState?.name || configState?.exchange || "bybit";
+  // ✅ namespace (플랫폼/봇 네임스페이스)
+  const ns = useMemo(() => {
+    return String(configState?.name || configState?.exchange || "bybit").toLowerCase();
   }, [configState]);
 
-  // ✅ DEFAULT_SYMBOLS 완전 제거: config에서만 symbols 사용
+  /* ------------------------- asset ------------------------- */
+  const [asset, setAsset] = useState({ wallet: { USDT: 0 }, positions: {} });
+
+  useEffect(() => {
+    let alive = true;
+
+    // config가 아직이면 기본 bybit로 1번 때리는 게 싫으면 여기서 return 시켜도 됨
+    // if (!configLoaded) return;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/asset?ns=${encodeURIComponent(ns)}`, { cache: "no-store" });
+        const j = res.ok ? await res.json() : null;
+        if (!alive || !j) return;
+        setAsset(j.asset);
+      } catch {}
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [ns]);
+
+  /* ------------------------- symbols ------------------------- */
   const symbolsConfig = useMemo(() => {
     const symbols = extractSymbolsFromConfig(configState);
     return symbols.map((sym) => ({ symbol: sym, market: "linear" }));
@@ -199,16 +195,13 @@ export default function Coin() {
   const [metaMap, setMetaMap] = useState({});
   useEffect(() => {
     let alive = true;
-
-    // symbols 없으면 meta 로드도 스킵
     if (!symbolsReady) return;
 
     (async () => {
       try {
         const results = await Promise.all(
-  symbolsConfig.map((s) => fetchThresholdMeta(s.symbol, signalName).catch(() => null))
-);
-
+          symbolsConfig.map((s) => fetchThresholdMeta(s.symbol, ns).catch(() => null))
+        );
         if (!alive) return;
 
         const merged = {};
@@ -222,13 +215,10 @@ export default function Coin() {
     return () => {
       alive = false;
     };
-  }, [symbolsConfig, symbolsReady,signalName]);
+  }, [symbolsConfig, symbolsReady, ns]);
 
   /* ------------------------- bounds (dayOffset clamp) ------------------------- */
-  const requiredSymbols = useMemo(
-    () => symbolsConfig.map((s) => s.symbol),
-    [symbolsConfig]
-  );
+  const requiredSymbols = useMemo(() => symbolsConfig.map((s) => s.symbol), [symbolsConfig]);
 
   const [perSymbolBounds, setPerSymbolBounds] = useState({});
   const onBounds = useCallback((symbol, bounds) => {
@@ -266,7 +256,7 @@ export default function Coin() {
     cursor: disabled ? "not-allowed" : "pointer",
   });
 
-  /* ------------------------- UI (config 없으면 안내) ------------------------- */
+  /* ------------------------- UI ------------------------- */
   if (!configLoaded) {
     return (
       <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
@@ -287,18 +277,16 @@ export default function Coin() {
             lineHeight: 1.6,
           }}
         >
-          config에서 symbols를 못 가져왔어.
+          심볼 목록을 불러오지 못했어요.
           <br />
           <span style={{ opacity: 0.75 }}>
-            개발자 콘솔(F12)에서 <b>[/api/config raw]</b> 로그를 확인해서,
-            symbols가 어떤 키에 들어오는지 보고 알려줘.
+            잠시 후 다시 시도해 주세요. 문제가 계속되면 운영자에게 문의해 주세요.
           </span>
         </div>
       </div>
     );
   }
 
-  /* ------------------------- main render ------------------------- */
   return (
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
       <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState} />
@@ -427,7 +415,7 @@ export default function Coin() {
               onStats={onStats}
               thr={metaMap[s.symbol]?.ma_threshold}
               crossTimes={metaMap[s.symbol]?.cross_times}
-              signalName={signalName}
+              signalName={ns} //
             />
           ))}
         </div>

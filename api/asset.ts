@@ -10,7 +10,6 @@ function json(payload: unknown, status = 200): Response {
   });
 }
 
-/** Upstash HSCAN 결과를 [cursor, array]로 정규화 */
 type HScanTuple = readonly [number | string, string[]];
 async function hscanTyped(
   redis: Redis,
@@ -24,11 +23,9 @@ async function hscanTyped(
   return [isNaN(next) ? 0 : next, arr];
 }
 
-/** positions 필드(JSON 문자열 또는 "[]") 파싱 → null | {LONG,SHORT} */
 function parsePositionVal(s: unknown): { LONG: any | null; SHORT: any | null } | null {
   if (s == null) return null;
 
-  // 1) 이미 객체로 역직렬화된 경우 (Upstash 자동 JSON 파싱)
   if (typeof s === "object") {
     const obj = s as any;
     const LONG = obj?.LONG ?? null;
@@ -39,7 +36,6 @@ function parsePositionVal(s: unknown): { LONG: any | null; SHORT: any | null } |
     return { LONG, SHORT };
   }
 
-  // 2) 문자열인 경우만 JSON.parse
   if (typeof s !== "string") return null;
   const trimmed = s.trim();
   if (!trimmed || trimmed === "[]") return null;
@@ -59,8 +55,6 @@ function parsePositionVal(s: unknown): { LONG: any | null; SHORT: any | null } |
   return null;
 }
 
-
-
 /* --------------------------- handler --------------------------- */
 export default async function handler(req: Request): Promise<Response> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -69,14 +63,20 @@ export default async function handler(req: Request): Promise<Response> {
     return json({ retCode: -1, retMsg: "Env missing UPSTASH_REDIS_REST_URL/TOKEN" }, 500);
   }
 
-  const redis = new Redis({ url, token });
-  const key = "asset";
-
   try {
     const { searchParams } = new URL(req.url);
 
+    // ✅ ns → redis key 결정
+    const ns = (searchParams.get("ns") || "bybit").toLowerCase();
+    const ALLOW = new Set(["bybit", "mt5_signal"]);
+    if (!ALLOW.has(ns)) return json({ retCode: -1, retMsg: "invalid ns" }, 400);
+
+    const key = `trading:${ns}:asset`;
+
+    const redis = new Redis({ url, token });
+
     // query
-    const symbolsParam = searchParams.get("symbols") || ""; // "BTCUSDT,ETHUSDT"
+    const symbolsParam = searchParams.get("symbols") || "";
     const wantSymbols = symbolsParam
       .split(",")
       .map((s) => s.trim().toUpperCase())
@@ -87,7 +87,6 @@ export default async function handler(req: Request): Promise<Response> {
     const scanCount = Math.min(Math.max(parseInt(searchParams.get("count") || "1000", 10) || 1000, 100), 5000);
 
     /* ---------------- wallet ---------------- */
-    // 기본은 단일 코인(USDT)만 조회. 필요하면 wallet.* 전체 스캔으로 확장 가능.
     const walletKey = `wallet.${walletCoin}`;
     const walletStr = await (redis as any).hget(key, walletKey);
     const walletVal = typeof walletStr === "string" ? parseFloat(walletStr) : Number(walletStr);
@@ -97,44 +96,37 @@ export default async function handler(req: Request): Promise<Response> {
     const positions: Record<string, any> = {};
 
     if (wantSymbols.length > 0) {
-      // 심볼 지정 시: HGET 반복
       for (const sym of wantSymbols) {
         const field = `positions.${sym}`;
         const v = await (redis as any).hget(key, field);
         const parsed = parsePositionVal(v);
-        if (parsed) {
-          positions[sym] = { LONG: parsed.LONG ?? null, SHORT: parsed.SHORT ?? null };
-        } else if (includeEmpty) {
-          positions[sym] = { LONG: null, SHORT: null };
-        }
+        if (parsed) positions[sym] = { LONG: parsed.LONG ?? null, SHORT: parsed.SHORT ?? null };
+        else if (includeEmpty) positions[sym] = { LONG: null, SHORT: null };
       }
     } else {
-      // 전체 스캔: positions.* 만 긁어오기
       let cursor = 0;
       do {
         const [next, arr] = await hscanTyped(redis, key, cursor, { match: "positions.*", count: scanCount });
         cursor = next;
+
         for (let i = 0; i + 1 < arr.length; i += 2) {
           const field = arr[i] ?? "";
           const val = arr[i + 1] ?? "";
-          const sym = field.split(".")[1]; // positions.BTCUSDT → BTCUSDT
+          const sym = field.split(".")[1];
           if (!sym) continue;
 
           const parsed = parsePositionVal(val);
-          if (parsed) {
-            positions[sym] = { LONG: parsed.LONG ?? null, SHORT: parsed.SHORT ?? null };
-          } else if (includeEmpty) {
-            positions[sym] = { LONG: null, SHORT: null };
-          }
+          if (parsed) positions[sym] = { LONG: parsed.LONG ?? null, SHORT: parsed.SHORT ?? null };
+          else if (includeEmpty) positions[sym] = { LONG: null, SHORT: null };
         }
       } while (cursor !== 0);
     }
 
-    /* ---------------- response ---------------- */
     return json({
       retCode: 0,
       asset: { wallet, positions },
       _debug: {
+        ns,
         key,
         walletField: walletKey,
         symbols: wantSymbols.length ? wantSymbols : Object.keys(positions),
