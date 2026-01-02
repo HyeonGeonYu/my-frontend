@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useDailySavedData } from "../hooks/useDailySavedData";
 import { newsParams } from "../constants/newsMeta";
 import { ClipboardCopy, Check } from "lucide-react";
@@ -56,7 +56,6 @@ const buildNewsPrompt = (content = "") => {
   return base + promptTail;
 };
 
-
 // 날짜 포맷 함수: 20250619 → 2025년 6월 19일 (목요일)
 const formatDateWithDay = (dateStr) => {
   if (!/^\d{8}$/.test(dateStr)) return dateStr;
@@ -79,9 +78,32 @@ function Archive() {
 
   const { data, total, loading, error } = useDailySavedData(page);
 
+  // ✅ 이전 데이터를 유지해서 렌더 (레이아웃 시프트 방지)
+  const [renderData, setRenderData] = useState([]);
+  useEffect(() => {
+    if (!loading && Array.isArray(data)) setRenderData(data);
+  }, [loading, data]);
+
+  // ✅ 기존 데이터가 있는데 로딩 중이면 "가져오는 중" 배지 표시
+  const isFetching = loading && renderData.length > 0;
+
   const perPage = 5;
   const totalPages = Math.ceil(total / perPage);
 
+  // ✅ 페이지 버튼 5개씩 보기
+  const pageWindowSize = 5;
+
+  const getPageWindow = (page, totalPages, windowSize) => {
+    const windowIndex = Math.floor((page - 1) / windowSize);
+    const start = windowIndex * windowSize + 1;
+    const end = Math.min(start + windowSize - 1, totalPages);
+    return { start, end, windowIndex };
+  };
+
+  const { start: windowStart, end: windowEnd } = getPageWindow(page, totalPages, pageWindowSize);
+
+  const goPrevPage = () => setPage((p) => Math.max(1, p - 1));
+  const goNextPage = () => setPage((p) => Math.min(totalPages, p + 1));
   const toggleDate = (date) => {
     setExpandedDate(expandedDate === date ? null : date);
   };
@@ -93,16 +115,74 @@ function Archive() {
     }));
   };
 
+  // ✅ Pagination 버튼 UI 통일 스타일
+  const pagerBtnBase = {
+    height: 40,
+    minWidth: 40,
+    padding: "0 12px",
+    borderRadius: 10,
+    border: "1px solid #2a2a2a",
+    background: "#2a2a2a",
+    color: "#fff",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 700,
+    userSelect: "none",
+  };
+
+  const pagerBtnActive = {
+    background: "#00ffcc",
+    color: "#000",
+    border: "1px solid #00ffcc",
+  };
+
+  const pagerBtnGhost = {
+    background: "transparent",
+    border: "1px solid #00ffcc",
+    color: "#00ffcc",
+  };
+
+  const pagerBtnDisabled = {
+    opacity: 0.45,
+    cursor: "not-allowed",
+  };
+
   return (
     <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
       <h1 style={{ color: "#00ffcc" }}>📅 아카이브</h1>
 
-      {loading && <p>⏳ 로딩 중...</p>}
       {error && <p style={{ color: "red" }}>❌ 오류 발생: {error.message}</p>}
-      {!loading && data.length === 0 && <p>데이터가 없습니다.</p>}
 
-      {!loading &&
-        data.map(({ date, data }) => (
+      {/* ✅ 리스트 영역: 로딩해도 화면 흔들림 줄이기 */}
+      <div style={{ position: "relative", minHeight: 600 }}>
+        {/* ✅ “가져오는 중…” 배지 (기존 데이터 유지하면서 표시) */}
+        {isFetching && (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              padding: "6px 10px",
+              borderRadius: 999,
+              background: "rgba(0,0,0,0.6)",
+              border: "1px solid #333",
+              color: "#aaa",
+              fontSize: 12,
+              zIndex: 20,
+            }}
+          >
+            가져오는 중…
+          </div>
+        )}
+
+        {/* ✅ 첫 로딩 (데이터 없는데 로딩중일 때만) */}
+        {loading && renderData.length === 0 && <p>⏳ 로딩 중...</p>}
+
+        {!loading && (data?.length ?? 0) === 0 && <p>데이터가 없습니다.</p>}
+
+        {renderData.map(({ date, data }) => (
           <div key={date} style={{ marginBottom: "20px", borderBottom: "1px solid #333", paddingBottom: "10px" }}>
             <h3
               onClick={() => toggleDate(date)}
@@ -132,116 +212,117 @@ function Archive() {
                     const resultKey = `${date}_${country}_result`;
 
                     return (
-                        <div key={country} style={{marginBottom: "16px"}}>
-                          <h4 style={{marginBottom: "4px", color: "#ffcc00"}}>{country}</h4>
+                      <div key={country} style={{ marginBottom: "16px" }}>
+                        <h4 style={{ marginBottom: "4px", color: "#ffcc00" }}>{country}</h4>
 
-                          <div>📌 <strong>제목:</strong>{" "}
-                            <a href={info.url} target="_blank" rel="noreferrer" style={{color: "#00ccff"}}>
-                              {info.title || info.url}
-                            </a>
-                          </div>
-                          <div>🕒 <strong>업로드:</strong> {info.publishedAt ? new Date(info.publishedAt).toLocaleString() : "없음"}
-                          </div>
+                        <div>
+                          📌 <strong>제목:</strong>{" "}
+                          <a href={info.url} target="_blank" rel="noreferrer" style={{ color: "#00ccff" }}>
+                            {info.title || info.url}
+                          </a>
+                        </div>
 
-                          {/* summary_result toggle */}
-                          {info.summary_result && (
-                              <div style={{marginTop: "8px"}}>
-                                <button
-                                    onClick={() => toggleSummary(resultKey)}
-                                    style={{
-                                      backgroundColor: "#222",
-                                      color: "#00ffcc",
-                                      border: "1px solid #00ffcc",
-                                      borderRadius: "4px",
-                                      padding: "4px 8px",
-                                      cursor: "pointer",
-                                      fontSize: "0.9rem",
-                                      marginRight: "8px",
-                                    }}
-                                >
-                                  {expandedSummary[resultKey] ? "요약 닫기" : "요약 보기"}
-                                </button>
+                        <div>
+                          🕒 <strong>업로드:</strong>{" "}
+                          {info.publishedAt ? new Date(info.publishedAt).toLocaleString() : "없음"}
+                        </div>
 
-                                {expandedSummary[resultKey] && (
-                                    <div
-                                        style={{
-                                          marginTop: "6px",
-                                          backgroundColor: "#222",
-                                          padding: "8px",
-                                          borderRadius: "6px",
-                                        }}
-                                    >
-                                      <CopyButton text={info.summary_result} />
-                                      <strong>🧾 summary_result:</strong>
-                                      <pre style={{whiteSpace: "pre-wrap", marginTop: "4px", color: "#ccc"}}>
-                                  {info.summary_result}
-                                </pre>
-                                    </div>
-                                )}
-                              </div>
-                          )}
-
-                          {/* summary_content toggle */}
-                          <div style={{marginTop: "8px"}}>
+                        {/* summary_result toggle */}
+                        {info.summary_result && (
+                          <div style={{ marginTop: "8px" }}>
                             <button
-                                onClick={() => toggleSummary(summaryKey)}
-                                style={{
-                                  backgroundColor: "#222",
-                                  color: "#00ffcc",
-                                  border: "1px solid #00ffcc",
-                                  borderRadius: "4px",
-                                  padding: "4px 8px",
-                                  cursor: "pointer",
-                                  fontSize: "0.9rem",
-                                }}
+                              onClick={() => toggleSummary(resultKey)}
+                              style={{
+                                backgroundColor: "#222",
+                                color: "#00ffcc",
+                                border: "1px solid #00ffcc",
+                                borderRadius: "6px",
+                                padding: "6px 10px",
+                                cursor: "pointer",
+                                fontSize: "0.9rem",
+                                marginRight: "8px",
+                              }}
                             >
-                              {expandedSummary[summaryKey] ? "전문 닫기" : "전문 보기"}
+                              {expandedSummary[resultKey] ? "요약 닫기" : "요약 보기"}
                             </button>
 
-                            {expandedSummary[summaryKey] && (
+                            {expandedSummary[resultKey] && (
                               <div
                                 style={{
                                   marginTop: "6px",
                                   backgroundColor: "#222",
                                   padding: "10px 12px",
-                                  borderRadius: "6px",
-                                  position: "relative", // ✅ 버튼 위치 기준
+                                  borderRadius: "8px",
+                                  position: "relative",
                                 }}
                               >
-                                {/* 왼쪽 라벨 */}
-                                <strong style={{ color: "#fff", display: "inline-block" }}>
-                                  📄 summary_content:
-                                </strong>
-
-                                {/* 👉 오른쪽 끝에 고정되는 버튼 그룹 */}
-                                <div
-                                  style={{
-                                    position: "absolute",
-                                    top: 8,
-                                    right: 12,                // ✅ 박스 오른쪽 끝에 밀착
-                                    display: "flex",
-                                    gap: 8,
-                                    alignItems: "center",
-                                  }}
-                                >
-                                  <CopyButton
-                                    text={info.summary_content || ""}
-                                    absolute={false}          // ✅ 내부 버튼은 absolute 아님
-                                    titleLabel="원문 복사"
-                                  />
-                                  <CopyButton
-                                    text={buildNewsPrompt(info.summary_content || "")}
-                                    absolute={false}
-                                    titleLabel="원문+프롬프트 복사"
-                                  />
-                                </div>
-                              <br/>
-                                {/* 본문 */}
-                                  {info.summary_content || "내용 없음"}
+                                <CopyButton text={info.summary_result} />
+                                <strong>🧾 summary_result:</strong>
+                                <pre style={{ whiteSpace: "pre-wrap", marginTop: "6px", color: "#ccc" }}>
+                                  {info.summary_result}
+                                </pre>
                               </div>
                             )}
                           </div>
+                        )}
+
+                        {/* summary_content toggle */}
+                        <div style={{ marginTop: "8px" }}>
+                          <button
+                            onClick={() => toggleSummary(summaryKey)}
+                            style={{
+                              backgroundColor: "#222",
+                              color: "#00ffcc",
+                              border: "1px solid #00ffcc",
+                              borderRadius: "6px",
+                              padding: "6px 10px",
+                              cursor: "pointer",
+                              fontSize: "0.9rem",
+                            }}
+                          >
+                            {expandedSummary[summaryKey] ? "전문 닫기" : "전문 보기"}
+                          </button>
+
+                          {expandedSummary[summaryKey] && (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                backgroundColor: "#222",
+                                padding: "10px 12px",
+                                borderRadius: "8px",
+                                position: "relative",
+                              }}
+                            >
+                              <strong style={{ color: "#fff", display: "inline-block" }}>📄 summary_content:</strong>
+
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: 8,
+                                  right: 12,
+                                  display: "flex",
+                                  gap: 8,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <CopyButton
+                                  text={info.summary_content || ""}
+                                  absolute={false}
+                                  titleLabel="원문 복사"
+                                />
+                                <CopyButton
+                                  text={buildNewsPrompt(info.summary_content || "")}
+                                  absolute={false}
+                                  titleLabel="원문+프롬프트 복사"
+                                />
+                              </div>
+
+                              <br />
+                              {info.summary_content || "내용 없음"}
+                            </div>
+                          )}
                         </div>
+                      </div>
                     );
                   });
                 })()}
@@ -249,28 +330,85 @@ function Archive() {
             )}
           </div>
         ))}
+      </div>
 
+            {/* ✅ Pagination */}
       {totalPages > 1 && (
-        <div style={{ marginTop: "24px" }}>
-          {Array.from({ length: totalPages }, (_, i) => (
+        <div
+          style={{
+            marginTop: 28,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center", // ✅ 전체를 가운데로 모음
+            gap: 14,                  // ✅ 그룹 간격
+            flexWrap: "wrap",
+          }}
+        >
+          {/* LEFT GROUP: First / Prev */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <button
-              key={i}
-              onClick={() => setPage(i + 1)}
-              style={{
-                marginRight: "8px",
-                backgroundColor: page === i + 1 ? "#00ffcc" : "#444",
-                color: page === i + 1 ? "#000" : "#fff",
-                padding: "6px 12px",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-              }}
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === 1 ? pagerBtnDisabled : null) }}
+              title="첫 페이지"
             >
-              {i + 1}
+              First
             </button>
-          ))}
+
+            <button
+              onClick={goPrevPage}
+              disabled={page === 1}
+              style={{ ...pagerBtnBase, ...(page === 1 ? pagerBtnDisabled : null) }}
+              title="이전 페이지"
+            >
+              ◀ Prev
+            </button>
+          </div>
+
+          {/* CENTER GROUP: page numbers + range */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {Array.from({ length: windowEnd - windowStart + 1 }, (_, i) => {
+              const pageNum = windowStart + i;
+              const isActive = page === pageNum;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  style={{ ...pagerBtnBase, ...(isActive ? pagerBtnActive : null) }}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+
+            <span style={{ marginLeft: 6, color: "#aaa", fontSize: 14 }}>
+              {windowStart}-{windowEnd} / {totalPages}
+            </span>
+          </div>
+
+          {/* RIGHT GROUP: Next / Last */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button
+              onClick={goNextPage}
+              disabled={page === totalPages}
+              style={{ ...pagerBtnBase, ...(page === totalPages ? pagerBtnDisabled : null) }}
+              title="다음 페이지"
+            >
+              Next ▶
+            </button>
+
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === totalPages ? pagerBtnDisabled : null) }}
+              title="마지막 페이지"
+            >
+              Last
+            </button>
+          </div>
         </div>
       )}
+
     </div>
   );
 }
