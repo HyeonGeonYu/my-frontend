@@ -4,109 +4,22 @@ import CfdChartPanel from "../components/cfd/CfdChartPanel";
 import TickerCard from "../components/cfd/TickerCard";
 
 /* ------------------------- symbols 추출 유틸 (coin.jsx 동일) ------------------------- */
-function extractSymbolsFromConfig(cfgRaw) {
-  const root = cfgRaw?.config ?? cfgRaw;
-  if (!root) return [];
-
-  const normalize = (raw) => {
-    if (typeof raw === "string") {
-      raw = raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
-    }
-    if (!Array.isArray(raw)) return [];
-
-    const out = [];
-    for (const it of raw) {
-      if (it == null) continue;
-      if (typeof it === "string" || typeof it === "number") {
-        out.push(String(it));
-        continue;
-      }
-      if (typeof it === "object") {
-        const s =
-          it.symbol ??
-          it.sym ??
-          it.name ??
-          it.ticker ??
-          it.pair ??
-          it.market ??
-          it.code ??
-          null;
-        if (s) out.push(String(s));
-      }
-    }
-
-    return out
-      .map((s) => String(s).trim())
-      .filter(Boolean)
-      .map((s) => s.toUpperCase());
-  };
-
-  const pickFrom = (obj) => {
-    if (!obj || typeof obj !== "object") return [];
-    const raw =
-      obj.symbols ??
-      obj.trade_symbols ??
-      obj.target_symbols ??
-      obj.targets ??
-      obj.pairs ??
-      obj.markets ??
-      obj.instruments ??
-      obj.watchlist ??
-      null;
-    return normalize(raw);
-  };
-
-  let symbols = pickFrom(root);
-  if (symbols.length) return symbols;
-
-  const candidates = [
-    root.bybit,
-    root.mt5,
-    root.bot,
-    root.bots,
-    root.strategy,
-    root.strategies,
-    root.config,
-    root.settings,
-    root.params,
-  ];
-  for (const c of candidates) {
-    symbols = pickFrom(c);
-    if (symbols.length) return symbols;
-  }
-
-  const seen = new Set();
-  const stack = [root];
-  while (stack.length) {
-    const cur = stack.pop();
-    if (!cur || typeof cur !== "object") continue;
-    if (seen.has(cur)) continue;
-    seen.add(cur);
-
-    symbols = pickFrom(cur);
-    if (symbols.length) return symbols;
-
-    for (const v of Object.values(cur)) {
-      if (v && typeof v === "object") stack.push(v);
-    }
-  }
-
-  return [];
+function extractSymbolsFromConfig(cfg) {
+  const arr = cfg?.symbols;
+  if (!Array.isArray(arr)) return [];
+  return arr.map((s) => String(s).trim()).filter(Boolean).map((s) => s.toUpperCase());
 }
 
 /* ------------------------- threshold meta ------------------------- */
 async function fetchThresholdMeta(symbol, name) {
   const qs = new URLSearchParams({ symbol: String(symbol || "") });
   if (name) qs.set("name", String(name));
-  // qs.set("cross_limit", "10"); // 원하면
   const url = `/api/thresholds?${qs.toString()}`;
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) return null;
   return (await res.json()) || null;
 }
-
-
 
 function sessionKeyLabel(sessionKey) {
   if (!sessionKey) return "—";
@@ -121,9 +34,11 @@ export default function Cfd() {
   /* ------------------------- config ------------------------- */
   const [configState, setConfigState] = useState(null);
   const [configLoaded, setConfigLoaded] = useState(false);
-const signalName = useMemo(() => {
-  return configState?.name || configState?.exchange || "mt5_signal";
-}, [configState]);
+
+  const signalName = useMemo(() => {
+    return configState?.name || configState?.exchange || "mt5_signal";
+  }, [configState]);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -153,11 +68,10 @@ const signalName = useMemo(() => {
 
     (async () => {
       try {
-        const namespace = "mt5_signal"; // 지금 페이지가 이 config를 쓰니까 고정
-const results = await Promise.all(
-  symbols.map((s) => fetchThresholdMeta(s, namespace).catch(() => null))
-);
-
+        const namespace = "mt5_signal";
+        const results = await Promise.all(
+          symbols.map((s) => fetchThresholdMeta(s, namespace).catch(() => null))
+        );
         if (!alive) return;
 
         const merged = {};
@@ -172,6 +86,62 @@ const results = await Promise.all(
       alive = false;
     };
   }, [symbols, symbolsReady, signalName]);
+
+  /* ------------------------- min + sorting + visibility ------------------------- */
+  const minMaThreshold = useMemo(() => {
+    const n = Number(configState?.min_ma_threshold);
+    return Number.isFinite(n) ? n : null;
+  }, [configState]);
+
+  // metaMap 기반 ma_threshold로 정렬(내림차순). meta 없으면 뒤로.
+  const symbolsSortedByMa = useMemo(() => {
+    const arr = [...symbols];
+    arr.sort((a, b) => {
+      const ta = Number(metaMap[a]?.ma_threshold);
+      const tb = Number(metaMap[b]?.ma_threshold);
+
+      const aOk = Number.isFinite(ta);
+      const bOk = Number.isFinite(tb);
+      if (!aOk && !bOk) return a.localeCompare(b);
+      if (!aOk) return 1;
+      if (!bOk) return -1;
+
+      return tb - ta;
+    });
+    return arr;
+  }, [symbols, metaMap]);
+
+  // ✅ 표시/숨김 분리
+  // 정책:
+  // - meta가 없으면(확인중) => 숨김 목록에 넣고 "확인중"으로 표시
+  // - meta가 있고 min 미만 => 숨김 목록에 넣고 "min 미만"으로 표시
+  // - meta가 있고 min 이상 => visible
+  const { visibleSymbols, hiddenSymbols } = useMemo(() => {
+    const visible = [];
+    const hidden = [];
+
+    for (const s of symbolsSortedByMa) {
+      const tRaw = metaMap[s]?.ma_threshold;
+      const t = Number(tRaw);
+
+      if (!Number.isFinite(t)) {
+        hidden.push({ symbol: s, reason: "확인중" });
+        continue;
+      }
+
+      if (Number.isFinite(minMaThreshold) && t < minMaThreshold) {
+        hidden.push({
+          symbol: s,
+          reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
+        });
+        continue;
+      }
+
+      visible.push(s);
+    }
+
+    return { visibleSymbols: visible, hiddenSymbols: hidden };
+  }, [symbolsSortedByMa, metaMap, minMaThreshold]);
 
   /* ------------------------- stats from panels ------------------------- */
   const [symbolStatsMap, setSymbolStatsMap] = useState({});
@@ -247,8 +217,60 @@ const results = await Promise.all(
 
   return (
     <div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
-      <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 14, opacity: 0.95 }}>
+      <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 10, opacity: 0.95 }}>
         CFD 세션 차트 <span style={{ opacity: 0.6, fontWeight: 700 }}>({symbols.join(" / ")})</span>
+      </div>
+
+      {/* ✅ 숨김 안내 */}
+      <div style={{ marginBottom: 14 }}>
+        <div
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            background: "#151515",
+            border: "1px solid #262626",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 700 }}>
+              표시 기준:{" "}
+              <span style={{ opacity: 0.85 }}>
+                ma_threshold ≥{" "}
+                {Number.isFinite(minMaThreshold) ? minMaThreshold : "—"}
+              </span>
+            </div>
+            <div style={{ opacity: 0.85 }}>
+              표시: <b>{visibleSymbols.length}</b>개 / 숨김: <b>{hiddenSymbols.length}</b>개
+            </div>
+          </div>
+
+          {hiddenSymbols.length > 0 ? (
+            <div style={{ marginTop: 8, opacity: 0.9 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>숨김 목록</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {hiddenSymbols.map((x) => (
+                  <span
+                    key={x.symbol}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      background: "#1f1f1f",
+                      border: "1px solid #2d2d2d",
+                      fontSize: 12,
+                      opacity: 0.95,
+                    }}
+                    title={x.reason}
+                  >
+                    <b style={{ marginRight: 6 }}>{x.symbol}</b>
+                    <span style={{ opacity: 0.7 }}>{x.reason}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24 }}>
@@ -318,16 +340,35 @@ const results = await Promise.all(
             </div>
           </div>
 
+          {/* ✅ 왼쪽 카드도 visible만 */}
           <div style={{ display: "grid", gap: 12 }}>
-            {symbols.map((s) => (
+            {visibleSymbols.map((s) => (
               <TickerCard key={s} symbol={s} stats={symbolStatsMap[s]} meta={metaMap[s]} />
             ))}
           </div>
+
+          {/* visible이 0이면 안내 */}
+          {visibleSymbols.length === 0 ? (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 12,
+                background: "#151515",
+                border: "1px solid #262626",
+                opacity: 0.9,
+                fontSize: 13,
+              }}
+            >
+              현재 표시 조건(ma_threshold ≥ {Number.isFinite(minMaThreshold) ? minMaThreshold.toFixed(4) : "—"})을
+              만족하는 심볼이 없어.
+            </div>
+          ) : null}
         </div>
 
         {/* 오른쪽 */}
         <div>
-          {symbols.map((s) => (
+          {visibleSymbols.map((s) => (
             <CfdChartPanel
               key={s}
               symbol={s}
@@ -338,6 +379,22 @@ const results = await Promise.all(
               onSessionKeys={onSessionKeys}
             />
           ))}
+
+          {/* 차트가 0이면 안내 */}
+          {visibleSymbols.length === 0 ? (
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 14,
+                background: "#151515",
+                border: "1px solid #262626",
+                opacity: 0.9,
+                fontSize: 14,
+              }}
+            >
+              표시할 차트가 없어. (min_ma_threshold 기준 미달 또는 아직 확인중)
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
