@@ -171,16 +171,22 @@ export async function fetchAllKlines(symbol, interval, keep) {
   return acc.slice(-keep);
 }
 
+export async function fetchSignals(symbol, name = "bybit", days = 7) {
+  const now = Date.now();
+  const from = now - days * 86400 * 1000;
 
-/* ──────────────────────────────
- * 시그널 어노테이션 (옵션)
- * ────────────────────────────── */
-export async function fetchSignals(symbol, name = "bybit") {
-  const sp = new URLSearchParams({ symbol, days: "7", name });
+  const sp = new URLSearchParams({
+    symbol: String(symbol || "").toUpperCase(),
+    name: String(name || "bybit"),
+    from: new Date(from).toISOString(),
+    to: new Date(now).toISOString(),
+  });
+
   const res = await fetch(`/api/signals?${sp.toString()}`, { cache: "no-store" });
   const j = await res.json().catch(() => ({}));
   return Array.isArray(j?.signals) ? j.signals : [];
 }
+
 
 
 
