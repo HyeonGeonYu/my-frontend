@@ -1,0 +1,9 @@
+{
+  "compilerOptions": { "baseUrl": "." },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "api/**/*.ts"
+  ]
+}
