@@ -10,8 +10,7 @@ const DAY_SEC = 24 * 3600;
 const pad2 = (n) => String(n).padStart(2, "0");
 
 export const fmtComma = (v, d = 0) => (typeof v === "number" && isFinite(v)) ? v.toLocaleString(undefined, {
-    maximumFractionDigits: d,
-    minimumFractionDigits: d
+    maximumFractionDigits: d, minimumFractionDigits: d
 }) : "—";
 
 const _toDateKST = (sec) => new Date(sec * 1000 + KST_OFFSET_MS);
@@ -77,6 +76,30 @@ export function genMinutePlaceholders(fromSec, toSec) {
     const end = Math.max(0, Math.floor(toSec / 60) * 60);
     for (let t = start; t < end; t += 60) out.push({time: t}); // lightweight-charts whitespace point
     return out;
+}
+
+// buildSignalAnnotations 안(혹은 파일 상단)에 추가
+function normalizeReasons(s) {
+    // 1) 기존 호환: reasons가 이미 배열이면 그대로
+    if (Array.isArray(s?.reasons)) return s.reasons;
+
+    // 2) 새 필드: reasons_json이 배열로 오는 경우(혹시나) 그대로
+    if (Array.isArray(s?.reasons_json)) return s.reasons_json;
+
+    // 3) 새 필드: reasons_json이 JSON 문자열이면 파싱
+    const rj = s?.reasons_json;
+    if (typeof rj === "string" && rj.trim()) {
+        try {
+            const parsed = JSON.parse(rj);
+            if (Array.isArray(parsed)) return parsed;
+        } catch {
+            // JSON 파싱 실패 시 fallthrough
+        }
+        // JSON이 아니고 그냥 문자열이면 한 줄 reason으로라도 처리
+        return [rj];
+    }
+
+    return [];
 }
 
 /* ──────────────────────────────
@@ -280,7 +303,7 @@ export function buildSignalAnnotations(sigs) {
             kind: kindStd,
             side: s.side,
             price: s.price,
-            reasons: Array.isArray(s.reasons) ? s.reasons : [],
+            reasons: normalizeReasons(s),
         });
     }
 
