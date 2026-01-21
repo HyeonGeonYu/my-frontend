@@ -9,9 +9,53 @@ const DAY_SEC = 24 * 3600;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
-export const fmtComma = (v, d = 0) => (typeof v === "number" && isFinite(v)) ? v.toLocaleString(undefined, {
-    maximumFractionDigits: d, minimumFractionDigits: d
-}) : "—";
+const BYBIT_API_BASE = "https://api.bybit.com";
+
+export async function fetchPriceScaleBybit(symbol, category = "linear") {
+  const url = new URL("/v5/market/instruments-info", BYBIT_API_BASE);
+  url.searchParams.set("category", category);
+  url.searchParams.set("symbol", String(symbol || "").toUpperCase());
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data?.retCode !== 0) throw new Error(`API error (${data?.retCode}): ${data?.retMsg}`);
+
+  const item = data?.result?.list?.[0];
+  const ps = item?.priceFilter?.priceScale ?? item?.priceScale;
+  const n = Number(ps);
+  return Number.isFinite(n) ? n : null;
+}
+
+const _priceScaleCache = new Map();
+
+export async function fetchPriceScaleBybitCached(symbol, category = "linear") {
+  const key = `${category}:${String(symbol || "").toUpperCase()}`;
+  if (_priceScaleCache.has(key)) return _priceScaleCache.get(key);
+  const p = fetchPriceScaleBybit(symbol, category).catch(() => null);
+  _priceScaleCache.set(key, p);
+  return p;
+}
+
+
+// ✅ 기존 fmtComma 교체
+export const fmtComma = (v, d = null) => {
+    if (!(typeof v === "number" && isFinite(v))) return "—";
+
+    // d를 주면: 그 자릿수로 고정
+    if (typeof d === "number" && d >= 0) {
+        return v.toLocaleString(undefined, {
+            maximumFractionDigits: d,
+            minimumFractionDigits: d,
+        });
+    }
+
+    // d를 안 주면: 자동(불필요한 0 안 붙이고, 있는 소수는 유지)
+    return v.toLocaleString(undefined, {
+        maximumFractionDigits: 12, // 너무 길어지는 것만 방지
+    });
+};
+
 
 const _toDateKST = (sec) => new Date(sec * 1000 + KST_OFFSET_MS);
 

@@ -1,3 +1,5 @@
+// src/components/ChartPage.jsx
+
 import React, { useState, useEffect } from "react";
 import IndexChart from "../components/indexChart";
 import { useAllChartData } from "../hooks/useAllChartData";
