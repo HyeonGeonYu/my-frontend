@@ -1,416 +1,424 @@
-import React, { useEffect, useState } from "react";
-import { useDailySavedData } from "../hooks/useDailySavedData";
-import { newsParams } from "../constants/newsMeta";
-import { ClipboardCopy, Check } from "lucide-react";
+import React, {useEffect, useState} from "react";
+import {useDailySavedData} from "../hooks/useDailySavedData";
+import {newsParams} from "../constants/newsMeta";
+import {ClipboardCopy, Check} from "lucide-react";
 
 // CopyButton 컴포넌트
-function CopyButton({ text, size = 18, absolute = true, titleLabel = "복사하기" }) {
-  const [copied, setCopied] = useState(false);
+function CopyButton({text, size = 18, absolute = true, titleLabel = "복사하기"}) {
+    const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch (e) {
-      alert("복사 실패!");
-    }
-  };
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+        } catch (e) {
+            alert("복사 실패!");
+        }
+    };
 
-  return (
-    <button
-      onClick={handleCopy}
-      title={titleLabel}
-      style={{
-        background: "none",
-        border: "none",
-        position: absolute ? "absolute" : "static",
-        top: absolute ? 8 : undefined,
-        right: absolute ? 8 : undefined,
-        cursor: "pointer",
-        color: "#00ffcc",
-        padding: 2,
-        zIndex: 10,
-      }}
-    >
-      {copied ? <Check size={size} /> : <ClipboardCopy size={size} />}
-    </button>
-  );
+    return (
+        <button
+            onClick={handleCopy}
+            title={titleLabel}
+            style={{
+                background: "none",
+                border: "none",
+                position: absolute ? "absolute" : "static",
+                top: absolute ? 8 : undefined,
+                right: absolute ? 8 : undefined,
+                cursor: "pointer",
+                color: "#00ffcc",
+                padding: 2,
+                zIndex: 10,
+            }}
+        >
+            {copied ? <Check size={size}/> : <ClipboardCopy size={size}/>}
+        </button>
+    );
 }
 
 const buildNewsPrompt = (content = "") => {
-  const base = (content || "").trim();
-  const promptTail =
-    "\n\n---\n\n" +
-    "위 뉴스 전체 내용을 기반으로 각 뉴스 항목별로 가로줄로 구분 확실히.\n" +
-    "뉴스가 여러 개일 경우 **각 뉴스마다 아래 형식**을 반복해서 작성해줘:\n\n" +
-    "(대제목으로 1,2,3...) 1. 🗞️ [뉴스 제목 혹은 주제 요약] \n\n" +
-    "✅ 한줄 요약: (핵심 사건을 한 문장으로)\n" +
-    "🔥 주요 쟁점:\n" +
-    "(들여쓰기 4칸 보기편하게)1) ...\n" +
-    "(들여쓰기 4칸 보기편하게)2) ...\n" +
-    "(들여쓰기 4칸 보기편하게)3) ...\n\n" +
-    "각 뉴스는 명확히 구분해서 작성해\n" +
-    "정리 순서는 뉴스 등장 순서와 같게 해줘.\n" +
-    "반드시 한글,한국어로만 작성해.";
-  return base + promptTail;
+    const base = (content || "").trim();
+    const promptTail =
+        "\n\n---\n\n" +
+        "위 뉴스 전체 내용을 기반으로 각 뉴스 항목별로 가로줄로 구분 확실히.\n" +
+        "뉴스가 여러 개일 경우 **각 뉴스마다 아래 형식**을 반복해서 작성해줘:\n\n" +
+        "(대제목으로 1,2,3...) 1. 🗞️ [뉴스 제목 혹은 주제 요약] \n\n" +
+        "✅ 한줄 요약: (핵심 사건을 한 문장으로)\n" +
+        "🔥 주요 쟁점:\n" +
+        "(들여쓰기 4칸 보기편하게)1) ...\n" +
+        "(들여쓰기 4칸 보기편하게)2) ...\n" +
+        "(들여쓰기 4칸 보기편하게)3) ...\n\n" +
+        "각 뉴스는 명확히 구분해서 작성해.\n" +
+        "주요 탑 뉴스 5개만 요약해.\n" +
+        "정리 순서는 뉴스 등장 순서와 같게 해줘.\n" +
+        "반드시 한글,한국어로만 작성해.";
+    return base + promptTail;
 };
 
 // 날짜 포맷 함수: 20250619 → 2025년 6월 19일 (목요일)
 const formatDateWithDay = (dateStr) => {
-  if (!/^\d{8}$/.test(dateStr)) return dateStr;
+    if (!/^\d{8}$/.test(dateStr)) return dateStr;
 
-  const year = parseInt(dateStr.slice(0, 4), 10);
-  const month = parseInt(dateStr.slice(4, 6), 10) - 1;
-  const day = parseInt(dateStr.slice(6, 8), 10);
+    const year = parseInt(dateStr.slice(0, 4), 10);
+    const month = parseInt(dateStr.slice(4, 6), 10) - 1;
+    const day = parseInt(dateStr.slice(6, 8), 10);
 
-  const date = new Date(year, month, day);
-  const days = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
-  const dayName = days[date.getDay()];
+    const date = new Date(year, month, day);
+    const days = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+    const dayName = days[date.getDay()];
 
-  return `${year}년 ${month + 1}월 ${day}일 (${dayName})`;
+    return `${year}년 ${month + 1}월 ${day}일 (${dayName})`;
 };
 
 function Archive() {
-  const [page, setPage] = useState(1);
-  const [expandedDate, setExpandedDate] = useState(null);
-  const [expandedSummary, setExpandedSummary] = useState({});
+    const [page, setPage] = useState(1);
+    const [expandedDate, setExpandedDate] = useState(null);
+    const [expandedSummary, setExpandedSummary] = useState({});
 
-  const { data, total, loading, error } = useDailySavedData(page);
+    const {data, total, loading, error} = useDailySavedData(page);
 
-  // ✅ 이전 데이터를 유지해서 렌더 (레이아웃 시프트 방지)
-  const [renderData, setRenderData] = useState([]);
-  useEffect(() => {
-    if (!loading && Array.isArray(data)) setRenderData(data);
-  }, [loading, data]);
+    // ✅ 이전 데이터를 유지해서 렌더 (레이아웃 시프트 방지)
+    const [renderData, setRenderData] = useState([]);
+    useEffect(() => {
+        if (!loading && Array.isArray(data)) setRenderData(data);
+    }, [loading, data]);
 
-  // ✅ 기존 데이터가 있는데 로딩 중이면 "가져오는 중" 배지 표시
-  const isFetching = loading && renderData.length > 0;
+    // ✅ 기존 데이터가 있는데 로딩 중이면 "가져오는 중" 배지 표시
+    const isFetching = loading && renderData.length > 0;
 
-  const perPage = 5;
-  const totalPages = Math.ceil(total / perPage);
+    const perPage = 5;
+    const totalPages = Math.ceil(total / perPage);
 
-  // ✅ 페이지 버튼 5개씩 보기
-  const pageWindowSize = 5;
+    // ✅ 페이지 버튼 5개씩 보기
+    const pageWindowSize = 5;
 
-  const getPageWindow = (page, totalPages, windowSize) => {
-    const windowIndex = Math.floor((page - 1) / windowSize);
-    const start = windowIndex * windowSize + 1;
-    const end = Math.min(start + windowSize - 1, totalPages);
-    return { start, end, windowIndex };
-  };
+    const getPageWindow = (page, totalPages, windowSize) => {
+        const windowIndex = Math.floor((page - 1) / windowSize);
+        const start = windowIndex * windowSize + 1;
+        const end = Math.min(start + windowSize - 1, totalPages);
+        return {start, end, windowIndex};
+    };
 
-  const { start: windowStart, end: windowEnd } = getPageWindow(page, totalPages, pageWindowSize);
+    const {start: windowStart, end: windowEnd} = getPageWindow(page, totalPages, pageWindowSize);
 
-  const goPrevPage = () => setPage((p) => Math.max(1, p - 1));
-  const goNextPage = () => setPage((p) => Math.min(totalPages, p + 1));
-  const toggleDate = (date) => {
-    setExpandedDate(expandedDate === date ? null : date);
-  };
+    const goPrevPage = () => setPage((p) => Math.max(1, p - 1));
+    const goNextPage = () => setPage((p) => Math.min(totalPages, p + 1));
+    const toggleDate = (date) => {
+        setExpandedDate(expandedDate === date ? null : date);
+    };
 
-  const toggleSummary = (key) => {
-    setExpandedSummary((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
+    const toggleSummary = (key) => {
+        setExpandedSummary((prev) => ({
+            ...prev,
+            [key]: !prev[key],
+        }));
+    };
 
-  // ✅ Pagination 버튼 UI 통일 스타일
-  const pagerBtnBase = {
-    height: 40,
-    minWidth: 40,
-    padding: "0 12px",
-    borderRadius: 10,
-    border: "1px solid #2a2a2a",
-    background: "#2a2a2a",
-    color: "#fff",
-    cursor: "pointer",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 700,
-    userSelect: "none",
-  };
+    // ✅ Pagination 버튼 UI 통일 스타일
+    const pagerBtnBase = {
+        height: 40,
+        minWidth: 40,
+        padding: "0 12px",
+        borderRadius: 10,
+        border: "1px solid #2a2a2a",
+        background: "#2a2a2a",
+        color: "#fff",
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700,
+        userSelect: "none",
+    };
 
-  const pagerBtnActive = {
-    background: "#00ffcc",
-    color: "#000",
-    border: "1px solid #00ffcc",
-  };
+    const pagerBtnActive = {
+        background: "#00ffcc",
+        color: "#000",
+        border: "1px solid #00ffcc",
+    };
 
-  const pagerBtnGhost = {
-    background: "transparent",
-    border: "1px solid #00ffcc",
-    color: "#00ffcc",
-  };
+    const pagerBtnGhost = {
+        background: "transparent",
+        border: "1px solid #00ffcc",
+        color: "#00ffcc",
+    };
 
-  const pagerBtnDisabled = {
-    opacity: 0.45,
-    cursor: "not-allowed",
-  };
+    const pagerBtnDisabled = {
+        opacity: 0.45,
+        cursor: "not-allowed",
+    };
 
-  return (
-    <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
-      <h1 style={{ color: "#00ffcc" }}>📅 아카이브</h1>
+    return (
+        <div style={{padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh"}}>
+            <h1 style={{color: "#00ffcc"}}>📅 아카이브</h1>
 
-      {error && <p style={{ color: "red" }}>❌ 오류 발생: {error.message}</p>}
+            {error && <p style={{color: "red"}}>❌ 오류 발생: {error.message}</p>}
 
-      {/* ✅ 리스트 영역: 로딩해도 화면 흔들림 줄이기 */}
-      <div style={{ position: "relative", minHeight: 600 }}>
-        {/* ✅ “가져오는 중…” 배지 (기존 데이터 유지하면서 표시) */}
-        {isFetching && (
-          <div
-            style={{
-              position: "absolute",
-              top: 8,
-              right: 8,
-              padding: "6px 10px",
-              borderRadius: 999,
-              background: "rgba(0,0,0,0.6)",
-              border: "1px solid #333",
-              color: "#aaa",
-              fontSize: 12,
-              zIndex: 20,
-            }}
-          >
-            가져오는 중…
-          </div>
-        )}
+            {/* ✅ 리스트 영역: 로딩해도 화면 흔들림 줄이기 */}
+            <div style={{position: "relative", minHeight: 600}}>
+                {/* ✅ “가져오는 중…” 배지 (기존 데이터 유지하면서 표시) */}
+                {isFetching && (
+                    <div
+                        style={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            background: "rgba(0,0,0,0.6)",
+                            border: "1px solid #333",
+                            color: "#aaa",
+                            fontSize: 12,
+                            zIndex: 20,
+                        }}
+                    >
+                        가져오는 중…
+                    </div>
+                )}
 
-        {/* ✅ 첫 로딩 (데이터 없는데 로딩중일 때만) */}
-        {loading && renderData.length === 0 && <p>⏳ 로딩 중...</p>}
+                {/* ✅ 첫 로딩 (데이터 없는데 로딩중일 때만) */}
+                {loading && renderData.length === 0 && <p>⏳ 로딩 중...</p>}
 
-        {!loading && (data?.length ?? 0) === 0 && <p>데이터가 없습니다.</p>}
+                {!loading && (data?.length ?? 0) === 0 && <p>데이터가 없습니다.</p>}
 
-        {renderData.map(({ date, data }) => (
-          <div key={date} style={{ marginBottom: "20px", borderBottom: "1px solid #333", paddingBottom: "10px" }}>
-            <h3
-              onClick={() => toggleDate(date)}
-              style={{
-                cursor: "pointer",
-                color: "#00ccff",
-                marginBottom: "8px",
-                userSelect: "none",
-              }}
-            >
-              {expandedDate === date ? "▼" : "▶"} {formatDateWithDay(date)}
-            </h3>
-
-            {expandedDate === date && (
-              <div style={{ paddingLeft: "16px" }}>
-                {(() => {
-                  const youtubeData = data.youtube_data || {};
-                  const orderedCountries = Object.entries(youtubeData).sort(([a], [b]) => {
-                    const order = newsParams.order;
-                    const indexA = order.indexOf(a);
-                    const indexB = order.indexOf(b);
-                    return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
-                  });
-
-                  return orderedCountries.map(([country, info]) => {
-                    const summaryKey = `${date}_${country}_content`;
-                    const resultKey = `${date}_${country}_result`;
-
-                    return (
-                      <div key={country} style={{ marginBottom: "16px" }}>
-                        <h4 style={{ marginBottom: "4px", color: "#ffcc00" }}>{country}</h4>
-
-                        <div>
-                          📌 <strong>제목:</strong>{" "}
-                          <a href={info.url} target="_blank" rel="noreferrer" style={{ color: "#00ccff" }}>
-                            {info.title || info.url}
-                          </a>
-                        </div>
-
-                        <div>
-                          🕒 <strong>업로드:</strong>{" "}
-                          {info.publishedAt ? new Date(info.publishedAt).toLocaleString() : "없음"}
-                        </div>
-
-                        {/* summary_result toggle */}
-                        {info.summary_result && (
-                          <div style={{ marginTop: "8px" }}>
-                            <button
-                              onClick={() => toggleSummary(resultKey)}
-                              style={{
-                                backgroundColor: "#222",
-                                color: "#00ffcc",
-                                border: "1px solid #00ffcc",
-                                borderRadius: "6px",
-                                padding: "6px 10px",
+                {renderData.map(({date, data}) => (
+                    <div key={date}
+                         style={{marginBottom: "20px", borderBottom: "1px solid #333", paddingBottom: "10px"}}>
+                        <h3
+                            onClick={() => toggleDate(date)}
+                            style={{
                                 cursor: "pointer",
-                                fontSize: "0.9rem",
-                                marginRight: "8px",
-                              }}
-                            >
-                              {expandedSummary[resultKey] ? "요약 닫기" : "요약 보기"}
-                            </button>
+                                color: "#00ccff",
+                                marginBottom: "8px",
+                                userSelect: "none",
+                            }}
+                        >
+                            {expandedDate === date ? "▼" : "▶"} {formatDateWithDay(date)}
+                        </h3>
 
-                            {expandedSummary[resultKey] && (
-                              <div
-                                style={{
-                                  marginTop: "6px",
-                                  backgroundColor: "#222",
-                                  padding: "10px 12px",
-                                  borderRadius: "8px",
-                                  position: "relative",
-                                }}
-                              >
-                                <CopyButton text={info.summary_result} />
-                                <strong>🧾 summary_result:</strong>
-                                <pre style={{ whiteSpace: "pre-wrap", marginTop: "6px", color: "#ccc" }}>
+                        {expandedDate === date && (
+                            <div style={{paddingLeft: "16px"}}>
+                                {(() => {
+                                    const youtubeData = data.youtube_data || {};
+                                    const orderedCountries = Object.entries(youtubeData).sort(([a], [b]) => {
+                                        const order = newsParams.order;
+                                        const indexA = order.indexOf(a);
+                                        const indexB = order.indexOf(b);
+                                        return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+                                    });
+
+                                    return orderedCountries.map(([country, info]) => {
+                                        const summaryKey = `${date}_${country}_content`;
+                                        const resultKey = `${date}_${country}_result`;
+
+                                        return (
+                                            <div key={country} style={{marginBottom: "16px"}}>
+                                                <h4 style={{marginBottom: "4px", color: "#ffcc00"}}>{country}</h4>
+
+                                                <div>
+                                                    📌 <strong>제목:</strong>{" "}
+                                                    <a href={info.url} target="_blank" rel="noreferrer"
+                                                       style={{color: "#00ccff"}}>
+                                                        {info.title || info.url}
+                                                    </a>
+                                                </div>
+
+                                                <div>
+                                                    🕒 <strong>업로드:</strong>{" "}
+                                                    {info.publishedAt ? new Date(info.publishedAt).toLocaleString() : "없음"}
+                                                </div>
+
+                                                {/* summary_result toggle */}
+                                                {info.summary_result && (
+                                                    <div style={{marginTop: "8px"}}>
+                                                        <button
+                                                            onClick={() => toggleSummary(resultKey)}
+                                                            style={{
+                                                                backgroundColor: "#222",
+                                                                color: "#00ffcc",
+                                                                border: "1px solid #00ffcc",
+                                                                borderRadius: "6px",
+                                                                padding: "6px 10px",
+                                                                cursor: "pointer",
+                                                                fontSize: "0.9rem",
+                                                                marginRight: "8px",
+                                                            }}
+                                                        >
+                                                            {expandedSummary[resultKey] ? "요약 닫기" : "요약 보기"}
+                                                        </button>
+
+                                                        {expandedSummary[resultKey] && (
+                                                            <div
+                                                                style={{
+                                                                    marginTop: "6px",
+                                                                    backgroundColor: "#222",
+                                                                    padding: "10px 12px",
+                                                                    borderRadius: "8px",
+                                                                    position: "relative",
+                                                                }}
+                                                            >
+                                                                <CopyButton text={info.summary_result}/>
+                                                                <strong>🧾 summary_result:</strong>
+                                                                <pre style={{
+                                                                    whiteSpace: "pre-wrap",
+                                                                    marginTop: "6px",
+                                                                    color: "#ccc"
+                                                                }}>
                                   {info.summary_result}
                                 </pre>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
 
-                        {/* summary_content toggle */}
-                        <div style={{ marginTop: "8px" }}>
-                          <button
-                            onClick={() => toggleSummary(summaryKey)}
-                            style={{
-                              backgroundColor: "#222",
-                              color: "#00ffcc",
-                              border: "1px solid #00ffcc",
-                              borderRadius: "6px",
-                              padding: "6px 10px",
-                              cursor: "pointer",
-                              fontSize: "0.9rem",
-                            }}
-                          >
-                            {expandedSummary[summaryKey] ? "전문 닫기" : "전문 보기"}
-                          </button>
+                                                {/* summary_content toggle */}
+                                                <div style={{marginTop: "8px"}}>
+                                                    <button
+                                                        onClick={() => toggleSummary(summaryKey)}
+                                                        style={{
+                                                            backgroundColor: "#222",
+                                                            color: "#00ffcc",
+                                                            border: "1px solid #00ffcc",
+                                                            borderRadius: "6px",
+                                                            padding: "6px 10px",
+                                                            cursor: "pointer",
+                                                            fontSize: "0.9rem",
+                                                        }}
+                                                    >
+                                                        {expandedSummary[summaryKey] ? "전문 닫기" : "전문 보기"}
+                                                    </button>
 
-                          {expandedSummary[summaryKey] && (
-                            <div
-                              style={{
-                                marginTop: "6px",
-                                backgroundColor: "#222",
-                                padding: "10px 12px",
-                                borderRadius: "8px",
-                                position: "relative",
-                              }}
-                            >
-                              <strong style={{ color: "#fff", display: "inline-block" }}>📄 summary_content:</strong>
+                                                    {expandedSummary[summaryKey] && (
+                                                        <div
+                                                            style={{
+                                                                marginTop: "6px",
+                                                                backgroundColor: "#222",
+                                                                padding: "10px 12px",
+                                                                borderRadius: "8px",
+                                                                position: "relative",
+                                                            }}
+                                                        >
+                                                            <strong style={{color: "#fff", display: "inline-block"}}>📄
+                                                                summary_content:</strong>
 
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  top: 8,
-                                  right: 12,
-                                  display: "flex",
-                                  gap: 8,
-                                  alignItems: "center",
-                                }}
-                              >
-                                <CopyButton
-                                  text={info.summary_content || ""}
-                                  absolute={false}
-                                  titleLabel="원문 복사"
-                                />
-                                <CopyButton
-                                  text={buildNewsPrompt(info.summary_content || "")}
-                                  absolute={false}
-                                  titleLabel="원문+프롬프트 복사"
-                                />
-                              </div>
+                                                            <div
+                                                                style={{
+                                                                    position: "absolute",
+                                                                    top: 8,
+                                                                    right: 12,
+                                                                    display: "flex",
+                                                                    gap: 8,
+                                                                    alignItems: "center",
+                                                                }}
+                                                            >
+                                                                <CopyButton
+                                                                    text={info.summary_content || ""}
+                                                                    absolute={false}
+                                                                    titleLabel="원문 복사"
+                                                                />
+                                                                <CopyButton
+                                                                    text={buildNewsPrompt(info.summary_content || "")}
+                                                                    absolute={false}
+                                                                    titleLabel="원문+프롬프트 복사"
+                                                                />
+                                                            </div>
 
-                              <br />
-                              {info.summary_content || "내용 없음"}
+                                                            <br/>
+                                                            {info.summary_content || "내용 없음"}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    });
+                                })()}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+                        )}
+                    </div>
+                ))}
+            </div>
 
             {/* ✅ Pagination */}
-      {totalPages > 1 && (
-        <div
-          style={{
-            marginTop: 28,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center", // ✅ 전체를 가운데로 모음
-            gap: 14,                  // ✅ 그룹 간격
-            flexWrap: "wrap",
-          }}
-        >
-          {/* LEFT GROUP: First / Prev */}
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button
-              onClick={() => setPage(1)}
-              disabled={page === 1}
-              style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === 1 ? pagerBtnDisabled : null) }}
-              title="첫 페이지"
-            >
-              First
-            </button>
-
-            <button
-              onClick={goPrevPage}
-              disabled={page === 1}
-              style={{ ...pagerBtnBase, ...(page === 1 ? pagerBtnDisabled : null) }}
-              title="이전 페이지"
-            >
-              ◀ Prev
-            </button>
-          </div>
-
-          {/* CENTER GROUP: page numbers + range */}
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            {Array.from({ length: windowEnd - windowStart + 1 }, (_, i) => {
-              const pageNum = windowStart + i;
-              const isActive = page === pageNum;
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => setPage(pageNum)}
-                  style={{ ...pagerBtnBase, ...(isActive ? pagerBtnActive : null) }}
+            {totalPages > 1 && (
+                <div
+                    style={{
+                        marginTop: 28,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center", // ✅ 전체를 가운데로 모음
+                        gap: 14,                  // ✅ 그룹 간격
+                        flexWrap: "wrap",
+                    }}
                 >
-                  {pageNum}
-                </button>
-              );
-            })}
+                    {/* LEFT GROUP: First / Prev */}
+                    <div style={{display: "flex", gap: 10, alignItems: "center"}}>
+                        <button
+                            onClick={() => setPage(1)}
+                            disabled={page === 1}
+                            style={{...pagerBtnBase, ...pagerBtnGhost, ...(page === 1 ? pagerBtnDisabled : null)}}
+                            title="첫 페이지"
+                        >
+                            First
+                        </button>
 
-            <span style={{ marginLeft: 6, color: "#aaa", fontSize: 14 }}>
+                        <button
+                            onClick={goPrevPage}
+                            disabled={page === 1}
+                            style={{...pagerBtnBase, ...(page === 1 ? pagerBtnDisabled : null)}}
+                            title="이전 페이지"
+                        >
+                            ◀ Prev
+                        </button>
+                    </div>
+
+                    {/* CENTER GROUP: page numbers + range */}
+                    <div style={{display: "flex", gap: 10, alignItems: "center"}}>
+                        {Array.from({length: windowEnd - windowStart + 1}, (_, i) => {
+                            const pageNum = windowStart + i;
+                            const isActive = page === pageNum;
+                            return (
+                                <button
+                                    key={pageNum}
+                                    onClick={() => setPage(pageNum)}
+                                    style={{...pagerBtnBase, ...(isActive ? pagerBtnActive : null)}}
+                                >
+                                    {pageNum}
+                                </button>
+                            );
+                        })}
+
+                        <span style={{marginLeft: 6, color: "#aaa", fontSize: 14}}>
               {windowStart}-{windowEnd} / {totalPages}
             </span>
-          </div>
+                    </div>
 
-          {/* RIGHT GROUP: Next / Last */}
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button
-              onClick={goNextPage}
-              disabled={page === totalPages}
-              style={{ ...pagerBtnBase, ...(page === totalPages ? pagerBtnDisabled : null) }}
-              title="다음 페이지"
-            >
-              Next ▶
-            </button>
+                    {/* RIGHT GROUP: Next / Last */}
+                    <div style={{display: "flex", gap: 10, alignItems: "center"}}>
+                        <button
+                            onClick={goNextPage}
+                            disabled={page === totalPages}
+                            style={{...pagerBtnBase, ...(page === totalPages ? pagerBtnDisabled : null)}}
+                            title="다음 페이지"
+                        >
+                            Next ▶
+                        </button>
 
-            <button
-              onClick={() => setPage(totalPages)}
-              disabled={page === totalPages}
-              style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === totalPages ? pagerBtnDisabled : null) }}
-              title="마지막 페이지"
-            >
-              Last
-            </button>
-          </div>
+                        <button
+                            onClick={() => setPage(totalPages)}
+                            disabled={page === totalPages}
+                            style={{...pagerBtnBase, ...pagerBtnGhost, ...(page === totalPages ? pagerBtnDisabled : null)}}
+                            title="마지막 페이지"
+                        >
+                            Last
+                        </button>
+                    </div>
+                </div>
+            )}
+
         </div>
-      )}
-
-    </div>
-  );
+    );
 }
 
 export default Archive;
