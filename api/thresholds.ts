@@ -264,7 +264,7 @@ export default async function handler(
       redis,
       symbolParam,
       streamKey,
-      500
+      300
     );
     const ma_threshold = found?.value ?? null;
 
