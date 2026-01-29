@@ -37,15 +37,6 @@ function getSessionKeyFromUtcMs(msUtc) {
     return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-// "YYYY-MM-DD HH:MM:SS" 를 KST(+09:00) 기준 초단위
-function parseKstToEpochSec(s) {
-    if (!s) return NaN;
-    const iso = s.includes("T") ? s : s.replace(" ", "T");
-    const withTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}+09:00`;
-    const t = Date.parse(withTz);
-    return Number.isFinite(t) ? Math.floor(t / 1000) : NaN;
-}
-
 // 세션 시작: KST 06:50
 function getSessionWindowUtcSec(sessionKey) {
     if (!sessionKey) return [NaN, NaN];
