@@ -96,14 +96,6 @@ export function getAnchorKst0650UtcSec(bars) {
     return sessionStartKst - KST_OFFSET_SEC; // back to UTC
 }
 
-// (기존) 06:50~다음날 06:50 (UTC초 범위)
-export function getWindowRangeUtcFromBars(bars, offsetDays) {
-    const anchor0650Utc = getAnchorKst0650UtcSec(bars);
-    if (anchor0650Utc == null) return [0, 0];
-    const startUtc = anchor0650Utc + offsetDays * DAY_SEC;
-    return [startUtc, startUtc + DAY_SEC];
-}
-
 // 끝 경계: 지금 기준 "다음 06:50 KST" (UTC초)
 export function next0650EndBoundaryUtcSec(nowSec = Math.floor(Date.now() / 1000)) {
     const SIX50 = 6 * 3600 + 50 * 60;
@@ -196,49 +188,6 @@ export function mergeBars(arr, bar) {
     return arr;
 }
 
-/* ──────────────────────────────
- * REST 누적 로딩 (/api/klines 프록시 사용)
- * ────────────────────────────── */
-export async function fetchAllKlines(symbol, interval, keep) {
-    const CHUNK = 1000;
-    let cursor = null;
-    const acc = [];
-
-    while (acc.length < keep) {
-        const sp = new URLSearchParams({
-            symbol, interval, limit: String(Math.min(CHUNK, keep - acc.length)), pages: "1",
-        });
-        if (cursor) sp.set("cursor", String(cursor));
-
-        const resp = await fetch(`/api/klines?${sp.toString()}`, {cache: "no-store"});
-        const raw = await resp.text();
-        let json = {};
-        try {
-            json = JSON.parse(raw);
-        } catch {
-        }
-
-        if (!resp.ok || json?.retCode !== 0) {
-            throw new Error(`klines bad response: ${resp.status} ${json?.retMsg || raw.slice(0, 200)}`);
-        }
-
-        const rows = Array.isArray(json?.list) ? json.list : [];
-        for (const r of rows) {
-            let t = Number(r.time);
-            if (t > 1e12) t = Math.floor(t / 1000);
-            acc.push({time: t, open: +r.open, high: +r.high, low: +r.low, close: +r.close});
-        }
-
-        cursor = json?.nextCursor ?? null;
-
-        // ✅ 더 과거가 없으면 종료
-        if (!cursor || rows.length === 0) break;
-    }
-
-    acc.sort((a, b) => a.time - b.time);
-    return acc.slice(-keep);
-}
-
 export async function fetchSignals(symbol, name = "bybit", days = 7) {
     const now = Date.now();
     const from = now - days * 86400 * 1000;
@@ -308,28 +257,33 @@ export function buildSignalAnnotations(sigs) {
         const isShort = s.side === "SHORT";
 
         let position = "aboveBar";
-        let color = "#ffd166";      // fallback(이상치일 때만)
+        // ✅ 투명도를 적용한 RGBA 색상 정의 (0.5 = 50% 투명도)
+        const COLOR_LONG = "rgba(47, 224, 141, 0.7)";  // 기존 #2fe08d
+        const COLOR_SHORT = "rgba(255, 107, 107, 0.7)"; // 기존 #ff6b6b
+        const COLOR_IDLE = "rgba(255, 209, 102, 0.7)";  // 기존 #ffd166
+
+        let color = COLOR_IDLE;
         let shape = "arrowDown";
 
-        // ✅ 기존 스타일 그대로 유지
+        // ✅ 조건별 색상 및 위치 설정
         if (isEntry && isLong) {
             position = "belowBar";
-            color = "#2fe08d";
+            color = COLOR_LONG;
             shape = "arrowUp";
         }
         if (isEntry && isShort) {
             position = "aboveBar";
-            color = "#ff6b6b";
+            color = COLOR_SHORT;
             shape = "arrowDown";
         }
         if (isExit && isLong) {
             position = "aboveBar";
-            color = "#2fe08d";
+            color = COLOR_LONG;
             shape = "arrowDown";
         }
         if (isExit && isShort) {
             position = "belowBar";
-            color = "#ff6b6b";
+            color = COLOR_SHORT;
             shape = "arrowUp";
         }
 
@@ -554,11 +508,6 @@ export function getWsHub(url) {
     _hubCache.set(key, hub);
     return hub;
 }
-
-/* 기존 코드 호환: coin이 wsHub를 그대로 import해도 동작 */
-export const wsHub = getWsHub("wss://stream.bybit.com/v5/public/linear");
-
-
 // === 평가/자산 계산 유틸 ===
 export function lastPriceFromStats(stats) {
     if (!stats) return null;
@@ -602,5 +551,47 @@ export function calcEquityUSDT(asset, statsBySymbol) {
     const wallet = +(asset?.wallet?.USDT ?? 0);
     const {pnlSum} = buildPositionRows(asset, statsBySymbol);
     return wallet + pnlSum;
+}
+
+/**
+ * 보라색 점(Cross Markers) 생성 함수
+ */
+export function buildCrossMarkers(crossTimesArr, fromSec, toSec) {
+    if (!Array.isArray(crossTimesArr) || crossTimesArr.length === 0) return [];
+
+    // ✅ 보라색 투명도 적용 (rgba)
+    const MARKER_COLOR = "rgba(167, 139, 250)";
+
+    const items = crossTimesArr
+        .map((c, idx) => {
+            // 날짜 문자열을 Epoch 초로 변환하는 로직 (기존 ChartPanel에 있던 것)
+            const s = String(c.time || "");
+            const iso = s.includes("T") ? s : s.replace(" ", "T");
+            const withTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}+09:00`;
+            const t = Date.parse(withTz);
+            const ts = Number.isFinite(t) ? Math.floor(t / 1000) : NaN;
+
+            return {
+                idx: idx + 1,
+                dir: String(c.dir || "").toUpperCase(),
+                ts: ts,
+            };
+        })
+        .filter((x) => Number.isFinite(x.ts))
+        .sort((a, b) => a.ts - b.ts);
+
+    const out = [];
+    for (const it of items) {
+        if (it.ts < fromSec || it.ts >= toSec) continue;
+        out.push({
+            time: it.ts,
+            position: it.dir === "UP" ? "aboveBar" : "belowBar",
+            shape: "circle",
+            color: MARKER_COLOR,
+            text: String(it.idx),
+            size: 1, // 점 크기 조절
+        });
+    }
+    return out;
 }
 

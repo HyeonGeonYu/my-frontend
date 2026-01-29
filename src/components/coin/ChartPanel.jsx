@@ -16,6 +16,7 @@ import {
     fetchSignals,
     buildSignalAnnotations,
     getWsHub,
+    buildCrossMarkers,
     next0650EndBoundaryUtcSec,
     genMinutePlaceholders,
     fmtComma,
@@ -34,34 +35,6 @@ function parseKstToEpochSec(s) {
     const withTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}+09:00`;
     const t = Date.parse(withTz);
     return Number.isFinite(t) ? Math.floor(t / 1000) : NaN;
-}
-
-// cross_times -> lightweight-charts markers
-function buildCrossMarkers(crossTimesArr, fromSec, toSec) {
-    if (!Array.isArray(crossTimesArr) || crossTimesArr.length === 0) return [];
-    const MARKER_COLOR = "#a78bfa";
-
-    const items = crossTimesArr
-        .map((c, idx) => ({
-            idx: idx + 1,
-            dir: String(c.dir || "").toUpperCase(),
-            ts: c.time ? parseKstToEpochSec(String(c.time)) : NaN,
-        }))
-        .filter((x) => Number.isFinite(x.ts))
-        .sort((a, b) => a.ts - b.ts);
-
-    const out = [];
-    for (const it of items) {
-        if (it.ts < fromSec || it.ts >= toSec) continue;
-        out.push({
-            time: it.ts,
-            position: it.dir === "UP" ? "aboveBar" : "belowBar",
-            shape: "circle",
-            color: MARKER_COLOR,
-            text: String(it.idx),
-        });
-    }
-    return out;
 }
 
 async function fetchPagedCandlesBybit(symbol, interval, targetCount) {
