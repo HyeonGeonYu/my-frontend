@@ -52,16 +52,6 @@ function CopyTradingInfoBanner() {
         letterSpacing: 0.5,
     };
 
-    const btn = {
-        padding: "8px 12px",
-        borderRadius: 10,
-        border: 0,
-        background: "#00ffcc",
-        color: "#000",
-        fontWeight: 800,
-        cursor: "pointer",
-    };
-
     const onCopy = async () => {
         try {
             await navigator.clipboard.writeText(inviteCode);
