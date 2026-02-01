@@ -1,7 +1,7 @@
 // src/pages/coin.jsx
 import React, {useEffect, useState, useMemo, useCallback} from "react";
 import AssetPanel from "../components/AssetPanel";
-
+import promoImgUrl from "../assets/bybit_copytrading_zannavi.png";
 import TickerCard from "../components/coin/TickerCard";
 import ChartPanel from "../components/coin/ChartPanel";
 
@@ -23,6 +23,7 @@ function selectedDayLabel(offsetDays = 0) {
 function CopyTradingInfoBanner() {
     const inviteCode = "YLPQEAX";
     const startDate = "2026-02-01"; // 26년 2월 1일 시작
+
 
     const box = {
         padding: 14,
@@ -78,71 +79,103 @@ function CopyTradingInfoBanner() {
     };
 
     return (
+  <div style={box}>
+    <div>
+      <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>
+        카피트레이딩 계정 안내
+      </div>
 
-        <div style={box}>
-            <div style={{display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap"}}>
-                <div>
-                    <div style={{fontWeight: 900, fontSize: 14, marginBottom: 8}}>
-                        카피트레이딩 계정 안내
-                    </div>
+      {/* 상단: 시작일 / 코드 / 복사 버튼 한 줄 */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <span style={pill}>
+          시작일: <b>{startDate}</b>
+        </span>
 
-                    <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
-                        <span style={pill}>시작일: <b>{startDate}</b></span>
-                        <span style={pill}>
-              Bybit code: <span style={codeStyle}>Code:{inviteCode}</span>
-            </span>
-                    </div>
+        <span style={pill}>
+          Bybit code: <span style={codeStyle}>Code:{inviteCode}</span>
+        </span>
 
-                    <div style={{marginTop: 10, fontSize: 12, opacity: 0.75, lineHeight: 1.5}}>
-                        * 본 화면의 자산/성과 표시는 카피트레이딩 계정 기준으로 집계됩니다.
-                    </div>
+        <button
+          onClick={onCopy}
+          title="초대코드 복사"
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid #2a2a2a",
+            background: "#00ffcc",
+            color: "#000",
+            fontWeight: 900,
+            cursor: "pointer",
+            fontSize: 12,
+          }}
+        >
+          초대코드 복사
+        </button>
+      </div>
 
-                    {/* ✅ 리스크 고지 (3개국어) */}
-                    <details style={{marginTop: 10}}>
-                        <summary style={{cursor: "pointer", fontSize: 12, opacity: 0.9}}>
-                            ⚠️ 리스크 고지 (KR / EN / 中文)
-                        </summary>
+      <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75, lineHeight: 1.5 }}>
+        * 본 화면의 자산/성과 표시는 카피트레이딩 계정 기준으로 집계됩니다.
+      </div>
 
-                        <div style={{marginTop: 10, fontSize: 12, lineHeight: 1.6, opacity: 0.85}}>
-                            <div style={{fontWeight: 800, marginBottom: 4}}>KR</div>
-                            <div>
-                                본 페이지는 카피트레이딩 계정 정보를 공유하기 위한 것이며,
-                                참여 여부는 이용자의 자율적 판단에 따릅니다.
-                                카피트레이딩은 손실 또는 청산이 발생할 수 있고,
-                                과거 성과는 미래 수익을 보장하지 않습니다.
-                                모든 투자 결과에 대한 책임은 이용자 본인에게 있습니다.
-                            </div>
+      {/* ✅ 홍보 이미지 (QR 포함) */}
+      <div style={{ marginTop: 12 }}>
+        <img
+          src={promoImgUrl}
+          alt="Bybit copytrading promo"
+          style={{
+            display: "block",
+            borderRadius: 14,
+            border: "1px solid #2a2a2a",
+            maxWidth: "100%",
+            height: "auto",
+          }}
+        />
+      </div>
 
-                            <div style={{height: 10}}/>
+      {/* ✅ 리스크 고지 (3개국어) */}
+      <details style={{ marginTop: 10 }}>
+        <summary style={{ cursor: "pointer", fontSize: 12, opacity: 0.9 }}>
+          ⚠️ 리스크 고지 (KR / EN / 中文)
+        </summary>
 
-                            <div style={{fontWeight: 800, marginBottom: 4}}>EN</div>
-                            <div>
-                                This page is intended to share information about a copy trading account.
-                                Participation is entirely at the user's own discretion.
-                                Copy trading involves the risk of loss or liquidation, and past performance
-                                does not guarantee future results.
-                                You are solely responsible for all investment decisions and outcomes.
-                            </div>
+        <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.6, opacity: 0.85 }}>
+          <div style={{ fontWeight: 800, marginBottom: 4 }}>KR</div>
+          <div>
+            본 페이지는 카피트레이딩 계정 정보를 공유하기 위한 것이며, 참여 여부는 이용자의
+            자율적 판단에 따릅니다. 카피트레이딩은 손실 또는 청산이 발생할 수 있고, 과거 성과는
+            미래 수익을 보장하지 않습니다. 모든 투자 결과에 대한 책임은 이용자 본인에게 있습니다.
+          </div>
 
-                            <div style={{height: 10}}/>
+          <div style={{ height: 10 }} />
 
-                            <div style={{fontWeight: 800, marginBottom: 4}}>中文</div>
-                            <div>
-                                本页面用于分享跟单交易账户相关信息，是否参与由用户自行决定。
-                                跟单交易存在亏损或强制平仓的风险，过往业绩不代表未来表现。
-                                所有投资决策及其结果均由用户本人承担责任。
-                            </div>
-                        </div>
-                    </details>
-                </div>
+          <div style={{ fontWeight: 800, marginBottom: 4 }}>EN</div>
+          <div>
+            This page is intended to share information about a copy trading account. Participation is
+            entirely at the user's own discretion. Copy trading involves the risk of loss or
+            liquidation, and past performance does not guarantee future results. You are solely
+            responsible for all investment decisions and outcomes.
+          </div>
 
-                <div style={{display: "flex", alignItems: "center"}}>
-                    <button onClick={onCopy} style={btn} title="초대코드 복사">
-                        초대코드 복사
-                    </button>
-                </div>
-            </div>
-        </div>);
+          <div style={{ height: 10 }} />
+
+          <div style={{ fontWeight: 800, marginBottom: 4 }}>中文</div>
+          <div>
+            本页面用于分享跟单交易账户相关信息，是否参与由用户自行决定。跟单交易存在亏损或强制平仓的风险，
+            过往业绩不代表未来表现。所有投资决策及其结果均由用户本人承担责任。
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+);
+
 }
 
 
@@ -268,7 +301,7 @@ export default function Coin() {
 
         (async () => {
             try {
-                const res = await fetch(`/api/asset?ns=${encodeURIComponent(assetNs)}`, { cache: "no-store" });
+                const res = await fetch(`/api/asset?ns=${encodeURIComponent(assetNs)}`, {cache: "no-store"});
                 const j = res.ok ? await res.json() : null;
                 if (!alive || !j) return;
                 setAsset(j.asset);
