@@ -19,6 +19,133 @@ function selectedDayLabel(offsetDays = 0) {
     return `${month}월 ${date}일(${dow})`;
 }
 
+
+function CopyTradingInfoBanner() {
+    const inviteCode = "YLPQEAX";
+    const startDate = "2026-02-01"; // 26년 2월 1일 시작
+
+    const box = {
+        padding: 14,
+        borderRadius: 14,
+        background: "linear-gradient(135deg, rgba(0,255,204,0.14), rgba(0,0,0,0))",
+        border: "1px solid #2a2a2a",
+        marginBottom: 14,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+    };
+
+    const pill = {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 10px",
+        borderRadius: 999,
+        background: "#1a1a1a",
+        border: "1px solid #2a2a2a",
+        fontSize: 12,
+        opacity: 0.95,
+    };
+
+    const codeStyle = {
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        fontWeight: 800,
+        letterSpacing: 0.5,
+    };
+
+    const btn = {
+        padding: "8px 12px",
+        borderRadius: 10,
+        border: 0,
+        background: "#00ffcc",
+        color: "#000",
+        fontWeight: 800,
+        cursor: "pointer",
+    };
+
+    const onCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(inviteCode);
+            alert("초대코드가 복사되었습니다: " + inviteCode);
+        } catch {
+            // clipboard 권한 실패 시 fallback
+            const ta = document.createElement("textarea");
+            ta.value = inviteCode;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            alert("초대코드가 복사되었습니다: " + inviteCode);
+        }
+    };
+
+    return (
+
+        <div style={box}>
+            <div style={{display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap"}}>
+                <div>
+                    <div style={{fontWeight: 900, fontSize: 14, marginBottom: 8}}>
+                        카피트레이딩 계정 안내
+                    </div>
+
+                    <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
+                        <span style={pill}>시작일: <b>{startDate}</b></span>
+                        <span style={pill}>
+              Bybit code: <span style={codeStyle}>Code:{inviteCode}</span>
+            </span>
+                    </div>
+
+                    <div style={{marginTop: 10, fontSize: 12, opacity: 0.75, lineHeight: 1.5}}>
+                        * 본 화면의 자산/성과 표시는 카피트레이딩 계정 기준으로 집계됩니다.
+                    </div>
+
+                    {/* ✅ 리스크 고지 (3개국어) */}
+                    <details style={{marginTop: 10}}>
+                        <summary style={{cursor: "pointer", fontSize: 12, opacity: 0.9}}>
+                            ⚠️ 리스크 고지 (KR / EN / 中文)
+                        </summary>
+
+                        <div style={{marginTop: 10, fontSize: 12, lineHeight: 1.6, opacity: 0.85}}>
+                            <div style={{fontWeight: 800, marginBottom: 4}}>KR</div>
+                            <div>
+                                본 페이지는 카피트레이딩 계정 정보를 공유하기 위한 것이며,
+                                참여 여부는 이용자의 자율적 판단에 따릅니다.
+                                카피트레이딩은 손실 또는 청산이 발생할 수 있고,
+                                과거 성과는 미래 수익을 보장하지 않습니다.
+                                모든 투자 결과에 대한 책임은 이용자 본인에게 있습니다.
+                            </div>
+
+                            <div style={{height: 10}}/>
+
+                            <div style={{fontWeight: 800, marginBottom: 4}}>EN</div>
+                            <div>
+                                This page is intended to share information about a copy trading account.
+                                Participation is entirely at the user's own discretion.
+                                Copy trading involves the risk of loss or liquidation, and past performance
+                                does not guarantee future results.
+                                You are solely responsible for all investment decisions and outcomes.
+                            </div>
+
+                            <div style={{height: 10}}/>
+
+                            <div style={{fontWeight: 800, marginBottom: 4}}>中文</div>
+                            <div>
+                                本页面用于分享跟单交易账户相关信息，是否参与由用户自行决定。
+                                跟单交易存在亏损或强制平仓的风险，过往业绩不代表未来表现。
+                                所有投资决策及其结果均由用户本人承担责任。
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div style={{display: "flex", alignItems: "center"}}>
+                    <button onClick={onCopy} style={btn} title="초대코드 복사">
+                        초대코드 복사
+                    </button>
+                </div>
+            </div>
+        </div>);
+}
+
+
 /* ------------------------- threshold meta ------------------------- */
 async function fetchThresholdMeta(symbol, ns) {
     const qs = new URLSearchParams({symbol: String(symbol || "")});
@@ -49,15 +176,7 @@ function extractSymbolsFromConfig(cfgRaw) {
                 continue;
             }
             if (typeof it === "object") {
-                const s =
-                    it.symbol ??
-                    it.sym ??
-                    it.name ??
-                    it.ticker ??
-                    it.pair ??
-                    it.market ??
-                    it.code ??
-                    null;
+                const s = it.symbol ?? it.sym ?? it.name ?? it.ticker ?? it.pair ?? it.market ?? it.code ?? null;
                 if (s) out.push(String(s));
             }
         }
@@ -70,33 +189,14 @@ function extractSymbolsFromConfig(cfgRaw) {
 
     const pickFrom = (obj) => {
         if (!obj || typeof obj !== "object") return [];
-        const raw =
-            obj.symbols ??
-            obj.trade_symbols ??
-            obj.target_symbols ??
-            obj.targets ??
-            obj.pairs ??
-            obj.markets ??
-            obj.instruments ??
-            obj.watchlist ??
-            null;
+        const raw = obj.symbols ?? obj.trade_symbols ?? obj.target_symbols ?? obj.targets ?? obj.pairs ?? obj.markets ?? obj.instruments ?? obj.watchlist ?? null;
         return normalize(raw);
     };
 
     let symbols = pickFrom(root);
     if (symbols.length) return symbols;
 
-    const candidates = [
-        root.bybit,
-        root.mt5,
-        root.bot,
-        root.bots,
-        root.strategy,
-        root.strategies,
-        root.config,
-        root.settings,
-        root.params,
-    ];
+    const candidates = [root.bybit, root.mt5, root.bot, root.bots, root.strategy, root.strategies, root.config, root.settings, root.params,];
     for (const c of candidates) {
         symbols = pickFrom(c);
         if (symbols.length) return symbols;
@@ -188,8 +288,7 @@ export default function Coin() {
     const [statsMap, setStatsMap] = useState({});
     const onStats = useCallback((symbol, stats) => {
         setStatsMap((prev) => ({
-            ...prev,
-            [symbol]: {...prev[symbol], ...stats},
+            ...prev, [symbol]: {...prev[symbol], ...stats},
         }));
     }, []);
 
@@ -200,9 +299,7 @@ export default function Coin() {
 
         (async () => {
             try {
-                const results = await Promise.all(
-                    symbolsConfig.map((s) => fetchThresholdMeta(s.symbol, ns).catch(() => null))
-                );
+                const results = await Promise.all(symbolsConfig.map((s) => fetchThresholdMeta(s.symbol, ns).catch(() => null)));
                 if (!alive) return;
 
                 const merged = {};
@@ -228,9 +325,7 @@ export default function Coin() {
 
         (async () => {
             try {
-                const results = await Promise.all(
-                    symbolsConfig.map((s) => fetchPriceScaleBybitCached(s.symbol, s.market || "linear"))
-                );
+                const results = await Promise.all(symbolsConfig.map((s) => fetchPriceScaleBybitCached(s.symbol, s.market || "linear")));
                 if (!alive) return;
 
                 const merged = {};
@@ -289,170 +384,150 @@ export default function Coin() {
 
     /* ------------------------- UI ------------------------- */
     if (!configLoaded) {
-        return (
-            <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-                <div style={{opacity: 0.85}}>config 로딩중...</div>
-            </div>
-        );
+        return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+            <div style={{opacity: 0.85}}>config 로딩중...</div>
+        </div>);
     }
 
     if (!symbolsReady) {
-        return (
-            <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-                <div
-                    style={{
-                        padding: 14,
-                        borderRadius: 12,
-                        background: "#1a1a1a",
-                        border: "1px solid #2a2a2a",
-                        lineHeight: 1.6,
-                    }}
-                >
-                    심볼 목록을 불러오지 못했어요.
-                    <br/>
-                    <span style={{opacity: 0.75}}>
+        return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+            <div
+                style={{
+                    padding: 14, borderRadius: 12, background: "#1a1a1a", border: "1px solid #2a2a2a", lineHeight: 1.6,
+                }}
+            >
+                심볼 목록을 불러오지 못했어요.
+                <br/>
+                <span style={{opacity: 0.75}}>
             잠시 후 다시 시도해 주세요. 문제가 계속되면 운영자에게 문의해 주세요.
           </span>
-                </div>
             </div>
-        );
+        </div>);
     }
 
-    return (
-        <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-            <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState}/>
+    return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+        <CopyTradingInfoBanner/>
+        <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState}/>
 
-            <div style={{display: "grid", gridTemplateColumns: "320px 1fr", gap: 24}}>
-                {/* 왼쪽 */}
-                <div>
+        <div style={{display: "grid", gridTemplateColumns: "320px 1fr", gap: 24}}>
+            {/* 왼쪽 */}
+            <div>
+                <div
+                    style={{
+                        position: "sticky", top: 12, zIndex: 5, display: "flex", flexDirection: "column", gap: 1,
+                    }}
+                >
                     <div
                         style={{
-                            position: "sticky",
-                            top: 12,
-                            zIndex: 5,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 1,
+                            padding: "14px 16px",
+                            borderRadius: 14,
+                            background: "#1a1a1a",
+                            marginBottom: 14,
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
                         }}
                     >
-                        <div
-                            style={{
-                                padding: "14px 16px",
-                                borderRadius: 14,
-                                background: "#1a1a1a",
-                                marginBottom: 14,
-                                boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-                            }}
-                        >
-                            <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline"}}>
-                                <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
-                                {interval === "1" &&
-                                    <div style={{fontSize: 12, opacity: 0.85}}>{selectedDayLabel(dayOffset)}</div>}
-                            </div>
-
-                            <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
-                                <button
-                                    onClick={() => {
-                                        setInterval_("1");
-                                        setDayOffset(0);
-                                    }}
-                                    style={{
-                                        padding: "8px 12px",
-                                        borderRadius: 10,
-                                        border: 0,
-                                        background: interval === "1" ? "#00ffcc" : "#2a2a2a",
-                                        color: interval === "1" ? "#000" : "#fff",
-                                        fontWeight: 700,
-                                    }}
-                                >
-                                    1분봉
-                                </button>
-                                <button
-                                    onClick={() => setInterval_("D")}
-                                    style={{
-                                        padding: "8px 12px",
-                                        borderRadius: 10,
-                                        border: 0,
-                                        background: interval === "D" ? "#00ffcc" : "#2a2a2a",
-                                        color: interval === "D" ? "#000" : "#fff",
-                                        fontWeight: 700,
-                                    }}
-                                >
-                                    1일봉
-                                </button>
-                            </div>
-
-                            {interval === "1" && (
-                                <>
-                                    <div style={{height: 10}}/>
-                                    <div style={{display: "flex", gap: 8}}>
-                                        <button
-                                            onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
-                                            disabled={!boundsReady || atMin}
-                                            style={disBtnStyle(!boundsReady || atMin)}
-                                            title="전날 보기"
-                                        >
-                                            ◀ 전날
-                                        </button>
-                                        <button
-                                            onClick={() => setDayOffset(0)}
-                                            style={{
-                                                padding: "8px 12px",
-                                                borderRadius: 10,
-                                                border: 0,
-                                                background: "#00ffcc",
-                                                color: "#000",
-                                                fontWeight: 700,
-                                            }}
-                                            title="오늘 보기"
-                                        >
-                                            오늘
-                                        </button>
-                                        <button
-                                            onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
-                                            disabled={!boundsReady || atMax}
-                                            style={disBtnStyle(!boundsReady || atMax)}
-                                            title="다음날 보기"
-                                        >
-                                            다음날 ▶
-                                        </button>
-                                    </div>
-                                </>
-                            )}
+                        <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline"}}>
+                            <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
+                            {interval === "1" &&
+                                <div style={{fontSize: 12, opacity: 0.85}}>{selectedDayLabel(dayOffset)}</div>}
                         </div>
-                    </div>
 
-                    <div style={{display: "grid", gap: 12}}>
-                        {symbolsConfig.map((s) => (
-                            <TickerCard
-                                key={s.symbol}
-                                symbol={s.symbol}
-                                interval={interval}
-                                stats={statsMap[s.symbol]}
-                                meta={{...(metaMap[s.symbol] || {}), price_scale: priceScaleMap[s.symbol]}}
-                            />
-                        ))}
+                        <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
+                            <button
+                                onClick={() => {
+                                    setInterval_("1");
+                                    setDayOffset(0);
+                                }}
+                                style={{
+                                    padding: "8px 12px",
+                                    borderRadius: 10,
+                                    border: 0,
+                                    background: interval === "1" ? "#00ffcc" : "#2a2a2a",
+                                    color: interval === "1" ? "#000" : "#fff",
+                                    fontWeight: 700,
+                                }}
+                            >
+                                1분봉
+                            </button>
+                            <button
+                                onClick={() => setInterval_("D")}
+                                style={{
+                                    padding: "8px 12px",
+                                    borderRadius: 10,
+                                    border: 0,
+                                    background: interval === "D" ? "#00ffcc" : "#2a2a2a",
+                                    color: interval === "D" ? "#000" : "#fff",
+                                    fontWeight: 700,
+                                }}
+                            >
+                                1일봉
+                            </button>
+                        </div>
+
+                        {interval === "1" && (<>
+                            <div style={{height: 10}}/>
+                            <div style={{display: "flex", gap: 8}}>
+                                <button
+                                    onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
+                                    disabled={!boundsReady || atMin}
+                                    style={disBtnStyle(!boundsReady || atMin)}
+                                    title="전날 보기"
+                                >
+                                    ◀ 전날
+                                </button>
+                                <button
+                                    onClick={() => setDayOffset(0)}
+                                    style={{
+                                        padding: "8px 12px",
+                                        borderRadius: 10,
+                                        border: 0,
+                                        background: "#00ffcc",
+                                        color: "#000",
+                                        fontWeight: 700,
+                                    }}
+                                    title="오늘 보기"
+                                >
+                                    오늘
+                                </button>
+                                <button
+                                    onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
+                                    disabled={!boundsReady || atMax}
+                                    style={disBtnStyle(!boundsReady || atMax)}
+                                    title="다음날 보기"
+                                >
+                                    다음날 ▶
+                                </button>
+                            </div>
+                        </>)}
                     </div>
                 </div>
 
-                {/* 오른쪽 */}
-                <div>
-                    {symbolsConfig.map((s) => (
-                        <ChartPanel
-                            key={s.symbol}
-                            symbol={s.symbol}
-                            globalInterval={interval}
-                            dayOffset={dayOffset}
-                            onBounds={onBounds}
-                            onStats={onStats}
-                            thr={metaMap[s.symbol]?.ma_threshold}
-                            crossTimes={metaMap[s.symbol]?.cross_times}
-                            signalName={ns} //
-                            priceScale={priceScaleMap[s.symbol]}
-                        />
-                    ))}
+                <div style={{display: "grid", gap: 12}}>
+                    {symbolsConfig.map((s) => (<TickerCard
+                        key={s.symbol}
+                        symbol={s.symbol}
+                        interval={interval}
+                        stats={statsMap[s.symbol]}
+                        meta={{...(metaMap[s.symbol] || {}), price_scale: priceScaleMap[s.symbol]}}
+                    />))}
                 </div>
             </div>
+
+            {/* 오른쪽 */}
+            <div>
+                {symbolsConfig.map((s) => (<ChartPanel
+                    key={s.symbol}
+                    symbol={s.symbol}
+                    globalInterval={interval}
+                    dayOffset={dayOffset}
+                    onBounds={onBounds}
+                    onStats={onStats}
+                    thr={metaMap[s.symbol]?.ma_threshold}
+                    crossTimes={metaMap[s.symbol]?.cross_times}
+                    signalName={ns} //
+                    priceScale={priceScaleMap[s.symbol]}
+                />))}
+            </div>
         </div>
-    );
+    </div>);
 }
