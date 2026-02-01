@@ -249,9 +249,14 @@ export default function Coin() {
 
     // ✅ namespace (플랫폼/봇 네임스페이스)
     const ns = useMemo(() => {
+        // 기존대로 유지 (threshold/meta에서 쓰는 값)
         return String(configState?.name || configState?.exchange || "bybit").toLowerCase();
     }, [configState]);
 
+    const assetNs = useMemo(() => {
+        // asset은 새 네임스페이스(대소문자 보존)
+        return "agent:CopyZannavi:u7c9f14d2a1:BYBIT";
+    }, []);
     /* ------------------------- asset ------------------------- */
     const [asset, setAsset] = useState({wallet: {USDT: 0}, positions: {}});
 
@@ -263,7 +268,7 @@ export default function Coin() {
 
         (async () => {
             try {
-                const res = await fetch(`/api/asset?ns=${encodeURIComponent(ns)}`, {cache: "no-store"});
+                const res = await fetch(`/api/asset?ns=${encodeURIComponent(assetNs)}`, { cache: "no-store" });
                 const j = res.ok ? await res.json() : null;
                 if (!alive || !j) return;
                 setAsset(j.asset);
@@ -274,7 +279,7 @@ export default function Coin() {
         return () => {
             alive = false;
         };
-    }, [ns]);
+    }, [assetNs]);
 
     /* ------------------------- symbols ------------------------- */
     const symbolsConfig = useMemo(() => {
