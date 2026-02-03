@@ -324,7 +324,7 @@ export default function CfdChartPanel({
 
         (async () => {
             try {
-                const sigs = await fetchSignals(symbol, "mt5_signal").catch(() => []);
+                const sigs = await fetchSignals(symbol, "mt5").catch(() => []);
                 const {markers, notes} = buildSignalAnnotations(sigs);
                 setNotesView(notes);
                 markersAllRef.current = markers || [];

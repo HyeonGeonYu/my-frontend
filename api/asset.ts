@@ -94,7 +94,7 @@ export default async function handler(req: Request): Promise<Response> {
     const ns = (searchParams.get("ns") || "bybit").trim();
 
     // legacy 허용
-    const LEGACY_ALLOW = new Set(["bybit", "mt5_signal"]);
+    const LEGACY_ALLOW = new Set(["bybit", "mt5"]);
 
     // agent:<name>:<id>:<exchange>
     const parts = ns.split(":").filter(Boolean);
@@ -104,8 +104,8 @@ export default async function handler(req: Request): Promise<Response> {
     const EXCHANGE_ALLOW = new Set([
       "BYBIT",
       "bybit",
-      "MT5_SIGNAL",
-      "mt5_signal",
+      "MT5",
+      "mt5",
     ]);
 
     const ok =

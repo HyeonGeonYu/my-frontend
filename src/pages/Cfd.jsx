@@ -36,14 +36,14 @@ export default function Cfd() {
     const [configLoaded, setConfigLoaded] = useState(false);
 
     const signalName = useMemo(() => {
-        return configState?.name || configState?.exchange || "mt5_signal";
+        return configState?.name || configState?.exchange || "mt5";
     }, [configState]);
 
     useEffect(() => {
         let alive = true;
         (async () => {
             try {
-                const r = await fetch("/api/config?name=mt5_signal", {cache: "no-store"});
+                const r = await fetch("/api/config?name=mt5", {cache: "no-store"});
                 const j = r.ok ? await r.json() : null;
                 if (!alive) return;
                 setConfigState(j?.config ?? j);
@@ -68,7 +68,7 @@ export default function Cfd() {
 
         (async () => {
             try {
-                const namespace = "mt5_signal";
+                const namespace = "mt5";
                 const results = await Promise.all(
                     symbols.map((s) => fetchThresholdMeta(s, namespace).catch(() => null))
                 );
@@ -206,10 +206,9 @@ export default function Cfd() {
                         lineHeight: 1.6,
                     }}
                 >
-                    config에서 symbols를 못 가져왔어.
+                    loading...
                     <br/>
                     <span style={{opacity: 0.75}}>
-            개발자 콘솔(F12)에서 <b>/api/config?name=mt5_signal</b> 응답을 확인해봐.
           </span>
                 </div>
             </div>
