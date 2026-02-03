@@ -69,9 +69,7 @@ export default function Cfd() {
         (async () => {
             try {
                 const namespace = "mt5";
-                const results = await Promise.all(
-                    symbols.map((s) => fetchThresholdMeta(s, namespace).catch(() => null))
-                );
+                const results = await Promise.all(symbols.map((s) => fetchThresholdMeta(s, namespace).catch(() => null)));
                 if (!alive) return;
 
                 const merged = {};
@@ -132,8 +130,7 @@ export default function Cfd() {
 
             if (Number.isFinite(minMaThreshold) && t < minMaThreshold) {
                 hidden.push({
-                    symbol: s,
-                    reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
+                    symbol: s, reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
                 });
                 continue;
             }
@@ -187,216 +184,190 @@ export default function Cfd() {
 
     /* ------------------------- UI ------------------------- */
     if (!configLoaded) {
-        return (
-            <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-                <div style={{opacity: 0.85}}>config 로딩중...</div>
-            </div>
-        );
+        return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+            <div style={{opacity: 0.85}}>config 로딩중...</div>
+        </div>);
     }
 
     if (!symbolsReady) {
-        return (
-            <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-                <div
-                    style={{
-                        padding: 14,
-                        borderRadius: 12,
-                        background: "#1a1a1a",
-                        border: "1px solid #2a2a2a",
-                        lineHeight: 1.6,
-                    }}
-                >
-                    loading...
-                    <br/>
-                    <span style={{opacity: 0.75}}>
+        return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+            <div
+                style={{
+                    padding: 14, borderRadius: 12, background: "#1a1a1a", border: "1px solid #2a2a2a", lineHeight: 1.6,
+                }}
+            >
+                loading...
+                <br/>
+                <span style={{opacity: 0.75}}>
           </span>
-                </div>
             </div>
-        );
+        </div>);
     }
 
-    return (
-        <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-            <div style={{fontWeight: 800, fontSize: 18, marginBottom: 10, opacity: 0.95}}>
-                CFD 세션 차트 <span style={{opacity: 0.6, fontWeight: 700}}>({symbols.join(" / ")})</span>
-            </div>
+    return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+        <div style={{fontWeight: 800, fontSize: 18, marginBottom: 10, opacity: 0.95}}>
+            CFD 세션 차트 <span style={{opacity: 0.6, fontWeight: 700}}>({symbols.join(" / ")})</span>
+        </div>
 
-            {/* ✅ 숨김 안내 */}
-            <div style={{marginBottom: 14}}>
+        {/* ✅ 숨김 안내 */}
+        <div style={{marginBottom: 14}}>
+            <div
+                style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: "#151515",
+                    border: "1px solid #262626",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                }}
+            >
+                <div style={{display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap"}}>
+                    <div style={{fontWeight: 700}}>
+                        표시 기준:{" "}
+                        <span style={{opacity: 0.85}}>
+                ma_threshold ≥{" "}
+                            {Number.isFinite(minMaThreshold) ? minMaThreshold : "—"}
+              </span>
+                    </div>
+                    <div style={{opacity: 0.85}}>
+                        표시: <b>{visibleSymbols.length}</b>개 / 숨김: <b>{hiddenSymbols.length}</b>개
+                    </div>
+                </div>
+
+                {hiddenSymbols.length > 0 ? (<div style={{marginTop: 8, opacity: 0.9}}>
+                    <div style={{fontWeight: 700, marginBottom: 6}}>숨김 목록</div>
+                    <div style={{display: "flex", flexWrap: "wrap", gap: 8}}>
+                        {hiddenSymbols.map((x) => (<span
+                            key={x.symbol}
+                            style={{
+                                padding: "6px 10px",
+                                borderRadius: 999,
+                                background: "#1f1f1f",
+                                border: "1px solid #2d2d2d",
+                                fontSize: 12,
+                                opacity: 0.95,
+                            }}
+                            title={x.reason}
+                        >
+                    <b style={{marginRight: 6}}>{x.symbol}</b>
+                    <span style={{opacity: 0.7}}>{x.reason}</span>
+                  </span>))}
+                    </div>
+                </div>) : null}
+            </div>
+        </div>
+
+        <div style={{display: "grid", gridTemplateColumns: "320px 1fr", gap: 24}}>
+            {/* 왼쪽 */}
+            <div>
                 <div
                     style={{
-                        padding: "10px 12px",
+                        position: "sticky", top: 12, zIndex: 5, display: "flex", flexDirection: "column", gap: 1,
+                    }}
+                >
+                    <div
+                        style={{
+                            padding: "14px 16px",
+                            borderRadius: 14,
+                            background: "#1a1a1a",
+                            marginBottom: 14,
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+                        }}
+                    >
+                        <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline"}}>
+                            <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
+                            <div style={{fontSize: 12, opacity: 0.85}}>
+                                {selectedDate ? sessionKeyLabel(selectedDate) : "—"}
+                                {selectedDate ? <span style={{opacity: 0.65}}> ({selectedDate})</span> : null}
+                            </div>
+                        </div>
+
+                        <div style={{display: "flex", gap: 8}}>
+                            <button
+                                onClick={() => setSessionIndex((i) => Math.max(0, i - 1))}
+                                disabled={!allSessionKeys.length || atMin}
+                                style={disBtnStyle(!allSessionKeys.length || atMin)}
+                                title="이전 세션"
+                            >
+                                ◀ 이전
+                            </button>
+
+                            <button
+                                onClick={() => setSessionIndex(allSessionKeys.length ? allSessionKeys.length - 1 : 0)}
+                                style={{
+                                    padding: "8px 12px",
+                                    borderRadius: 10,
+                                    border: 0,
+                                    background: "#00ffcc",
+                                    color: "#000",
+                                    fontWeight: 700,
+                                }}
+                                title="최신 세션"
+                            >
+                                최신
+                            </button>
+
+                            <button
+                                onClick={() => setSessionIndex((i) => Math.min(allSessionKeys.length - 1, i + 1))}
+                                disabled={!allSessionKeys.length || atMax}
+                                style={disBtnStyle(!allSessionKeys.length || atMax)}
+                                title="다음 세션"
+                            >
+                                다음 ▶
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ✅ 왼쪽 카드도 visible만 */}
+                <div style={{display: "grid", gap: 12}}>
+                    {visibleSymbols.map((s) => (
+                        <TickerCard key={s} symbol={s} stats={symbolStatsMap[s]} meta={metaMap[s]}/>))}
+                </div>
+
+                {/* visible이 0이면 안내 */}
+                {visibleSymbols.length === 0 ? (<div
+                    style={{
+                        marginTop: 12,
+                        padding: 12,
                         borderRadius: 12,
                         background: "#151515",
                         border: "1px solid #262626",
+                        opacity: 0.9,
                         fontSize: 13,
-                        lineHeight: 1.5,
                     }}
                 >
-                    <div style={{display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap"}}>
-                        <div style={{fontWeight: 700}}>
-                            표시 기준:{" "}
-                            <span style={{opacity: 0.85}}>
-                ma_threshold ≥{" "}
-                                {Number.isFinite(minMaThreshold) ? minMaThreshold : "—"}
-              </span>
-                        </div>
-                        <div style={{opacity: 0.85}}>
-                            표시: <b>{visibleSymbols.length}</b>개 / 숨김: <b>{hiddenSymbols.length}</b>개
-                        </div>
-                    </div>
-
-                    {hiddenSymbols.length > 0 ? (
-                        <div style={{marginTop: 8, opacity: 0.9}}>
-                            <div style={{fontWeight: 700, marginBottom: 6}}>숨김 목록</div>
-                            <div style={{display: "flex", flexWrap: "wrap", gap: 8}}>
-                                {hiddenSymbols.map((x) => (
-                                    <span
-                                        key={x.symbol}
-                                        style={{
-                                            padding: "6px 10px",
-                                            borderRadius: 999,
-                                            background: "#1f1f1f",
-                                            border: "1px solid #2d2d2d",
-                                            fontSize: 12,
-                                            opacity: 0.95,
-                                        }}
-                                        title={x.reason}
-                                    >
-                    <b style={{marginRight: 6}}>{x.symbol}</b>
-                    <span style={{opacity: 0.7}}>{x.reason}</span>
-                  </span>
-                                ))}
-                            </div>
-                        </div>
-                    ) : null}
-                </div>
+                    현재 표시 조건(ma_threshold ≥ {Number.isFinite(minMaThreshold) ? minMaThreshold.toFixed(4) : "—"})을
+                    만족하는 심볼이 없어.
+                </div>) : null}
             </div>
 
-            <div style={{display: "grid", gridTemplateColumns: "320px 1fr", gap: 24}}>
-                {/* 왼쪽 */}
-                <div>
-                    <div
-                        style={{
-                            position: "sticky",
-                            top: 12,
-                            zIndex: 5,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 1,
-                        }}
-                    >
-                        <div
-                            style={{
-                                padding: "14px 16px",
-                                borderRadius: 14,
-                                background: "#1a1a1a",
-                                marginBottom: 14,
-                                boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-                            }}
-                        >
-                            <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline"}}>
-                                <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
-                                <div style={{fontSize: 12, opacity: 0.85}}>
-                                    {selectedDate ? sessionKeyLabel(selectedDate) : "—"}
-                                    {selectedDate ? <span style={{opacity: 0.65}}> ({selectedDate})</span> : null}
-                                </div>
-                            </div>
+            {/* 오른쪽 */}
+            <div>
+                {visibleSymbols.map((s) => (<CfdChartPanel
+                    key={s}
+                    symbol={s}
+                    sessionKey={selectedDate}
+                    thr={metaMap[s]?.ma_threshold}
+                    crossTimes={metaMap[s]?.cross_times}
+                    onStats={onStats}
+                    onSessionKeys={onSessionKeys}
+                />))}
 
-                            <div style={{display: "flex", gap: 8}}>
-                                <button
-                                    onClick={() => setSessionIndex((i) => Math.max(0, i - 1))}
-                                    disabled={!allSessionKeys.length || atMin}
-                                    style={disBtnStyle(!allSessionKeys.length || atMin)}
-                                    title="이전 세션"
-                                >
-                                    ◀ 이전
-                                </button>
-
-                                <button
-                                    onClick={() => setSessionIndex(allSessionKeys.length ? allSessionKeys.length - 1 : 0)}
-                                    style={{
-                                        padding: "8px 12px",
-                                        borderRadius: 10,
-                                        border: 0,
-                                        background: "#00ffcc",
-                                        color: "#000",
-                                        fontWeight: 700,
-                                    }}
-                                    title="최신 세션"
-                                >
-                                    최신
-                                </button>
-
-                                <button
-                                    onClick={() => setSessionIndex((i) => Math.min(allSessionKeys.length - 1, i + 1))}
-                                    disabled={!allSessionKeys.length || atMax}
-                                    style={disBtnStyle(!allSessionKeys.length || atMax)}
-                                    title="다음 세션"
-                                >
-                                    다음 ▶
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ✅ 왼쪽 카드도 visible만 */}
-                    <div style={{display: "grid", gap: 12}}>
-                        {visibleSymbols.map((s) => (
-                            <TickerCard key={s} symbol={s} stats={symbolStatsMap[s]} meta={metaMap[s]}/>
-                        ))}
-                    </div>
-
-                    {/* visible이 0이면 안내 */}
-                    {visibleSymbols.length === 0 ? (
-                        <div
-                            style={{
-                                marginTop: 12,
-                                padding: 12,
-                                borderRadius: 12,
-                                background: "#151515",
-                                border: "1px solid #262626",
-                                opacity: 0.9,
-                                fontSize: 13,
-                            }}
-                        >
-                            현재 표시 조건(ma_threshold ≥ {Number.isFinite(minMaThreshold) ? minMaThreshold.toFixed(4) : "—"})을
-                            만족하는 심볼이 없어.
-                        </div>
-                    ) : null}
-                </div>
-
-                {/* 오른쪽 */}
-                <div>
-                    {visibleSymbols.map((s) => (
-                        <CfdChartPanel
-                            key={s}
-                            symbol={s}
-                            sessionKey={selectedDate}
-                            thr={metaMap[s]?.ma_threshold}
-                            crossTimes={metaMap[s]?.cross_times}
-                            onStats={onStats}
-                            onSessionKeys={onSessionKeys}
-                        />
-                    ))}
-
-                    {/* 차트가 0이면 안내 */}
-                    {visibleSymbols.length === 0 ? (
-                        <div
-                            style={{
-                                padding: 16,
-                                borderRadius: 14,
-                                background: "#151515",
-                                border: "1px solid #262626",
-                                opacity: 0.9,
-                                fontSize: 14,
-                            }}
-                        >
-                            표시할 차트가 없어. (min_ma_threshold 기준 미달 또는 아직 확인중)
-                        </div>
-                    ) : null}
-                </div>
+                {/* 차트가 0이면 안내 */}
+                {visibleSymbols.length === 0 ? (<div
+                    style={{
+                        padding: 16,
+                        borderRadius: 14,
+                        background: "#151515",
+                        border: "1px solid #262626",
+                        opacity: 0.9,
+                        fontSize: 14,
+                    }}
+                >
+                    표시할 차트가 없어. (min_ma_threshold 기준 미달 또는 아직 확인중)
+                </div>) : null}
             </div>
         </div>
-    );
+    </div>);
 }
