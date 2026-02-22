@@ -369,7 +369,7 @@ export default function ChartPanel({
                 }
             });
         };
-    }, [wsHub, symbol, visibleRange, renderWindow]);
+    }, [wsHub, symbol, visibleRange, renderWindow, onStats]);
 
     return (<div style={{marginBottom: 28}}>
             <div style={{fontSize: 20, opacity: 0.8, marginBottom: 6}}>
