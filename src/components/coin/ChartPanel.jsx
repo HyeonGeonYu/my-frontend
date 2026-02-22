@@ -1,5 +1,5 @@
 // src/components/coin/ChartPanel.jsx
-import React, {useEffect, useState, useCallback, useMemo, useRef} from "react";
+import React, {useEffect, useState, useCallback,  useRef} from "react";
 import SignalNotesPanel from "../common/SignalNotesPanel";
 import ChartView from "../common/ChartView";
 import {
