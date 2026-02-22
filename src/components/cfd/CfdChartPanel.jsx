@@ -1,632 +1,431 @@
 // src/components/cfd/CfdChartPanel.jsx
-import React, {useEffect, useMemo, useRef, useState, useCallback} from "react";
-import {createChart} from "lightweight-charts";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import ChartView from "../common/ChartView";
+import SignalNotesPanel from "../common/SignalNotesPanel";
 import {
-    getWsHub, mergeBars, fmtKSTFull, fmtKSTHour, fmtKSTHMS, buildCrossMarkers, fmtComma, getTs,
+  getWsHub,
+  mergeBars,
+  fmtKSTHour,
+  buildCrossMarkers,
+  fmtComma,
+  sliceWithBuffer,
 } from "../../lib/tradeUtils";
-import {fetchSignals, buildSignalAnnotations} from "../../lib/tradeUtils";
+import { fetchSignals, buildSignalAnnotations } from "../../lib/tradeUtils";
 
 const API_BASE = "https://api.hyeongeonnoil.com";
 const PAGE_LIMIT = 1000;
 
-// ✅ 8일치(버퍼 포함) 로딩
-const TARGET_CANDLE_COUNT = 8 * 1440;
+const MA_BUF = 99;
+const ONE_DAY_SEC = 86400;
 
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000; // UTC → KST
-const SESSION_START_MIN = 6 * 60 + 50; // KST 06:50
+/* -------------------- CACHE -------------------- */
+// symbol -> Map(dayOffset -> rows)
+const candleCache = new Map();
+const signalCache = new Map();
+const MAX_DAYS_PER_SYMBOL = 8;
 
-/* ------------------------- helpers ------------------------- */
+function touchCandleCache(symbol, dayKey, rows) {
+  const sym = symbol.toUpperCase();
+  if (!candleCache.has(sym)) candleCache.set(sym, new Map());
+  const symMap = candleCache.get(sym);
 
-// UTC ms → 세션 날짜(KST 기준) "YYYY-MM-DD"
-function getSessionKeyFromUtcMs(msUtc) {
-    const msKst = msUtc + KST_OFFSET_MS;
-    const d = new Date(msKst);
+  // LRU-ish
+  if (symMap.has(dayKey)) symMap.delete(dayKey);
+  symMap.set(dayKey, rows);
 
-    const h = d.getUTCHours();
-    const m = d.getUTCMinutes();
-    const minutes = h * 60 + m;
-
-    let sessionDate;
-    if (minutes >= SESSION_START_MIN) sessionDate = d; else sessionDate = new Date(msKst - 24 * 60 * 60 * 1000);
-
-    const year = sessionDate.getUTCFullYear();
-    const month = sessionDate.getUTCMonth() + 1;
-    const day = sessionDate.getUTCDate();
-    const pad = (n) => (n < 10 ? "0" + n : "" + n);
-
-    return `${year}-${pad(month)}-${pad(day)}`;
+  while (symMap.size > MAX_DAYS_PER_SYMBOL) {
+    const firstKey = symMap.keys().next().value;
+    symMap.delete(firstKey);
+  }
 }
 
-// 세션 시작: KST 06:50
-function getSessionWindowUtcSec(sessionKey) {
-    if (!sessionKey) return [NaN, NaN];
-
-    const [y, m, d] = String(sessionKey)
-        .split("-")
-        .map((v) => Number(v));
-
-    if (![y, m, d].every(Number.isFinite)) return [NaN, NaN];
-
-    const startMsUtc = Date.UTC(y, m - 1, d, 6, 50, 0) - KST_OFFSET_MS;
-    const start = Math.floor(startMsUtc / 1000);
-    const end = start + 86400;
-    return [start, end];
+function getCachedRows(symbol, dayKey) {
+  const symMap = candleCache.get(symbol.toUpperCase());
+  if (!symMap) return null;
+  return symMap.get(dayKey) || null;
 }
 
-// rows(list) -> sessionGroups
-function groupBySessionKstWithGaps(rows) {
-    const groups = {};
+/* -------------------- UTILS -------------------- */
 
-    for (const row of rows) {
-        const [msUtc, o, h, l, c] = row;
+function getDayWindowByOffset(anchorEndUtcSec, offsetDays = 0) {
+  const end = Number(anchorEndUtcSec) + Number(offsetDays) * ONE_DAY_SEC;
+  return [end - ONE_DAY_SEC, end];
+}
 
-        const sessionKey = getSessionKeyFromUtcMs(msUtc);
-        const timeSec = Math.floor(msUtc / 1000);
-
-        if (!groups[sessionKey]) groups[sessionKey] = [];
-
-        if (o == null || h == null || l == null || c == null) {
-            groups[sessionKey].push({time: timeSec}); // whitespace
-        } else {
-            groups[sessionKey].push({time: timeSec, open: o, high: h, low: l, close: c});
-        }
-    }
-
-    for (const k of Object.keys(groups)) groups[k].sort((a, b) => a.time - b.time);
-    return groups;
+function rowsToBars(rows) {
+  return (rows || [])
+    .filter((r) => r && r[0] != null && r[1] != null && r[2] != null && r[3] != null && r[4] != null)
+    .map((r) => ({
+      time: Math.floor(Number(r[0]) / 1000),
+      open: Number(r[1]),
+      high: Number(r[2]),
+      low: Number(r[3]),
+      close: Number(r[4]),
+    }))
+    .sort((a, b) => a.time - b.time);
 }
 
 function calcSMAFromCandles(candles, win = 100) {
-    const out = [];
+  const out = [];
+  let sum = 0;
+  const q = [];
+  for (const c of candles) {
+    const v = Number(c?.close);
+    if (!Number.isFinite(v)) continue;
+    q.push(v);
+    sum += v;
+    if (q.length > win) sum -= q.shift();
+    if (q.length === win) out.push({ time: c.time, value: sum / win });
+  }
+  return out;
+}
+
+function buildStats(bars) {
+  if (!bars?.length) return { ma100: null, chg3mPct: null };
+
+  let ma100 = null;
+  if (bars.length >= 100) {
     let sum = 0;
-    const q = [];
+    for (let i = bars.length - 100; i < bars.length; i++) sum += bars[i].close;
+    ma100 = sum / 100;
+  }
 
-    for (const c of candles) {
-        const v = Number(c?.close);
-        if (!Number.isFinite(v)) continue;
+  let chg3mPct = null;
+  if (bars.length >= 3) {
+    const last = bars[bars.length - 1]?.close ?? null;
+    const prev3 = bars[bars.length - 3]?.close;
+    if (prev3 && last != null) chg3mPct = ((last - prev3) / prev3) * 100;
+  }
 
-        q.push(v);
-        sum += v;
+  return { ma100, chg3mPct };
+}
 
-        if (q.length > win) sum -= q.shift();
-        if (q.length === win) out.push({time: c.time, value: sum / win});
+// ✅ start~end(+MA buffer) 충분히 커버될 때까지 페이지 로드
+async function fetchCandlesForWindow(symbol, interval, startSec, endSec, signal) {
+  const wantStart = startSec - MA_BUF * 60;
+
+  let rows = [];
+  let nextCursor = null;
+
+  for (let i = 0; i < 12; i++) {
+    const url = new URL("/v5/market/candles/with-gaps", API_BASE);
+    url.searchParams.set("symbol", symbol.toUpperCase());
+    url.searchParams.set("interval", String(interval));
+    url.searchParams.set("limit", String(PAGE_LIMIT));
+    if (nextCursor != null) url.searchParams.set("end", String(nextCursor));
+
+    const res = await fetch(url, signal ? { signal } : undefined);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    if (data?.retCode !== 0) throw new Error(`API error (${data?.retCode}): ${data?.retMsg}`);
+
+    const list = data?.result?.list || [];
+    if (!list.length) break;
+
+    rows = rows.concat(list);
+
+    let minMs = Infinity;
+    for (const r of list) {
+      const ms = Number(r?.[0]);
+      if (Number.isFinite(ms) && ms < minMs) minMs = ms;
     }
 
-    return out;
+    const oldestSec = Number.isFinite(minMs) ? Math.floor(minMs / 1000) : Infinity;
+    if (oldestSec <= wantStart) break;
+
+    nextCursor = data?.result?.nextCursor ?? null;
+    if (!nextCursor) break;
+  }
+
+  rows.sort((a, b) => Number(a[0]) - Number(b[0]));
+  return rows;
 }
 
-function calcLatestMAFromRows(rows, period = 100) {
-    const closes = (rows || []).filter((r) => r?.[4] != null).map((r) => Number(r[4]));
-    if (closes.length < period) return null;
+/* -------------------- COMPONENT -------------------- */
 
-    let sum = 0;
-    for (let i = closes.length - period; i < closes.length; i++) sum += closes[i];
-    return sum / period;
-}
-
-function buildSymbolStats(rows) {
-    const valid = (rows || []).filter((r) => r?.[4] != null);
-    if (!valid.length) return {price: null, ma100: null, chg3mPct: null};
-
-    const lastClose = Number(valid[valid.length - 1][4]);
-    const ma100 = calcLatestMAFromRows(valid, 100);
-
-    let chg3mPct = null;
-    if (valid.length >= 3) {
-        const prev3 = Number(valid[valid.length - 3][4]);
-        if (prev3) chg3mPct = ((lastClose - prev3) / prev3) * 100;
-    }
-    return {price: lastClose, ma100, chg3mPct};
-}
-
-async function fetchPagedCandles(symbol, interval, targetCount) {
-    let allRows = [];
-    let nextCursor = null;
-
-    while (allRows.length < targetCount) {
-        const url = new URL("/v5/market/candles/with-gaps", API_BASE);
-        url.searchParams.set("symbol", symbol.toUpperCase());
-        url.searchParams.set("interval", interval);
-        url.searchParams.set("limit", String(PAGE_LIMIT));
-        if (nextCursor != null) url.searchParams.set("end", String(nextCursor));
-
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const data = await res.json();
-        if (data.retCode !== 0) throw new Error(`API error (${data.retCode}): ${data.retMsg}`);
-
-        const result = data.result || {};
-        const rows = result.list || [];
-        if (!rows.length) break;
-
-        allRows = allRows.concat(rows);
-        nextCursor = result.nextCursor;
-        if (nextCursor == null) break;
-    }
-
-    allRows.sort((a, b) => a[0] - b[0]);
-    if (allRows.length > targetCount) allRows = allRows.slice(allRows.length - targetCount);
-    return allRows;
-}
-
-// ✅ coin의 sliceWithBuffer(세션 시작 전 99개 캔들 버퍼)
-function sliceWithBuffer(all, start, end, bufferBars = 99) {
-    if (!Array.isArray(all) || !all.length) return [];
-    const inRange = all.filter((b) => b.time >= start && b.time < end);
-    const before = all.filter((b) => b.time < start);
-    const buf = before.slice(Math.max(0, before.length - bufferBars));
-    return buf.concat(inRange);
-}
-
-/* ------------------------- Component ------------------------- */
 export default function CfdChartPanel({
-                                          symbol, sessionKey, // 레거시 입력(부모)
-                                          thr, crossTimes, onStats, onSessionKeys, onBounds,
-                                      }) {
-    const wsHub = useMemo(() => getWsHub("wss://api.hyeongeonnoil.com/ws"), []);
+  symbol,
+  dayOffset,
+  anchorEndUtcSec,
+  thr,
+  crossTimes,
+  onStats,
+  onBounds,
+}) {
+  const wsHub = useMemo(() => getWsHub("wss://api.hyeongeonnoil.com/ws"), []);
 
-    const wrapRef = useRef(null);
-    const chartRef = useRef(null);
-    const seriesRef = useRef(null);
-    const maSeriesRef = useRef(null);
-    const maUpperSeriesRef = useRef(null);
-    const maLowerSeriesRef = useRef(null);
+  const allBarsRef = useRef([]);
+  const markersAllRef = useRef([]);
+  const notesAllRef = useRef([]);
 
-    const markersAllRef = useRef([]);
-    const rowsRef = useRef([]);
-    const allRealCandlesRef = useRef([]);
+  const [loading, setLoading] = useState(false);
+  const [displayCandles, setDisplayCandles] = useState([]);
+  const [ma100, setMa100] = useState([]);
+  const [markers, setMarkers] = useState([]);
+  const [visibleRange, setVisibleRange] = useState(null);
+  const [notesView, setNotesView] = useState([]);
 
-    const [sessionGroups, setSessionGroups] = useState({});
+  // StrictMode / 빠른 이동에서도 안전하게: "이번 로드" 식별자
+  const loadSeqRef = useRef(0);
 
-    // ✅ 부모 sessionKey가 꼬이거나 groups에 없을 때도 “최근 세션”으로 fallback
-    const [effectiveSessionKey, setEffectiveSessionKey] = useState(sessionKey || "");
+  // prefetch 중복 방지 + 취소 컨트롤
+  const prefetchedRef = useRef(false);
+  const prefetchAbortRef = useRef(null);
 
-    // UI notes
-    const [notesView, setNotesView] = useState([]);
-    const visibleNotes = useMemo(() => {
-        if (!effectiveSessionKey) return [];
-        const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
-        if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  useEffect(() => {
+    onBounds?.(symbol, { min: -6, max: 0 });
+  }, [onBounds, symbol]);
 
-        return (notesView || [])
-            .filter((n) => {
-                const t = Number(n?.timeSec);
-                return Number.isFinite(t) && t >= start && t < end;
-            })
-            .sort((a, b) => Number(a?.timeSec || 0) - Number(b?.timeSec || 0));
-    }, [notesView, effectiveSessionKey]);
+  const ensureSignals = useCallback(async (symUpper) => {
+    if (!signalCache.has(symUpper)) {
+      const sigs = await fetchSignals(symUpper, "mt5").catch(() => []);
+      const { markers, notes } = buildSignalAnnotations(sigs);
+      signalCache.set(symUpper, { markers: markers || [], notes: notes || [] });
+    }
+    const s = signalCache.get(symUpper);
+    markersAllRef.current = s?.markers || [];
+    notesAllRef.current = s?.notes || [];
+  }, []);
 
-    const [notesCollapsed, setNotesCollapsed] = useState(true);
-    useEffect(() => setNotesCollapsed(true), [sessionKey, effectiveSessionKey]);
+  const renderWindow = useCallback(
+    (start, end) => {
+      const real = (allBarsRef.current || []).filter((b) => b.time >= start && b.time < end).sort((a, b) => a.time - b.time);
 
-    // ✅ sessionGroups -> 최근 7개만 부모로 전달 + bounds도 -6..0로 고정
-    const lastKeysSigRef = useRef("");
-    useEffect(() => {
-        const keys = Object.keys(sessionGroups || {}).sort();
-        if (!keys.length) return;
-
-        const last7 = keys.slice(-7);
-        const sig = last7.join("|");
-
-        if (typeof onSessionKeys === "function" && sig !== lastKeysSigRef.current) {
-            lastKeysSigRef.current = sig;
-            onSessionKeys(symbol, last7);
-        }
-
-        if (typeof onBounds === "function") {
-            onBounds(symbol, {min: -6, max: 0});
-        }
-
-        const want = sessionKey && keys.includes(sessionKey) ? sessionKey : last7[last7.length - 1];
-        setEffectiveSessionKey(want);
-    }, [sessionGroups, onSessionKeys, onBounds, symbol, sessionKey]);
-
-    const pushStatsUp = useCallback(() => {
-        if (typeof onStats !== "function") return;
-        const stats = buildSymbolStats(rowsRef.current || []);
-        onStats(symbol, stats);
-    }, [onStats, symbol]);
-
-    const CHART_HEIGHT = 320;
-    const CHART_WIDTH = 800;
-
-    /* ------------------------- chart init ------------------------- */
-    useEffect(() => {
-        const el = wrapRef.current;
-        if (!el) return;
-
-        try {
-            chartRef.current?.remove();
-        } catch {
-        }
-        chartRef.current = null;
-        seriesRef.current = null;
-        maSeriesRef.current = null;
-        maUpperSeriesRef.current = null;
-        maLowerSeriesRef.current = null;
-
-        const chart = createChart(el, {
-            width: CHART_WIDTH,
-            height: CHART_HEIGHT,
-            autoSize: false,
-            layout: {background: {color: "#111"}, textColor: "#ddd"},
-            grid: {
-                vertLines: {color: "rgba(255,255,255,0.06)"}, horzLines: {color: "rgba(255,255,255,0.06)"},
-            },
-            timeScale: {
-                timeVisible: true,
-                secondsVisible: false,
-                lockVisibleTimeRangeOnResize: true,
-                fixLeftEdge: true,
-                tickMarkFormatter: (t) => {
-                    const ts = typeof t === "number" ? t : t?.timestamp ? t.timestamp : 0;
-                    return fmtKSTHour(ts);
-                },
-            },
-            rightPriceScale: {borderVisible: false},
-            crosshair: {mode: 1},
-            localization: {timeFormatter: (t) => fmtKSTFull(getTs(t))},
-            handleScroll: {
-                mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false,
-            },
-            handleScale: {
-                axisDoubleClickReset: false, axisPressedMouseMove: false, mouseWheel: false, pinch: false,
-            },
-        });
-
-        const candleSeries = chart.addCandlestickSeries({
-            upColor: "#2fe08d",
-            downColor: "#ff6b6b",
-            borderUpColor: "#2fe08d",
-            borderDownColor: "#ff6b6b",
-            wickUpColor: "#2fe08d",
-            wickDownColor: "#ff6b6b",
-        });
-
-        const maSeries = chart.addLineSeries({
-            lineWidth: 2, priceLineVisible: false, lastValueVisible: true, color: "#ffd166",
-        });
-
-        const maUpperSeries = chart.addLineSeries({
-            lineWidth: 1, priceLineVisible: false, lastValueVisible: false, color: "#9ca3af",
-        });
-
-        const maLowerSeries = chart.addLineSeries({
-            lineWidth: 1, priceLineVisible: false, lastValueVisible: false, color: "#9ca3af",
-        });
-
-        chartRef.current = chart;
-        seriesRef.current = candleSeries;
-        maSeriesRef.current = maSeries;
-        maUpperSeriesRef.current = maUpperSeries;
-        maLowerSeriesRef.current = maLowerSeries;
-
-        const ro = new ResizeObserver(() => {
-            if (!wrapRef.current) return;
-            const w = wrapRef.current.clientWidth || CHART_WIDTH;
-            chart.applyOptions({width: w});
-        });
-        ro.observe(wrapRef.current);
-
-        return () => {
-            ro.disconnect();
-            try {
-                chart.remove();
-            } catch {
-            }
-        };
-    }, [symbol]);
-
-    /* ------------------------- initial REST load ------------------------- */
-    useEffect(() => {
-        let alive = true;
-
-        (async () => {
-            try {
-                const sigs = await fetchSignals(symbol, "mt5").catch(() => []);
-                const {markers, notes} = buildSignalAnnotations(sigs);
-                setNotesView(notes);
-                markersAllRef.current = markers || [];
-
-                const rows = await fetchPagedCandles(symbol, "1", TARGET_CANDLE_COUNT);
-                if (!alive) return;
-
-                rowsRef.current = rows;
-
-                allRealCandlesRef.current = (rows || [])
-                    .filter((r) => r && r[1] != null && r[2] != null && r[3] != null && r[4] != null)
-                    .map((r) => ({
-                        time: Math.floor(Number(r[0]) / 1000),
-                        open: Number(r[1]),
-                        high: Number(r[2]),
-                        low: Number(r[3]),
-                        close: Number(r[4]),
-                    }))
-                    .sort((a, b) => a.time - b.time);
-
-                const groups = groupBySessionKstWithGaps(rows);
-                setSessionGroups(groups);
-
-                pushStatsUp();
-            } catch {
-                // ignore
-            }
-        })();
-
-        return () => {
-            alive = false;
-        };
-    }, [symbol, pushStatsUp]);
-
-    /* ------------------------- selected candles ------------------------- */
-    const selectedCandles = useMemo(() => {
-        if (!effectiveSessionKey) return [];
-
-        const raw = sessionGroups?.[effectiveSessionKey] || [];
-        const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
-        if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
-
-        const real = raw
-            .filter((c) => c && c.time >= start && c.time < end && c.open != null)
-            .sort((a, b) => a.time - b.time);
-
-        const filled = [];
-        let ri = 0;
-        for (let t = start; t < end; t += 60) {
-            const r = real[ri];
-            if (r && Math.floor(r.time / 60) * 60 === t) {
-                filled.push(r);
-                ri++;
-            } else {
-                filled.push({time: t}); // whitespace
-            }
-        }
-        return filled;
-    }, [sessionGroups, effectiveSessionKey]);
-
-    /* ------------------------- WS via wsHub ------------------------- */
-    useEffect(() => {
-        const tTopic = `tickers.${symbol}`;
-        const kTopic = `kline.1.${symbol}`;
-        const topics = [tTopic, kTopic];
-
-        try {
-            wsHub.subscribe?.(topics);
-        } catch {
-        }
-
-        const offT = wsHub.addListener?.(tTopic, (d) => {
-            const bid = Number(d?.bid1Price ?? d?.bid);
-            const ask = Number(d?.ask1Price ?? d?.ask);
-
-            const mid = Number.isFinite(bid) && Number.isFinite(ask) ? (bid + ask) / 2 : NaN;
-
-            const last = Number(d?.lastPrice ?? d?.last ?? d?.price);
-
-            const px = Number.isFinite(mid) ? mid : last;
-            if (!Number.isFinite(px)) return;
-
-            onStats?.(symbol, {price: px});
-        });
-
-
-        const offK = wsHub.addListener?.(kTopic, (d) => {
-            const rawStart = Number(d?.start);
-            const o = Number(d?.open);
-            const h = Number(d?.high);
-            const l = Number(d?.low);
-            const c = Number(d?.close);
-
-            const startMsUtc = Number.isFinite(rawStart) ? (rawStart < 2e10 ? rawStart * 1000 : rawStart) : NaN;
-            if (!Number.isFinite(startMsUtc) || ![o, h, l, c].every(Number.isFinite)) return;
-
-            const row = [startMsUtc, o, h, l, c];
-            const rows = rowsRef.current || [];
-            let nextRows = rows;
-
-            if (rows.length && rows[rows.length - 1][0] === startMsUtc) {
-                nextRows = rows.slice(0, -1).concat([row]);
-            } else {
-                nextRows = rows.concat([row]);
-                if (nextRows.length > TARGET_CANDLE_COUNT) nextRows = nextRows.slice(-TARGET_CANDLE_COUNT);
-            }
-            rowsRef.current = nextRows;
-
-            allRealCandlesRef.current = (nextRows || [])
-                .filter((r) => r && r[1] != null && r[2] != null && r[3] != null && r[4] != null)
-                .map((r) => ({
-                    time: Math.floor(Number(r[0]) / 1000),
-                    open: Number(r[1]),
-                    high: Number(r[2]),
-                    low: Number(r[3]),
-                    close: Number(r[4]),
-                }))
-                .sort((a, b) => a.time - b.time);
-
-            const timeSec = Math.floor(startMsUtc / 1000);
-            const candle = {time: timeSec, open: o, high: h, low: l, close: c};
-            const sk = getSessionKeyFromUtcMs(startMsUtc);
-
-            setSessionGroups((prev) => {
-                const old = prev?.[sk] || [];
-                const merged = mergeBars(old, candle);
-                return {...(prev || {}), [sk]: merged};
-            });
-
-            pushStatsUp();
-        });
-
-        return () => {
-            try {
-                wsHub.unsubscribe?.(topics);
-            } catch {
-            }
-            try {
-                offT?.();
-            } catch {
-            }
-            try {
-                offK?.();
-            } catch {
-            }
-        };
-    }, [wsHub, symbol, onStats, pushStatsUp]);
-
-    /* ------------------------- draw (candles + MA + env + markers) ------------------------- */
-    useEffect(() => {
-        const candleSeries = seriesRef.current;
-        const maSeries = maSeriesRef.current;
-        const maUpper = maUpperSeriesRef.current;
-        const maLower = maLowerSeriesRef.current;
-
-        if (!candleSeries || !maSeries || !maUpper || !maLower) return;
-        if (!effectiveSessionKey) return;
-
-        candleSeries.setData(selectedCandles || []);
-
-        const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
-        if (!Number.isFinite(start) || !Number.isFinite(end)) return;
-
-        const forMa = sliceWithBuffer(allRealCandlesRef.current || [], start, end, 99);
-        const ma100 = calcSMAFromCandles(forMa, 100).filter((p) => p.time >= start && p.time < end);
-        maSeries.setData(ma100);
-
-        if (typeof thr === "number" && isFinite(thr) && thr > 0) {
-            maUpper.setData(ma100.map((p) => ({time: p.time, value: p.value * (1 + thr)})));
-            maLower.setData(ma100.map((p) => ({time: p.time, value: p.value * (1 - thr)})));
+      // 1분 placeholder 채우기
+      const filled = [];
+      let ri = 0;
+      for (let t = start; t < end; t += 60) {
+        const r = real[ri];
+        if (r && Math.floor(r.time / 60) * 60 === t) {
+          filled.push(r);
+          ri++;
         } else {
-            maUpper.setData([]);
-            maLower.setData([]);
+          filled.push({ time: t });
         }
+      }
+      setDisplayCandles(filled);
 
-        const arr = Array.isArray(crossTimes) ? crossTimes : [];
-        const base = (markersAllRef.current || []).filter((x) => x.time >= start && x.time < end);
-        const cross = buildCrossMarkers(arr, start, end);
+      const forMa = sliceWithBuffer(allBarsRef.current || [], start, end, MA_BUF);
+      const ma = calcSMAFromCandles(forMa, 100).filter((p) => p.time >= start && p.time < end);
+      setMa100(ma);
 
-        const merged = [...base, ...cross].sort((a, b) => {
-            if (a.time !== b.time) return a.time - b.time;
-            return String(a.text || "").localeCompare(String(b.text || ""));
-        });
+      const base = (markersAllRef.current || []).filter((x) => x.time >= start && x.time < end);
+      const cross = buildCrossMarkers(Array.isArray(crossTimes) ? crossTimes : [], start, end);
+      const merged = [...base, ...cross].sort((a, b) => {
+        if (a.time !== b.time) return a.time - b.time;
+        return String(a.text || "").localeCompare(String(b.text || ""));
+      });
+      setMarkers(merged);
 
-        if (typeof candleSeries.setMarkers === "function") {
-            candleSeries.setMarkers(merged);
-        }
-    }, [selectedCandles, thr, crossTimes, effectiveSessionKey]);
+      const nv = (notesAllRef.current || []).filter((n) => {
+        const t = Number(n?.timeSec);
+        return Number.isFinite(t) && t >= start && t < end;
+      }).sort((a, b) => Number(a?.timeSec || 0) - Number(b?.timeSec || 0));
+      setNotesView(nv);
 
-    /* ------------------------- visible range ------------------------- */
-    useEffect(() => {
-        if (!effectiveSessionKey) return;
-        const [start, end] = getSessionWindowUtcSec(effectiveSessionKey);
-        if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+      onStats?.(symbol, buildStats(real));
+    },
+    [crossTimes, onStats, symbol]
+  );
+
+  // ✅ 오늘 로드 끝나면 백그라운드로 -1..-7 순차 prefetch
+  const prefetchPastDays = useCallback(
+    async (symUpper) => {
+      // 이미 시작했으면 중복 방지
+      if (prefetchedRef.current) return;
+      prefetchedRef.current = true;
+
+      // 기존 프리패치 있으면 취소
+      try { prefetchAbortRef.current?.abort(); } catch {}
+      const ac = new AbortController();
+      prefetchAbortRef.current = ac;
+
+      for (let offset = -1; offset >= -7; offset--) {
+        if (ac.signal.aborted) return;
+
+        const dayKey = String(offset);
+        if (getCachedRows(symUpper, dayKey)) continue;
+
+        const [start, end] = getDayWindowByOffset(anchorEndUtcSec, offset);
 
         try {
-            chartRef.current?.timeScale?.()?.setVisibleRange({from: start, to: end - 60});
-        } catch {
+          const rows = await fetchCandlesForWindow(symUpper, "1", start, end, ac.signal);
+          if (ac.signal.aborted) return;
+          touchCandleCache(symUpper, dayKey, rows);
+        } catch (e) {
+          if (e?.name === "AbortError") return;
+          // prefetch는 실패해도 UX에 치명적이지 않게 조용히
+          console.warn(`[CFD prefetch] failed offset=${offset}`, e);
         }
-    }, [effectiveSessionKey, symbol]);
+      }
+    },
+    [anchorEndUtcSec]
+  );
 
-    return (<div style={{marginBottom: 28}}>
-        <div style={{fontSize: 20, opacity: 0.8, marginBottom: 6}}>
-            {symbol}
-            <span style={{marginLeft: 10, fontSize: 12, opacity: 0.65}}>
-          (show: {effectiveSessionKey || "—"} / loaded: {TARGET_CANDLE_COUNT})
+  /* -------------------- MAIN LOAD (dayOffset / symbol) -------------------- */
+  useEffect(() => {
+    if (!Number.isFinite(Number(anchorEndUtcSec))) return;
+
+    const symUpper = symbol.toUpperCase();
+    const [start, end] = getDayWindowByOffset(anchorEndUtcSec, dayOffset);
+    const dayKey = String(dayOffset);
+
+    const mySeq = ++loadSeqRef.current;
+
+    // UI reset (이전 차트 잔상 제거)
+    setLoading(true);
+    setVisibleRange({ start, end });
+    setDisplayCandles([]);
+    setMa100([]);
+    setMarkers([]);
+    setNotesView([]);
+
+    // dayOffset가 0(오늘)으로 돌아오면 프리패치를 다시 허용하지는 않음(페이지 유지 동안 1회)
+    // 만약 "오늘 눌렀을 때마다 다시 프리패치" 원하면 여기서 prefetchedRef.current=false 처리하면 됨.
+    // 지금은 1회만 돌리는게 안전.
+    // prefetchedRef.current = false; // <- 원하면 활성화
+
+    const cached = getCachedRows(symUpper, dayKey);
+    const ac = new AbortController();
+
+    (async () => {
+      try {
+        await ensureSignals(symUpper);
+
+        // ✅ 캐시 히트면 fetch 없이 즉시 렌더
+        if (cached) {
+          if (loadSeqRef.current !== mySeq) return;
+          allBarsRef.current = rowsToBars(cached);
+          renderWindow(start, end);
+
+          // ✅ 오늘이면 캐시여도 프리패치 시작
+          if (dayOffset === 0) prefetchPastDays(symUpper);
+          return;
+        }
+
+        // ✅ 캐시 미스면 fetch
+        const rows = await fetchCandlesForWindow(symUpper, "1", start, end, ac.signal);
+        if (loadSeqRef.current !== mySeq) return;
+
+        touchCandleCache(symUpper, dayKey, rows);
+        allBarsRef.current = rowsToBars(rows);
+        renderWindow(start, end);
+
+        // ✅ 오늘이면 fetch 끝난 직후 프리패치
+        if (dayOffset === 0) prefetchPastDays(symUpper);
+      } catch (e) {
+        if (e?.name === "AbortError") return; // dev StrictMode / 빠른 이동 정상
+        console.error("[CFD] load failed:", e);
+      } finally {
+        if (loadSeqRef.current === mySeq) setLoading(false);
+      }
+    })();
+
+    return () => {
+      try { ac.abort(); } catch {}
+    };
+  }, [symbol, dayOffset, anchorEndUtcSec, ensureSignals, renderWindow, prefetchPastDays]);
+
+  /* -------------------- WS (현재 window만 갱신) -------------------- */
+  useEffect(() => {
+    const tTopic = `tickers.${symbol}`;
+    const kTopic = `kline.1.${symbol}`;
+    const topics = [tTopic, kTopic];
+
+    try { wsHub.subscribe?.(topics); } catch {}
+
+    const offT = wsHub.addListener?.(tTopic, (d) => {
+      const bid = Number(d?.bid1Price ?? d?.bid);
+      const ask = Number(d?.ask1Price ?? d?.ask);
+      const mid = Number.isFinite(bid) && Number.isFinite(ask) ? (bid + ask) / 2 : NaN;
+      const last = Number(d?.lastPrice ?? d?.last ?? d?.price);
+      const px = Number.isFinite(mid) ? mid : last;
+      if (!Number.isFinite(px)) return;
+      onStats?.(symbol, { price: px });
+    });
+
+    const offK = wsHub.addListener?.(kTopic, (d) => {
+      const vr = visibleRange;
+      if (!vr?.start || !vr?.end) return;
+
+      const rawStart = Number(d?.start);
+      const o = Number(d?.open);
+      const h = Number(d?.high);
+      const l = Number(d?.low);
+      const c = Number(d?.close);
+
+      const startMsUtc = Number.isFinite(rawStart) ? (rawStart < 2e10 ? rawStart * 1000 : rawStart) : NaN;
+      if (!Number.isFinite(startMsUtc) || ![o, h, l, c].every(Number.isFinite)) return;
+
+      const bar = { time: Math.floor(startMsUtc / 1000), open: o, high: h, low: l, close: c };
+      allBarsRef.current = mergeBars(allBarsRef.current || [], bar);
+
+      // 현재 윈도우만 다시 렌더
+      renderWindow(vr.start, vr.end);
+    });
+
+    return () => {
+      try { wsHub.unsubscribe?.(topics); } catch {}
+      try { offT?.(); } catch {}
+      try { offK?.(); } catch {}
+    };
+  }, [wsHub, symbol, onStats, visibleRange, renderWindow]);
+
+  // 컴포넌트 unmount 시 prefetch 중이면 취소
+  useEffect(() => {
+    return () => {
+      try { prefetchAbortRef.current?.abort(); } catch {}
+    };
+  }, []);
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>
+        {symbol}
+        <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.65 }}>
+          (dayOffset: {dayOffset})
         </span>
-        </div>
+      </div>
 
-        <div
-            ref={wrapRef}
+      <div style={{ width: 800, maxWidth: "100%", position: "relative" }}>
+        {loading && (
+          <div
             style={{
-                width: CHART_WIDTH, height: CHART_HEIGHT, borderRadius: 12, overflow: "hidden", background: "#111",
+              position: "absolute",
+              inset: 0,
+              background: "rgba(0,0,0,0.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 5,
+              fontWeight: 800,
+              borderRadius: 12,
+              backdropFilter: "blur(2px)",
             }}
+          >
+            로딩중...
+          </div>
+        )}
+
+        <ChartView
+          width={800}
+          height={320}
+          tickFormatter={(ts) => fmtKSTHour(ts)}
+          displayCandles={displayCandles}
+          ma100={ma100}
+          thr={thr}
+          markers={markers}
+          visibleRange={visibleRange}
         />
 
-        <div
-            style={{
-                marginTop: 10,
-                background: "#161616",
-                border: "1px solid #262626",
-                borderRadius: 12,
-                padding: "10px 12px",
-                width: CHART_WIDTH,
-                boxSizing: "border-box",
-            }}
-        >
-            <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                <div style={{fontWeight: 700, fontSize: 13, opacity: 0.9}}>
-                    {symbol} · 시그널 설명 ({visibleNotes.length})
-                </div>
-
-                <button
-                    onClick={() => setNotesCollapsed((v) => !v)}
-                    style={{
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid #2a2a2a",
-                        background: "#1f1f1f",
-                        color: "#ddd",
-                        fontSize: 12,
-                        cursor: "pointer",
-                    }}
-                    title={notesCollapsed ? "펼치기" : "접기"}
-                >
-                    {notesCollapsed ? "펼치기 ⌄" : "접기 ⌃"}
-                </button>
-            </div>
-
-            {notesCollapsed ? (
-                <div style={{fontSize: 12, opacity: 0.7, marginTop: 8}}/>) : visibleNotes.length === 0 ? (
-                <div style={{fontSize: 12, opacity: 0.7, marginTop: 8}}>시그널 없음</div>) : (
-                <div style={{display: "grid", gap: 8, marginTop: 8}}>
-                    {visibleNotes.map((n) => {
-                        const side = String(n.side || "").toUpperCase();
-                        const kind = String(n.kind || "").toUpperCase();
-                        const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
-
-                        const priceTxt = n.price != null ? fmtComma(n.price) : "—";
-                        const timeTxt = n.timeSec ? fmtKSTHMS(n.timeSec) : "";
-                        const reasonsTxt = n.reasons?.length ? `${n.reasons.join(", ")}` : "";
-
-                        return (<div
-                            key={n.key}
-                            style={{
-                                padding: "8px 10px",
-                                borderRadius: 10,
-                                background: "#1b1b1b",
-                                border: "1px solid #2a2a2a",
-                            }}
-                        >
-                            <div
-                                style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "6ch 9ch 8ch 9ch 14ch 1fr",
-                                    columnGap: 12,
-                                    alignItems: "baseline",
-                                    fontSize: 12,
-                                    lineHeight: 1.5,
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    fontVariantNumeric: "tabular-nums",
-                                }}
-                                title={[`#${n.seq}`, timeTxt, side, kind, priceTxt, fmtKSTFull(n.timeSec), reasonsTxt,]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                            >
-                                <b style={{opacity: 0.95}}>#{n.seq}</b>
-                                <span>{timeTxt}</span>
-                                <span style={{color: sideColor, fontWeight: 700}}>{side}</span>
-                                <span style={{opacity: 0.85}}>{kind}</span>
-                                <span>{priceTxt}</span>
-                                <span style={{
-                                    overflow: "hidden", textOverflow: "ellipsis", opacity: reasonsTxt ? 0.9 : 0.6
-                                }}>
-                      {reasonsTxt || "—"}
-                    </span>
-                            </div>
-                        </div>);
-                    })}
-                </div>)}
-        </div>
-    </div>);
+        <SignalNotesPanel
+          symbol={symbol}
+          notes={notesView}
+          getPriceText={(n) => (n.price != null ? fmtComma(n.price) : "—")}
+          collapseKey={`${symbol}:${dayOffset}`}
+        />
+      </div>
+    </div>
+  );
 }

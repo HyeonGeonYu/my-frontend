@@ -4,8 +4,6 @@ import Home from "../pages/Home";
 import Exchange from "../pages/Exchange";
 import Indexes from "../pages/Indexes";
 import Commodity from "../pages/Commodity";
-import KoreaStock from "../pages/KoreaStock";
-import UsStock from "../pages/UsStock";
 import Coin from "../pages/Coin";
 import Cfd from "../pages/Cfd";
 import Archive from "../pages/Archive";
@@ -40,8 +38,6 @@ function AppRouter() {
           <Route path="/exchange" element={<Exchange />} />
           <Route path="/indexes" element={<Indexes />} />
           <Route path="/commodity" element={<Commodity />} />
-          <Route path="/koreastock" element={<KoreaStock />} />
-          <Route path="/usstock" element={<UsStock />} />
           <Route path="/coin" element={<Coin />} />
           <Route path="/cfd" element={<Cfd />} />
           <Route path="/archive" element={<Archive />} />
@@ -57,8 +53,6 @@ const navItems = [
   { path: "/exchange", label: "환율, 채권", emoji: "💱" },
   { path: "/indexes", label: "지수", emoji: "📈" },
   { path: "/commodity", label: "원자재", emoji: "⛏️" },
-  { path: "/koreastock", label: "국내 개별주", emoji: "📊🇰🇷" },
-  { path: "/usstock", label: "해외 개별주", emoji: "📊🇺🇸" },
   { path: "/coin", label: "코인", emoji: "🪙" },
   { path: "/cfd", label: "CFD", emoji: "💹" },
   { path: "/archive", label: "아카이브", emoji: "🗂️" },

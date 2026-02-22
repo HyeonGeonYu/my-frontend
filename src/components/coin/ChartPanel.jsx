@@ -1,14 +1,9 @@
 // src/components/coin/ChartPanel.jsx
-
-import React, {useEffect, useState, useCallback, useRef} from "react";
-import {createChart} from "lightweight-charts";
-
+import React, {useEffect, useState, useCallback, useMemo, useRef} from "react";
+import SignalNotesPanel from "../common/SignalNotesPanel";
+import ChartView from "../common/ChartView";
 import {
-    fmtKSTFull,
     fmtKSTHour,
-    fmtKSTMonth,
-    fmtKSTHMS,
-    getTs,
     sliceWithBuffer,
     calcSMA,
     calcLatestMAValue,
@@ -17,7 +12,6 @@ import {
     buildSignalAnnotations,
     getWsHub,
     buildCrossMarkers,
-    next0650EndBoundaryUtcSec,
     genMinutePlaceholders,
     fmtComma,
 } from "../../lib/tradeUtils";
@@ -25,61 +19,49 @@ import {
 const API_BASE = "https://api.bybit.com";
 const PAGE_LIMIT = 1000;
 
-// ✅ 8일치(버퍼 포함) 로딩 (1분봉 기준)
-const TARGET_1M_COUNT = 8 * 1440;
+const ONE_DAY_SEC = 86400;
+const MA_BUF = 99;
+const MAX_1M_BARS = 43200; // 안전 상한(너무 커지면 메모리/성능 이슈)
 
-async function fetchPagedCandlesBybit(symbol, interval, targetCount) {
-    let allRows = [];
-    let endMs = Date.now(); // 최신부터 과거로 땡김
+/* -------------------- CACHE (CFD와 동일한 형태) -------------------- */
 
-    // 중복/무한루프 방지: endMs가 더 이상 줄지 않으면 중단
-    let prevEndMs = null;
+// symbol -> Map(dayOffset -> rows)
+const candleCache = new Map();
+const signalCache = new Map();
+const MAX_DAYS_PER_SYMBOL = 8;
 
-    while (allRows.length < targetCount) {
-        const url = new URL("/v5/market/kline", API_BASE);
-        url.searchParams.set("category", "linear"); // BTCUSDT/ETHUSDT 선물 기준
-        url.searchParams.set("symbol", symbol.toUpperCase());
-        url.searchParams.set("interval", String(interval)); // "1" or "D"
-        url.searchParams.set("limit", String(PAGE_LIMIT));
-        url.searchParams.set("end", String(endMs)); // ms
+function touchCandleCache(symbol, dayKey, rows) {
+    const sym = symbol.toUpperCase();
+    if (!candleCache.has(sym)) candleCache.set(sym, new Map());
+    const symMap = candleCache.get(sym);
 
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (symMap.has(dayKey)) symMap.delete(dayKey);
+    symMap.set(dayKey, rows);
 
-        const data = await res.json();
-        if (data?.retCode !== 0) throw new Error(`API error (${data?.retCode}): ${data?.retMsg}`);
-
-        const rows = data?.result?.list || [];
-        if (!rows.length) break;
-
-        allRows = allRows.concat(rows);
-
-        // 다음 end 갱신: 이번에 받은 것 중 "가장 오래된 startTime - 1ms"
-        let minTs = Infinity;
-        for (const r of rows) {
-            const ts = Number(r?.[0]);
-            if (Number.isFinite(ts) && ts < minTs) minTs = ts;
-        }
-        if (!Number.isFinite(minTs)) break;
-
-        prevEndMs = endMs;
-        endMs = minTs - 1;
-
-        if (endMs <= 0) break;
-        if (prevEndMs != null && endMs >= prevEndMs) break; // 안전장치
+    while (symMap.size > MAX_DAYS_PER_SYMBOL) {
+        const firstKey = symMap.keys().next().value;
+        symMap.delete(firstKey);
     }
+}
 
-    // 정렬 + 목표 개수만 자르기
-    allRows.sort((a, b) => Number(a[0]) - Number(b[0]));
-    if (allRows.length > targetCount) allRows = allRows.slice(allRows.length - targetCount);
-    return allRows;
+function getCachedRows(symbol, dayKey) {
+    const symMap = candleCache.get(symbol.toUpperCase());
+    if (!symMap) return null;
+    return symMap.get(dayKey) || null;
+}
+
+/* -------------------- UTILS -------------------- */
+
+function getDayWindowByOffset(anchorEndUtcSec, offsetDays = 0) {
+    const end = Number(anchorEndUtcSec) + Number(offsetDays) * ONE_DAY_SEC;
+    return [end - ONE_DAY_SEC, end];
 }
 
 function rowsToBars(rows) {
     return (rows || [])
         .filter((r) => r && r[0] != null && r[1] != null && r[2] != null && r[3] != null && r[4] != null)
         .map((r) => ({
-            time: Math.floor(Number(r[0]) / 1000), // ms -> sec
+            time: Math.floor(Number(r[0]) / 1000),
             open: Number(r[1]),
             high: Number(r[2]),
             low: Number(r[3]),
@@ -88,305 +70,296 @@ function rowsToBars(rows) {
         .sort((a, b) => a.time - b.time);
 }
 
+/**
+ * ✅ Bybit v5 kline: 특정 window(start~end) + MA buffer(이전 99분)까지 커버될 때까지 과거로 페이지네이션
+ * - 요청은 end(ms) 기준으로 과거로 내려가며 list를 누적
+ * - oldestSec <= wantStartSec 이면 stop
+ */
+async function fetchCandlesForWindowBybit(symbol, interval, startSec, endSec, signal) {
+    const wantStartSec = startSec - MA_BUF * 60;
+
+    let rows = [];
+    let endMs = Math.floor(Number(endSec) * 1000);
+    let prevEndMs = null;
+
+    for (let page = 0; page < 12; page++) {
+        const url = new URL("/v5/market/kline", API_BASE);
+        url.searchParams.set("category", "linear");
+        url.searchParams.set("symbol", symbol.toUpperCase());
+        url.searchParams.set("interval", String(interval));
+        url.searchParams.set("limit", String(PAGE_LIMIT));
+        url.searchParams.set("end", String(endMs));
+
+        const res = await fetch(url, {signal});
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (data?.retCode !== 0) throw new Error(`API error (${data?.retCode}): ${data?.retMsg}`);
+
+        const list = data?.result?.list || [];
+        if (!list.length) break;
+
+        rows = rows.concat(list);
+
+        // 이번 페이지에서 가장 오래된 ts 찾기
+        let minMs = Infinity;
+        for (const r of list) {
+            const ms = Number(r?.[0]);
+            if (Number.isFinite(ms) && ms < minMs) minMs = ms;
+        }
+        if (!Number.isFinite(minMs)) break;
+
+        const oldestSec = Math.floor(minMs / 1000);
+        if (oldestSec <= wantStartSec) break;
+
+        // 다음 페이지: 더 과거로
+        prevEndMs = endMs;
+        endMs = minMs - 1;
+
+        if (endMs <= 0) break;
+        if (prevEndMs != null && endMs >= prevEndMs) break;
+    }
+
+    rows.sort((a, b) => Number(a[0]) - Number(b[0]));
+    return rows;
+}
+
+/* -------------------- COMPONENT -------------------- */
+
 export default function ChartPanel({
-                                       symbol,
-                                       globalInterval,
-                                       dayOffset,
-                                       onBounds,
-                                       onStats,
-                                       thr,
-                                       crossTimes,
-                                       signalName,
-  priceScale, // ✅ 부모(coin.jsx)에서 내려받음
+                                       symbol, dayOffset, anchorEndUtcSec, // ✅ 부모에서 고정해서 내려받기 (CFD와 통일)
+                                       onBounds, onStats, thr, crossTimes, signalName, priceScale,
                                    }) {
-    const wrapRef = useRef(null);
-    const chartRef = useRef(null);
-    const seriesRef = useRef(null);
-    const maSeriesRef = useRef(null);
-    const maUpperSeriesRef = useRef(null);
-    const maLowerSeriesRef = useRef(null);
+    const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).current;
 
     const allBarsRef = useRef([]);
-    const dailyBarsRef = useRef([]);
     const markersAllRef = useRef([]);
     const notesAllRef = useRef([]);
 
+    const prefetchedRef = useRef(false);
+    const prefetchAbortRef = useRef(null); // prefetch 취소용
+    const loadSeqRef = useRef(0);
+
+    const [loading, setLoading] = useState(false);
+
     const [notesView, setNotesView] = useState([]);
-    const [notesCollapsed, setNotesCollapsed] = useState(true);
+    const [displayCandles, setDisplayCandles] = useState([]);
+    const [ma100, setMa100] = useState([]);
+    const [markers, setMarkers] = useState([]);
+    const [visibleRange, setVisibleRange] = useState(null);
 
-    const versionRef = useRef(0);
-    const dayOffsetRef = useRef(dayOffset);
+    const tickFormatter = useCallback((tsSec) => fmtKSTHour(tsSec), []);
 
-    const wsHub = useRef(getWsHub("wss://stream.bybit.com/v5/public/linear")).current;
-
-    useEffect(() => setNotesCollapsed(true), [dayOffset]);
+    // ✅ bounds 고정 (-7..0) (coin도 8일치 기준)
     useEffect(() => {
-        dayOffsetRef.current = dayOffset;
-    }, [dayOffset]);
+        onBounds?.(symbol, {min: -7, max: 0});
+    }, [onBounds, symbol]);
 
-    const getDayWindowByOffset = useCallback((offsetDays = 0) => {
-        const end = next0650EndBoundaryUtcSec() + offsetDays * 86400;
-        return [end - 86400, end];
-    }, []);
+    const renderWindow = useCallback((start, end, resetRange = false) => {
+        if (resetRange) setVisibleRange({start, end}); else setVisibleRange((prev) => prev || {start, end});
 
-    const renderDayWindow = useCallback(
-        (arrAll, resetRange = false) => {
-            if (!chartRef.current || !seriesRef.current) return;
+        const arrAll = allBarsRef.current || [];
+        const real = arrAll.filter((b) => b.time >= start && b.time < end);
 
-            const [start, end] = getDayWindowByOffset(dayOffsetRef.current);
+        // ✅ prefix + suffix placeholder (coin 기존 UX 유지)
+        const firstRealTime = real.length ? real[0].time : end;
+        const prefixEnd = Math.min(firstRealTime, end);
+        const prefixPlaceholders = prefixEnd > start ? genMinutePlaceholders(start, prefixEnd) : [];
 
-            const real = (arrAll || []).filter((b) => b.time >= start && b.time < end);
+        const placeStart = (real.at(-1)?.time ?? start) + 60;
+        const placeholders = placeStart < end ? genMinutePlaceholders(placeStart, end) : [];
 
-            const firstRealTime = real.length ? real[0].time : end;
-            const prefixEnd = Math.min(firstRealTime, end);
-            const prefixPlaceholders = prefixEnd > start ? genMinutePlaceholders(start, prefixEnd) : [];
+        setDisplayCandles(prefixPlaceholders.concat(real, placeholders));
 
-            const nowSec = Math.floor(Date.now() / 1000);
-            const placeStart = Math.max(nowSec + 60, (real.at(-1)?.time ?? start) + 60);
-            const placeholders = placeStart < end ? genMinutePlaceholders(placeStart, end) : [];
+        // ✅ MA
+        const forMa = sliceWithBuffer(arrAll, start, end, MA_BUF);
+        const ma = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
+        setMa100(ma);
 
-            const priceSlice = prefixPlaceholders.concat(real, placeholders);
+        // ✅ markers
+        const base = (markersAllRef.current || []).filter((x) => x.time >= start && x.time < end);
+        const cross = buildCrossMarkers(Array.isArray(crossTimes) ? crossTimes : [], start, end);
+        const mergedMarkers = [...base, ...cross].sort((a, b) => {
+            if (a.time !== b.time) return a.time - b.time;
+            return String(a.text || "").localeCompare(String(b.text || ""));
+        });
+        setMarkers(mergedMarkers);
 
-            const forMa = sliceWithBuffer(arrAll, start, end, 99);
-            const ma100 = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
+        // ✅ notes
+        const n = (notesAllRef.current || []).filter((x) => x.timeSec >= start && x.timeSec < end);
+        setNotesView(n);
 
-            seriesRef.current?.setData(priceSlice);
-            maSeriesRef.current?.setData(ma100);
+        // ✅ stats (window 기준)
+        const lastClose = real.length ? real[real.length - 1].close : null;
+        const lastMa = calcLatestMAValue(real, 100);
 
-            if (typeof thr === "number" && isFinite(thr) && thr > 0) {
-                maUpperSeriesRef.current?.setData(ma100.map((p) => ({time: p.time, value: p.value * (1 + thr)})));
-                maLowerSeriesRef.current?.setData(ma100.map((p) => ({time: p.time, value: p.value * (1 - thr)})));
-            } else {
-                maUpperSeriesRef.current?.setData([]);
-                maLowerSeriesRef.current?.setData([]);
-            }
+        const prev3 = real.length >= 3 ? real[real.length - 3].close : null;
+        const chg3mPct = prev3 && lastClose != null ? ((lastClose - prev3) / prev3) * 100 : null;
 
-            if (resetRange) {
-                try {
-                    chartRef.current?.timeScale?.()?.setVisibleRange({from: start, to: end - 60});
-                } catch {
-                }
-            }
+        onStats?.(symbol, {ma100_1m: lastMa, chg3mPct});
+    }, [crossTimes, onStats, symbol]);
 
-            const base = (markersAllRef.current || []).filter((x) => x.time >= start && x.time < end);
-            const cross = buildCrossMarkers(crossTimes || [], start, end);
+    const ensureSignals = useCallback(async (symUpper) => {
+        if (!signalCache.has(symUpper)) {
+            const sigs = await fetchSignals(symUpper, signalName || "bybit").catch(() => []);
+            const {markers: m, notes} = buildSignalAnnotations(sigs);
+            signalCache.set(symUpper, {markers: m || [], notes: notes || []});
+        }
+        const s = signalCache.get(symUpper);
+        markersAllRef.current = s?.markers || [];
+        notesAllRef.current = s?.notes || [];
+    }, [signalName]);
 
-            const m = [...base, ...cross].sort((a, b) => {
-                if (a.time !== b.time) return a.time - b.time;
-                return String(a.text || "").localeCompare(String(b.text || ""));
-            });
+    // ✅ prefetch: 오늘(0) 로드 완료 후 -1..-7 순서대로 캐시 채움
+    const prefetchPastDays = useCallback(async (symUpper) => {
+        // 이미 시작했으면 중복 방지
+        if (prefetchedRef.current) return;
+        prefetchedRef.current = true;
 
-            const n = (notesAllRef.current || []).filter((x) => x.timeSec >= start && x.timeSec < end);
-
-            seriesRef.current.setMarkers(m);
-            setNotesView(n);
-        },
-        [getDayWindowByOffset, thr, crossTimes]
-    );
-
-    const CHART_HEIGHT = 320;
-    const CHART_WIDTH = 800;
-
-    useEffect(() => {
-        const el = wrapRef.current;
-        if (!el) return;
-
-        const myVersion = ++versionRef.current;
-        const cleanups = [];
-
+        // 기존 prefetch 취소
         try {
-            chartRef.current?.remove();
+            prefetchAbortRef.current?.abort?.();
         } catch {
         }
-        chartRef.current = null;
-        seriesRef.current = null;
-        maSeriesRef.current = null;
+        const ac = new AbortController();
+        prefetchAbortRef.current = ac;
 
-        markersAllRef.current = [];
-        notesAllRef.current = [];
+        for (let offset = -1; offset >= -7; offset--) {
+            if (ac.signal.aborted) return;
+
+            const dayKey = String(offset);
+            if (getCachedRows(symUpper, dayKey)) continue;
+
+            const [start, end] = getDayWindowByOffset(anchorEndUtcSec, offset);
+
+            try {
+                const rows = await fetchCandlesForWindowBybit(symUpper, "1", start, end, ac.signal);
+                touchCandleCache(symUpper, dayKey, rows);
+            } catch (e) {
+                if (e?.name === "AbortError") return; // 정상 취소
+                console.warn("[Bybit Prefetch] failed:", symUpper, offset, e);
+            }
+        }
+    }, [anchorEndUtcSec]);
+
+    // ✅ main load: dayOffset 기준 “그 날만” 캐시/로드
+    useEffect(() => {
+        if (!Number.isFinite(Number(anchorEndUtcSec))) return;
+
+        const symUpper = symbol.toUpperCase();
+        const [start, end] = getDayWindowByOffset(anchorEndUtcSec, dayOffset);
+        const dayKey = String(dayOffset);
+
+        // 새로운 로드 시퀀스
+        const mySeq = ++loadSeqRef.current;
+
+        setLoading(true);
+        setVisibleRange({start, end});
         setNotesView([]);
+        setDisplayCandles([]);
+        setMa100([]);
+        setMarkers([]);
 
-        const chart = createChart(el, {
-            width: CHART_WIDTH,
-            height: CHART_HEIGHT,
-            autoSize: false,
-            layout: {background: {color: "#111"}, textColor: "#ddd"},
-            grid: {
-                vertLines: {color: "rgba(255,255,255,0.06)"},
-                horzLines: {color: "rgba(255,255,255,0.06)"},
-            },
-            timeScale: {
-                timeVisible: true,
-                secondsVisible: false,
-                tickMarkFormatter: (t) => {
-                    const ts = typeof t === "number" ? t : t?.timestamp ? t.timestamp : 0;
-                    return globalInterval === "D" ? fmtKSTMonth(ts) : fmtKSTHour(ts);
-                },
-                lockVisibleTimeRangeOnResize: true,
-                fixLeftEdge: true,
-            },
-            rightPriceScale: {borderVisible: false},
-            crosshair: {mode: 1},
-            localization: {timeFormatter: (t) => fmtKSTFull(getTs(t))},
-            handleScroll: {mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false},
-            handleScale: {axisDoubleClickReset: false, axisPressedMouseMove: false, mouseWheel: false, pinch: false},
-        });
+        // ✅ 캐시 히트
+        const cached = getCachedRows(symUpper, dayKey);
+        if (cached) {
+            (async () => {
+                try {
+                    await ensureSignals(symUpper);
+                    if (loadSeqRef.current !== mySeq) return;
 
-        const candleSeries = chart.addCandlestickSeries({
-            upColor: "#2fe08d",
-            downColor: "#ff6b6b",
-            borderUpColor: "#2fe08d",
-            borderDownColor: "#ff6b6b",
-            wickUpColor: "#2fe08d",
-            wickDownColor: "#ff6b6b",
-        });
+                    allBarsRef.current = rowsToBars(cached);
+                    renderWindow(start, end, true);
 
-        const maSeries = chart.addLineSeries({
-            lineWidth: 2,
-            priceLineVisible: false,
-            lastValueVisible: true,
-            color: "#ffd166"
-        });
-        const maUpperSeries = chart.addLineSeries({
-            lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: false,
-            color: "#9ca3af"
-        });
-        const maLowerSeries = chart.addLineSeries({
-            lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: false,
-            color: "#9ca3af"
-        });
 
-        if (versionRef.current !== myVersion) {
-            chart.remove();
+                    // ✅ 오늘이면 캐시여도 prefetch 보장
+                    if (dayOffset === 0) prefetchPastDays(symUpper);
+                } finally {
+                    if (loadSeqRef.current === mySeq) setLoading(false);
+                }
+            })();
             return;
         }
 
-        chartRef.current = chart;
-        seriesRef.current = candleSeries;
-        maSeriesRef.current = maSeries;
-        maUpperSeriesRef.current = maUpperSeries;
-        maLowerSeriesRef.current = maLowerSeries;
-
-        const MAX_1M_BARS = 43200;
-
+        // ✅ 캐시 미스: fetch
+        const ac = new AbortController();
         (async () => {
             try {
-                // signals (공통)
-                const sigs = await fetchSignals(symbol, signalName || "bybit").catch(() => []);
-                const {markers, notes} = buildSignalAnnotations(sigs);
-                markersAllRef.current = markers;
-                notesAllRef.current = notes;
+                await ensureSignals(symUpper);
+                if (loadSeqRef.current !== mySeq) return;
 
-                if (globalInterval === "1") {
-                    // ✅ 1분봉: 8일치
-                    const rows = await fetchPagedCandlesBybit(symbol, "1", TARGET_1M_COUNT);
-                    const bars = rowsToBars(rows);
-                    if (versionRef.current !== myVersion) return;
+                const rows = await fetchCandlesForWindowBybit(symUpper, "1", start, end, ac.signal);
+                if (loadSeqRef.current !== mySeq) return;
 
-                    allBarsRef.current = bars;
-                    renderDayWindow(allBarsRef.current, false);
+                touchCandleCache(symUpper, dayKey, rows);
 
-                    const lastCloseAll = bars.length ? bars[bars.length - 1].close : null;
-                    const lastMaAll = calcLatestMAValue(bars, 100);
+                let bars = rowsToBars(rows);
+                if (bars.length > MAX_1M_BARS) bars = bars.slice(-MAX_1M_BARS);
 
-                    const prev3 = bars.length >= 3 ? bars[bars.length - 3].close : null;
-                    const chg3mPct = prev3 && lastCloseAll != null ? ((lastCloseAll - prev3) / prev3) * 100 : null;
+                allBarsRef.current = bars;
+                renderWindow(start, end, true);
 
-                    onStats?.(symbol, {price1m: lastCloseAll, ma100_1m: lastMaAll, chg3mPct});
-                    onBounds?.(symbol, {min: -7, max: 0});
-
-                    const TOPIC_1M = `kline.1.${symbol}`;
-                    try {
-                        wsHub.subscribe?.([TOPIC_1M]);
-                    } catch {
-                    }
-                    cleanups.push(() => {
-                        try {
-                            wsHub.unsubscribe?.([TOPIC_1M]);
-                        } catch {
-                        }
-                    });
-
-                    const off1m = wsHub.addListener(TOPIC_1M, (d) => {
-                        const bar = {
-                            time: Math.floor(Number(d.start) / 1000),
-                            open: +d.open,
-                            high: +d.high,
-                            low: +d.low,
-                            close: +d.close,
-                        };
-
-                        let arr = mergeBars(allBarsRef.current || [], bar);
-                        if (arr.length > MAX_1M_BARS) arr = arr.slice(-MAX_1M_BARS);
-                        allBarsRef.current = arr;
-
-                        renderDayWindow(allBarsRef.current, true);
-
-                        const lastClose = arr.length ? arr[arr.length - 1].close : null;
-                        const lastMa = calcLatestMAValue(arr, 100);
-
-                        const prev3m = arr.length >= 3 ? arr[arr.length - 3].close : null;
-                        const chg3m = prev3m && lastClose != null ? ((lastClose - prev3m) / prev3m) * 100 : null;
-
-                        onStats?.(symbol, {price1m: lastClose, ma100_1m: lastMa, chg3mPct: chg3m});
-                    });
-
-                    cleanups.push(off1m);
-                } else {
-                    // ✅ 일봉
-                    const rows = await fetchPagedCandlesBybit(symbol, "D", 1000);
-                    const bars = rowsToBars(rows);
-                    if (versionRef.current !== myVersion) return;
-
-                    dailyBarsRef.current = bars;
-                    candleSeries.setData(bars);
-                    maSeries.setData(calcSMA(bars, 100));
-                    chart.timeScale().fitContent();
-
-                    const lastCloseD = bars.length ? bars[bars.length - 1].close : null;
-                    const lastMaD = calcLatestMAValue(bars, 100);
-                    onStats?.(symbol, {priceD: lastCloseD, ma100_D: lastMaD});
-
-                    const TOPIC_1D = `kline.D.${symbol}`;
-                    try {
-                        wsHub.subscribe?.([TOPIC_1D]);
-                    } catch {
-                    }
-                    cleanups.push(() => {
-                        try {
-                            wsHub.unsubscribe?.([TOPIC_1D]);
-                        } catch {
-                        }
-                    });
-
-                    const off1d = wsHub.addListener(TOPIC_1D, (d) => {
-                        const bar = {
-                            time: Math.floor(Number(d.start) / 1000),
-                            open: +d.open,
-                            high: +d.high,
-                            low: +d.low,
-                            close: +d.close,
-                        };
-
-                        dailyBarsRef.current = mergeBars(dailyBarsRef.current || [], bar);
-                        seriesRef.current?.update(bar);
-                        maSeriesRef.current?.setData(calcSMA(dailyBarsRef.current, 100));
-
-                        const lastClose = dailyBarsRef.current.length ? dailyBarsRef.current[dailyBarsRef.current.length - 1].close : null;
-                        const lastMa = calcLatestMAValue(dailyBarsRef.current, 100);
-                        onStats?.(symbol, {priceD: lastClose, ma100_D: lastMa});
-                    });
-
-                    cleanups.push(off1d);
-                }
+                // ✅ 오늘이면 prefetch
+                if (dayOffset === 0) prefetchPastDays(symUpper);
             } catch (e) {
-                console.error("[REST] failed", e);
+                if (e?.name === "AbortError") return; // 정상 취소 (StrictMode / 빠른 이동)
+                console.error("[Bybit] load failed:", e);
+            } finally {
+                if (loadSeqRef.current === mySeq) setLoading(false);
             }
         })();
+
+        return () => ac.abort();
+    }, [symbol, dayOffset, anchorEndUtcSec, ensureSignals, renderWindow, prefetchPastDays]);
+
+    // ✅ WS: 현재 window에 대해서만 갱신 (필요 시 cache에도 반영 가능)
+    useEffect(() => {
+        const TOPIC_1M = `kline.1.${symbol}`;
+        const cleanups = [];
+
+        try {
+            wsHub.subscribe?.([TOPIC_1M]);
+        } catch {
+        }
+        cleanups.push(() => {
+            try {
+                wsHub.unsubscribe?.([TOPIC_1M]);
+            } catch {
+            }
+        });
+
+        const off1m = wsHub.addListener?.(TOPIC_1M, (d) => {
+            const vr = visibleRange;
+            if (!vr?.start || !vr?.end) return;
+
+            const rawStart = Number(d?.start);
+            const startSec = Number.isFinite(rawStart) ? rawStart > 2e10 ? Math.floor(rawStart / 1000) : Math.floor(rawStart) : NaN;
+
+            if (!Number.isFinite(startSec)) return;
+
+            const bar = {
+                time: startSec, open: +d.open, high: +d.high, low: +d.low, close: +d.close,
+            };
+
+            // window 밖이면 굳이 렌더 안 해도 됨 (현재는 무시)
+            if (bar.time < vr.start - MA_BUF * 60 || bar.time >= vr.end) return;
+
+            let arr = mergeBars(allBarsRef.current || [], bar);
+            if (arr.length > MAX_1M_BARS) arr = arr.slice(-MAX_1M_BARS);
+            allBarsRef.current = arr;
+
+            renderWindow(vr.start, vr.end, true);
+            // ✅ 여기에서만 현재가 업데이트
+            onStats?.(symbol, {price1m: bar.close});
+            // stats는 renderWindow에서 처리함
+        });
+
+        cleanups.push(() => {
+            try {
+                off1m?.();
+            } catch {
+            }
+        });
 
         return () => {
             cleanups.forEach((fn) => {
@@ -395,137 +368,51 @@ export default function ChartPanel({
                 } catch {
                 }
             });
-            try {
-                chart.remove();
-            } catch {
-            }
         };
-    }, [wsHub, symbol, globalInterval, signalName, onBounds, onStats, renderDayWindow]);
+    }, [wsHub, symbol, visibleRange, renderWindow]);
 
-    useEffect(() => {
-        if (!seriesRef.current || globalInterval !== "1") return;
-        if (chartRef.current && allBarsRef.current?.length) renderDayWindow(allBarsRef.current, true);
-    }, [dayOffset, globalInterval, renderDayWindow]);
-
-    return (
-        <div style={{marginBottom: 28}}>
-            <div style={{fontSize: 20, opacity: 0.8, marginBottom: 6}}>{symbol}</div>
-
-            <div
-                ref={wrapRef}
-                style={{
-                    width: CHART_WIDTH,
-                    height: CHART_HEIGHT,
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    background: "#111",
-                }}
-            />
-
-            <div
-                style={{
-                    marginTop: 10,
-                    background: "#161616",
-                    border: "1px solid #262626",
-                    borderRadius: 12,
-                    padding: "10px 12px",
-                    width: CHART_WIDTH,
-                    boxSizing: "border-box",
-                }}
-            >
-                <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                    <div style={{fontWeight: 700, fontSize: 13, opacity: 0.9}}>
-                        {symbol} · 시그널 설명 ({notesView.length})
-                    </div>
-                    <button
-                        onClick={() => setNotesCollapsed((v) => !v)}
-                        style={{
-                            padding: "6px 10px",
-                            borderRadius: 8,
-                            border: "1px solid #2a2a2a",
-                            background: "#1f1f1f",
-                            color: "#ddd",
-                            fontSize: 12,
-                            cursor: "pointer",
-                        }}
-                        title={notesCollapsed ? "펼치기" : "접기"}
-                    >
-                        {notesCollapsed ? "펼치기 ⌄" : "접기 ⌃"}
-                    </button>
-                </div>
-
-                {notesCollapsed ? (
-                    <div style={{fontSize: 12, opacity: 0.7, marginTop: 8}}/>
-                ) : notesView.length === 0 ? (
-                    <div style={{fontSize: 12, opacity: 0.7, marginTop: 8}}>시그널 없음</div>
-                ) : (
-                    <div style={{display: "grid", gap: 8, marginTop: 8}}>
-                        {notesView.map((n) => {
-                            const side = String(n.side || "").toUpperCase();
-                            const kind = String(n.kind || "").toUpperCase();
-                            const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
-
-                            const priceTxt = n.price != null ? fmtComma(Number(n.price), priceScale ?? 2) : "—";
-
-                            const timeTxt = n.timeSec ? fmtKSTHMS(n.timeSec) : "";
-                            const reasonsTxt = n.reasons?.length ? `${n.reasons.join(", ")}` : "";
-
-                            return (
-                                <div
-                                    key={n.key}
-                                    style={{
-                                        padding: "8px 10px",
-                                        borderRadius: 10,
-                                        background: "#1b1b1b",
-                                        border: "1px solid #2a2a2a",
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            display: "grid",
-                                            gridTemplateColumns: "6ch 9ch 8ch 9ch 14ch 1fr",
-                                            columnGap: 12,
-                                            alignItems: "baseline",
-                                            fontSize: 12,
-                                            lineHeight: 1.5,
-                                            whiteSpace: "nowrap",
-                                            overflow: "hidden",
-                                            textOverflow: "ellipsis",
-                                            fontVariantNumeric: "tabular-nums",
-                                        }}
-                                        title={[
-                                            `#${n.seq}`,
-                                            timeTxt,
-                                            side,
-                                            kind,
-                                            priceTxt,
-                                            fmtKSTFull(n.timeSec),
-                                            reasonsTxt,
-                                        ]
-                                            .filter(Boolean)
-                                            .join(" · ")}
-                                    >
-                                        <b style={{opacity: 0.95}}>#{n.seq}</b>
-                                        <span>{timeTxt}</span>
-                                        <span style={{color: sideColor, fontWeight: 700}}>{side}</span>
-                                        <span style={{opacity: 0.85}}>{kind}</span>
-                                        <span>{priceTxt}</span>
-                                        <span
-                                            style={{
-                                                overflow: "hidden",
-                                                textOverflow: "ellipsis",
-                                                opacity: reasonsTxt ? 0.9 : 0.6,
-                                            }}
-                                        >
-                      {reasonsTxt || "—"}
-                    </span>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+    return (<div style={{marginBottom: 28}}>
+            <div style={{fontSize: 20, opacity: 0.8, marginBottom: 6}}>
+                {symbol}
+                <span style={{marginLeft: 10, fontSize: 12, opacity: 0.65}}>
+          (dayOffset: {dayOffset})
+        </span>
             </div>
-        </div>
-    );
+
+            <div style={{width: 1100, maxWidth: "100%", position: "relative"}}>
+                {loading ? (<div
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            background: "rgba(0,0,0,0.35)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            zIndex: 5,
+                            fontWeight: 800,
+                            borderRadius: 12,
+                            backdropFilter: "blur(2px)",
+                        }}
+                    >
+                        로딩중...
+                    </div>) : null}
+
+                <ChartView
+                    height={320}
+                    tickFormatter={tickFormatter}
+                    displayCandles={displayCandles}
+                    ma100={ma100}
+                    thr={thr}
+                    markers={markers}
+                    visibleRange={visibleRange}
+                />
+
+                <SignalNotesPanel
+                    symbol={symbol}
+                    notes={notesView}
+                    getPriceText={(n) => (n.price != null ? fmtComma(Number(n.price), priceScale ?? 2) : "—")}
+                    collapseKey={`${symbol}:${dayOffset}`}
+                />
+            </div>
+        </div>);
 }
