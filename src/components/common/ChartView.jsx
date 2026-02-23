@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useCallback } from "react";
 import { createChart } from "lightweight-charts";
-import { fmtKSTFull, getTs } from "../../lib/tradeUtils";
+import { fmtKSTFull, getTs, fmtComma } from "../../lib/tradeUtils";
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -14,6 +14,10 @@ export default function ChartView({
   markers,
   visibleRange, // {start,end}
   onChartReady,
+
+  // ✅ 추가: 심볼별 소수점 (precision)
+  priceScale = 2, // e.g. 2,3,4...
+  priceFormatter, // (num) => string (optional)
 }) {
   const wrapRef = useRef(null);
   const chartRef = useRef(null);
@@ -23,10 +27,24 @@ export default function ChartView({
   const lowerRef = useRef(null);
 
   const tickFmtRef = useRef(tickFormatter);
-  useEffect(() => { tickFmtRef.current = tickFormatter; }, [tickFormatter]);
+  useEffect(() => {
+    tickFmtRef.current = tickFormatter;
+  }, [tickFormatter]);
 
   const rangeRef = useRef(visibleRange);
-  useEffect(() => { rangeRef.current = visibleRange; }, [visibleRange]);
+  useEffect(() => {
+    rangeRef.current = visibleRange;
+  }, [visibleRange]);
+
+  const priceScaleRef = useRef(priceScale);
+  useEffect(() => {
+    priceScaleRef.current = Number.isFinite(Number(priceScale)) ? Number(priceScale) : 2;
+  }, [priceScale]);
+
+  const priceFormatterRef = useRef(priceFormatter);
+  useEffect(() => {
+    priceFormatterRef.current = priceFormatter;
+  }, [priceFormatter]);
 
   const safeCandles = useMemo(() => (Array.isArray(displayCandles) ? displayCandles : []), [displayCandles]);
   const safeMA = useMemo(() => (Array.isArray(ma100) ? ma100 : []), [ma100]);
@@ -44,14 +62,11 @@ export default function ChartView({
 
     const w = el.clientWidth || width;
 
-    // ✅ 핵심: DPR(브라우저 줌) 변하면 applyOptions만으론 부족한 경우가 있음 → resize로 캔버스 재생성
     chart.resize(w, height);
 
     const bars = Math.max(1, Math.round((end - start) / 60)); // 1분봉 기준
     const rawSpacing = (w - 40) / bars;
-
-    // ✅ 너무 커지거나 너무 작아지면 setVisibleRange가 “못 들어가서” 일부만 보이는 현상 생김 → clamp
-    const spacing = clamp(rawSpacing, 0.1, 3.5); // max는 취향(2.5~5 사이 추천)
+    const spacing = clamp(rawSpacing, 0.1, 3.5);
 
     chart.timeScale().applyOptions({
       rightOffset: 0,
@@ -64,13 +79,29 @@ export default function ChartView({
     } catch {}
   }, [width, height]);
 
+  // ✅ 공통 가격 포맷터
+  const fmtPrice = useCallback((v) => {
+    const fn = priceFormatterRef.current;
+    if (typeof fn === "function") return fn(v);
+
+    const ps = priceScaleRef.current ?? 2;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return fmtComma(n, ps);
+  }, []);
+
   // init
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
 
-    try { chartRef.current?.remove(); } catch {}
+    try {
+      chartRef.current?.remove();
+    } catch {}
     chartRef.current = null;
+
+    const ps = Number.isFinite(Number(priceScaleRef.current)) ? Number(priceScaleRef.current) : 2;
+    const minMove = Math.pow(10, -ps);
 
     const chart = createChart(el, {
       width,
@@ -97,11 +128,16 @@ export default function ChartView({
       },
       rightPriceScale: { borderVisible: false },
       crosshair: { mode: 1 },
-      localization: { timeFormatter: (t) => fmtKSTFull(getTs(t)) },
+      localization: {
+        timeFormatter: (t) => fmtKSTFull(getTs(t)),
+        // ✅ 여기서 크로스헤어/축 레이블 가격 포맷 통일
+        priceFormatter: (p) => fmtPrice(p),
+      },
       handleScroll: { mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false },
       handleScale: { axisDoubleClickReset: false, axisPressedMouseMove: false, mouseWheel: false, pinch: false },
     });
 
+    // ✅ series별 priceFormat도 고정 (precision 강제)
     candleRef.current = chart.addCandlestickSeries({
       upColor: "#2fe08d",
       downColor: "#ff6b6b",
@@ -109,16 +145,36 @@ export default function ChartView({
       borderDownColor: "#ff6b6b",
       wickUpColor: "#2fe08d",
       wickDownColor: "#ff6b6b",
+      priceFormat: { type: "price", precision: ps, minMove },
     });
 
-    maRef.current = chart.addLineSeries({ lineWidth: 2, priceLineVisible: false, lastValueVisible: true, color: "#ffd166" });
-    upperRef.current = chart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false, color: "#9ca3af" });
-    lowerRef.current = chart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false, color: "#9ca3af" });
+    maRef.current = chart.addLineSeries({
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      color: "#ffd166",
+      priceFormat: { type: "price", precision: ps, minMove },
+    });
+
+    upperRef.current = chart.addLineSeries({
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      color: "#9ca3af",
+      priceFormat: { type: "price", precision: ps, minMove },
+    });
+
+    lowerRef.current = chart.addLineSeries({
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      color: "#9ca3af",
+      priceFormat: { type: "price", precision: ps, minMove },
+    });
 
     chartRef.current = chart;
     onChartReady?.(chart);
 
-    // ✅ 컨테이너 크기 변할 때(레이아웃 변화) + 브라우저 줌에서 visualViewport/RO가 잡히는 케이스 처리
     let raf = 0;
     const kick = () => {
       cancelAnimationFrame(raf);
@@ -131,7 +187,6 @@ export default function ChartView({
     window.addEventListener("resize", kick, { passive: true });
     window.visualViewport?.addEventListener("resize", kick, { passive: true });
 
-    // ✅ DPR 변화(줌) 보정: 이때도 resize로 캔버스 다시 만들어줘야 “복구”됨
     let lastDpr = window.devicePixelRatio || 1;
     const dprTimer = setInterval(() => {
       const dpr = window.devicePixelRatio || 1;
@@ -147,9 +202,38 @@ export default function ChartView({
       window.removeEventListener("resize", kick);
       window.visualViewport?.removeEventListener("resize", kick);
       clearInterval(dprTimer);
-      try { chart.remove(); } catch {}
+      try {
+        chart.remove();
+      } catch {}
     };
-  }, [width, height, applyLayout, onChartReady]);
+  }, [width, height, applyLayout, onChartReady, fmtPrice]);
+
+  // ✅ priceScale/formatter가 바뀌면 chart localization / series priceFormat 갱신
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candleSeries = candleRef.current;
+    const maSeries = maRef.current;
+    const upper = upperRef.current;
+    const lower = lowerRef.current;
+    if (!chart || !candleSeries || !maSeries || !upper || !lower) return;
+
+    const ps = Number.isFinite(Number(priceScale)) ? Number(priceScale) : 2;
+    const minMove = Math.pow(10, -ps);
+
+    try {
+      chart.applyOptions({
+        localization: {
+          priceFormatter: (p) => fmtPrice(p),
+        },
+      });
+    } catch {}
+
+    const pf = { type: "price", precision: ps, minMove };
+    try { candleSeries.applyOptions({ priceFormat: pf }); } catch {}
+    try { maSeries.applyOptions({ priceFormat: pf }); } catch {}
+    try { upper.applyOptions({ priceFormat: pf }); } catch {}
+    try { lower.applyOptions({ priceFormat: pf }); } catch {}
+  }, [priceScale, fmtPrice]);
 
   // data update
   useEffect(() => {
@@ -171,10 +255,12 @@ export default function ChartView({
     }
 
     candleSeries.setMarkers?.(safeMarkers);
-    applyLayout(); // ✅ 갱신 후에도 항상 하루를 “한 화면”에
+    applyLayout();
   }, [safeCandles, safeMA, thr, safeMarkers, applyLayout]);
 
-  useEffect(() => { applyLayout(); }, [visibleRange?.start, visibleRange?.end, applyLayout]);
+  useEffect(() => {
+    applyLayout();
+  }, [visibleRange?.start, visibleRange?.end, applyLayout]);
 
   return (
     <div

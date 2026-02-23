@@ -3,9 +3,10 @@ import React, {useEffect, useState, useMemo, useCallback} from "react";
 import AssetPanel from "../components/AssetPanel";
 import promoImgUrl from "../assets/bybit_copytrading_zannavi.png";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
-import ChartPanel from "../components/coin/ChartPanel";
+import ChartPanelCore from "../components/common/ChartPanelCore";
+import {makeBybitSource} from "../lib/chartSources";
 
-import {next0650EndBoundaryUtcSec, fetchPriceScaleBybitCached} from "../lib/tradeUtils";
+import {next0650EndBoundaryUtcSec} from "../lib/tradeUtils";
 
 /* ------------------------- 날짜 라벨 ------------------------- */
 function selectedDayLabel(offsetDays = 0) {
@@ -280,6 +281,8 @@ export default function Coin() {
 
     // asset 네임스페이스
     const assetNs = useMemo(() => "agent:CopyZannavi:u7c9f14d2a1:BYBIT", []);
+    // ------------------------- chart source (bybit) -------------------------
+    const bybitSource = useMemo(() => makeBybitSource({signalName: ns}), [ns]);
 
     /* ------------------------- asset ------------------------- */
     const [asset, setAsset] = useState({wallet: {USDT: 0}, positions: {}});
@@ -346,32 +349,6 @@ export default function Coin() {
     }, [symbolsConfig, symbolsReady, ns]);
 
     /* ------------------------- priceScale (decimals) ------------------------- */
-    const [priceScaleMap, setPriceScaleMap] = useState({});
-    useEffect(() => {
-        let alive = true;
-        if (!symbolsReady) return;
-
-        (async () => {
-            try {
-                const results = await Promise.all(
-                    symbolsConfig.map((s) => fetchPriceScaleBybitCached(s.symbol, s.market || "linear"))
-                );
-                if (!alive) return;
-
-                const merged = {};
-                results.forEach((ps, i) => {
-                    merged[symbolsConfig[i].symbol] = typeof ps === "number" ? ps : null;
-                });
-
-                setPriceScaleMap((prev) => ({...prev, ...merged}));
-            } catch {
-            }
-        })();
-
-        return () => {
-            alive = false;
-        };
-    }, [symbolsConfig, symbolsReady]);
 
     /* ------------------------- bounds (dayOffset clamp) ------------------------- */
     const [perSymbolBounds, setPerSymbolBounds] = useState({});
@@ -533,13 +510,13 @@ export default function Coin() {
                         {symbolsConfig.map((s) => {
                             const sym = s.symbol;
                             const st = statsMap[sym];
-                            const meta = {...(metaMap[sym] || {}), price_scale: priceScaleMap[sym]};
+                            const meta = (metaMap[sym] || {});
+                            const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
 
-                            const price = st?.price1m;
-                            const ma100 = st?.ma100_1m;
+                            const price = st?.price;
+                            const ma100 = st?.ma100;
                             const chg3mPct = st?.chg3mPct;
 
-                            const ps = typeof meta?.price_scale === "number" ? meta.price_scale : 2;
 
                             return (
                                 <UnifiedTickerCard
@@ -560,18 +537,21 @@ export default function Coin() {
                 {/* 오른쪽 */}
                 <div>
                     {symbolsConfig.map((s) => (
-                        <ChartPanel
+                        <ChartPanelCore
                             key={s.symbol}
+                            source={bybitSource}
                             symbol={s.symbol}
                             dayOffset={dayOffset}
-
                             anchorEndUtcSec={anchorEndUtcSec}
                             onBounds={onBounds}
                             onStats={onStats}
                             thr={metaMap[s.symbol]?.ma_threshold}
                             crossTimes={metaMap[s.symbol]?.cross_times}
-                            signalName={ns}
-                            priceScale={priceScaleMap[s.symbol]}
+                            bounds={{min: -7, max: 0}}
+                            width={1100}
+                            // getPriceText 통일까지 원하면 여기서 넘기지 말고 Core 기본값 사용하면 됨.
+                            // 코인만 priceScale 반영하고 싶다면 아래처럼 넘길 수 있음:
+                            // getPriceText={(n) => (n?.price != null ? fmtComma(Number(n.price), priceScaleMap[s.symbol] ?? 2) : "—")}
                         />
                     ))}
                 </div>
