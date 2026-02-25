@@ -305,7 +305,10 @@ export default function Coin() {
 
     const symbolsReady = symbolsConfig.length > 0;
     const requiredSymbols = useMemo(() => symbolsConfig.map((s) => s.symbol), [symbolsConfig]);
-
+    const requiredSymbolsKey = useMemo(
+        () => requiredSymbols.join(","),
+        [requiredSymbols]
+    );
     /* ------------------------- asset ------------------------- */
     const [asset, setAsset] = useState({wallet: {USDT: 0}, positions: {}});
 
@@ -315,8 +318,8 @@ export default function Coin() {
 
         (async () => {
             try {
-                const symbolsQs = requiredSymbols.length
-                    ? `&symbols=${encodeURIComponent(requiredSymbols.join(","))}`
+                const symbolsQs = requiredSymbolsKey
+                    ? `&symbols=${encodeURIComponent(requiredSymbolsKey)}`
                     : "";
 
                 const res = await fetch(
@@ -334,7 +337,7 @@ export default function Coin() {
         return () => {
             alive = false;
         };
-    }, [assetNs, symbolsReady, requiredSymbols.join(",")]);
+    }, [assetNs, symbolsReady, requiredSymbolsKey]);
 
     /* ------------------------- stats ------------------------- */
     const [statsMap, setStatsMap] = useState({});
