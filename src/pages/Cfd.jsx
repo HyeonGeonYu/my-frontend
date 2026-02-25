@@ -4,6 +4,8 @@ import ChartPanelCore from "../components/common/ChartPanelCore";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec} from "../lib/tradeUtils";
+import StreamsCenter from "../components/common/StreamsCenter";
+
 
 /* ------------------------- symbols 추출 유틸 ------------------------- */
 function extractSymbolsFromConfig(cfg) {
@@ -268,6 +270,16 @@ export default function Cfd() {
                 </div>
             </div>
 
+            {/* 🔥 StreamsCenter - 전체 가로 한줄 */}
+            <StreamsCenter
+                source={cfdSource}
+                anchorEndUtcSec={anchorEndUtcSec}
+                dayOffset={dayOffset}
+                onDayOffsetChange={setDayOffset}
+                bounds={{min: -7, max: 0}}
+                priceScale={2}
+            />
+
             <div style={{display: "grid", gridTemplateColumns: "320px 1fr", gap: 24}}>
                 {/* 왼쪽 */}
                 <div>
@@ -335,6 +347,8 @@ export default function Cfd() {
 
                     {/* 왼쪽 카드: visible만 */}
                     <div style={{display: "grid", gap: 12}}>
+
+
                         {visibleSymbols.map((sym) => {
                             const st = symbolStatsMap[sym];
                             const meta = metaMap[sym];

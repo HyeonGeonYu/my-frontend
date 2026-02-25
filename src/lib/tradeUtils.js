@@ -523,34 +523,136 @@ export function calcSidePnl(side, qty, avg, px) {
     return {pnl, pnlPct};
 }
 
-export function buildPositionRows(asset, statsBySymbol) {
-    const rows = [];
-    let pnlSum = 0;
+export function buildPositionRows(asset, statsBySymbol = {}) {
+  const positions = asset?.positions || {};
+  const rows = [];
 
-    const positions = (asset && asset.positions) ? asset.positions : {};
-    for (const sym of Object.keys(positions)) {
-        const pos = positions[sym] || {};
-        const px = lastPriceFromStats(statsBySymbol?.[sym]);
+  const toNum = (v) => (v == null || v === "" ? 0 : Number(v));
 
-        for (const side of ["LONG", "SHORT"]) {
-            const s = pos[side];
-            if (!s || !px) continue;
-            const qty = +s.qty || 0;
-            const avg = +s.avg_price || 0;
-            if (qty <= 0 || avg <= 0) continue;
+  const isNonEmptyPos = (p) => {
+    if (!p || typeof p !== "object") return false;
+    const q = Math.abs(toNum(p.qty));
+    const hasEntries = Array.isArray(p.entries) && p.entries.length > 0;
+    return q > 0 || hasEntries;
+  };
 
-            const {pnl, pnlPct} = calcSidePnl(side, qty, avg, px);
-            pnlSum += pnl;
-            rows.push({sym, side, qty, avg, px, pnl, pnlPct});
-        }
+  const calcFromEntries = (entries) => {
+    // weighted avg by qty
+    let sumQty = 0;
+    let sumPxQty = 0;
+    for (const e of entries || []) {
+      const q = Math.abs(toNum(e?.qty));
+      const px = toNum(e?.price);
+      if (q <= 0 || !isFinite(px)) continue;
+      sumQty += q;
+      sumPxQty += q * px;
     }
-    return {rows, pnlSum};
+    const avg = sumQty > 0 ? sumPxQty / sumQty : null;
+    return { sumQty, avg };
+  };
+
+  for (const symRaw of Object.keys(positions)) {
+    const sym = String(symRaw).toUpperCase();
+    const pos = positions[symRaw];
+    if (!pos || typeof pos !== "object") continue;
+
+    for (const side of ["LONG", "SHORT"]) {
+      const p = pos?.[side];
+      if (!isNonEmptyPos(p)) continue;
+
+      // qty 우선: p.qty, 없으면 entries 합
+      const directQty = Math.abs(toNum(p?.qty));
+      const { sumQty, avg: avgFromEntries } = calcFromEntries(p?.entries);
+      const qty = directQty > 0 ? directQty : sumQty;
+
+      // avg 우선: p.avg / p.entry_price / p.price, 없으면 entries로 계산한 avg
+      const avg =
+        toNum(p?.avg) ||
+        toNum(p?.avg_price) ||
+        toNum(p?.entry_price) ||
+        toNum(p?.price) ||
+        avgFromEntries ||
+        null;
+
+      // 현재가: statsBySymbol에서
+      const st = statsBySymbol?.[sym] || {};
+      const px = st?.price != null ? Number(st.price) : null;
+
+      // PnL
+      const pnl = px != null && avg != null ? (side === "LONG" ? (px - avg) : (avg - px)) * qty : 0;
+      const pnlPct = px != null && avg != null && avg !== 0
+        ? ((side === "LONG" ? (px - avg) : (avg - px)) / avg) * 100
+        : null;
+
+      rows.push({
+        sym,
+        side,
+        qty,
+        avg,
+        px,
+        pnl,
+        pnlPct,
+      });
+    }
+  }
+
+  return { rows };
 }
 
-export function calcEquityUSDT(asset, statsBySymbol) {
-    const wallet = +(asset?.wallet?.USDT ?? 0);
-    const {pnlSum} = buildPositionRows(asset, statsBySymbol);
-    return wallet + pnlSum;
+export function calcEquityUSDT(asset, statsBySymbol = {}) {
+  const wallet = Number(asset?.wallet?.USDT ?? 0);
+  const positions = asset?.positions || {};
+
+  const toNum = (v) => (v == null || v === "" ? NaN : Number(v));
+
+  const calcFromEntries = (entries) => {
+    let sumQty = 0;
+    let sumPxQty = 0;
+    for (const e of entries || []) {
+      const q = Math.abs(Number(e?.qty ?? 0));
+      const px = Number(e?.price ?? 0);
+      if (!isFinite(q) || !isFinite(px) || q <= 0) continue;
+      sumQty += q;
+      sumPxQty += q * px;
+    }
+    const avg = sumQty > 0 ? sumPxQty / sumQty : NaN;
+    return { sumQty, avg };
+  };
+
+  let unreal = 0;
+
+  for (const symRaw of Object.keys(positions)) {
+    const sym = String(symRaw).toUpperCase();
+    const pos = positions[symRaw];
+    if (!pos || typeof pos !== "object") continue;
+
+    const st = statsBySymbol?.[sym] || {};
+    const px = st?.price != null ? Number(st.price) : NaN;
+    if (!isFinite(px)) continue; // 현재가 없으면 평가 불가 → 일단 스킵
+
+    for (const side of ["LONG", "SHORT"]) {
+      const p = pos?.[side];
+      if (!p || typeof p !== "object") continue;
+
+      const qDirect = Math.abs(Number(p?.qty ?? 0));
+      const { sumQty, avg: avgFromEntries } = calcFromEntries(p?.entries);
+
+      const qty = qDirect > 0 ? qDirect : sumQty;
+      if (!(qty > 0)) continue;
+
+      const avg =
+        Number(p?.avg ?? p?.avg_price ?? p?.entry_price ?? p?.price ?? NaN) ||
+        avgFromEntries;
+
+      if (!isFinite(avg) || avg <= 0) continue;
+
+      const pnl = side === "LONG" ? (px - avg) * qty : (avg - px) * qty;
+      if (isFinite(pnl)) unreal += pnl;
+    }
+  }
+
+  const equity = wallet + unreal;
+  return isFinite(equity) ? equity : wallet; // fallback
 }
 
 /**
