@@ -515,14 +515,6 @@ export function lastPriceFromStats(stats) {
     if (typeof stats.priceD === "number") return stats.priceD;
     return null;
 }
-
-export function calcSidePnl(side, qty, avg, px) {
-    if (!qty || !avg || !px) return {pnl: 0, pnlPct: null};
-    const pnl = side === "LONG" ? (px - avg) * qty : (avg - px) * qty;
-    const pnlPct = (px / avg - 1) * (side === "LONG" ? 100 : -100);
-    return {pnl, pnlPct};
-}
-
 export function buildPositionRows(asset, statsBySymbol = {}) {
   const positions = asset?.positions || {};
   const rows = [];
@@ -602,8 +594,6 @@ export function buildPositionRows(asset, statsBySymbol = {}) {
 export function calcEquityUSDT(asset, statsBySymbol = {}) {
   const wallet = Number(asset?.wallet?.USDT ?? 0);
   const positions = asset?.positions || {};
-
-  const toNum = (v) => (v == null || v === "" ? NaN : Number(v));
 
   const calcFromEntries = (entries) => {
     let sumQty = 0;

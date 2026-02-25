@@ -27,22 +27,6 @@ function toNum(x) {
     return Number.isFinite(n) ? n : null;
 }
 
-function parsePnlFromReasons(reasons) {
-    if (!Array.isArray(reasons)) return null;
-    for (const r of reasons) {
-        const s = String(r || "");
-
-        // "pnl=-0.89%"
-        let m = s.match(/pnl\s*=\s*([+-]?\d+(?:\.\d+)?)\s*%/i);
-        if (m) return toNum(m[1]);
-
-        // "OLDEST_PNL -0.87%"
-        m = s.match(/OLDEST_PNL\s*([+-]?\d+(?:\.\d+)?)\s*%/i);
-        if (m) return toNum(m[1]);
-    }
-    return null;
-}
-
 function getPnlPct(note) {
     // ✅ 1) stream이 이미 주는 정규화 필드 우선
     const direct =

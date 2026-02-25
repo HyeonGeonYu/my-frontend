@@ -17,10 +17,6 @@ function _cacheKey({ name = "bybit", days = DEFAULT_DAYS, limit = DEFAULT_LIMIT 
 function _dayKeyFromTsMs(tsMs) {
   if (!Number.isFinite(tsMs)) return null;
 
-  const endUtcSec = next0650EndBoundaryUtcSec(); // "현재 세션의 다음 06:50 end"
-  // 우리는 일반화가 필요: 특정 ts가 어느 세션에 속하는지 계산해야 함.
-  // tradeUtils에 일반 함수가 없을 수 있어서 여기서 직접 계산:
-  // 1) ts를 KST로 바꾼 뒤, 06:50 이전이면 전날로 간주
   const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
   const SESSION_START_MIN = 6 * 60 + 50;
 
