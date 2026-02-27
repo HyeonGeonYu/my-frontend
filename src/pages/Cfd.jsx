@@ -129,8 +129,7 @@ export default function Cfd() {
 
             if (Number.isFinite(minMaThreshold) && t < minMaThreshold) {
                 hidden.push({
-                    symbol: s,
-                    reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
+                    symbol: s, reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
                 });
                 continue;
             }
@@ -158,8 +157,7 @@ export default function Cfd() {
 
     if (cfdSourceRef.current.key !== cfdKey) {
         cfdSourceRef.current = {
-            key: cfdKey,
-            source: makeCfdSource({signalName: "mt5"}),
+            key: cfdKey, source: makeCfdSource({signalName: "mt5"}),
         };
     }
     const cfdSource = cfdSourceRef.current.source;
@@ -187,239 +185,179 @@ export default function Cfd() {
 
     /* ------------------------- UI ------------------------- */
     if (!configLoaded) {
-        return (
-            <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-                <div style={{opacity: 0.85}}>config 로딩중...</div>
-            </div>
-        );
+        return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+            <div style={{opacity: 0.85}}>config 로딩중...</div>
+        </div>);
     }
 
     if (!symbolsReady) {
-        return (
-            <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-                <div
-                    style={{
-                        padding: 14,
-                        borderRadius: 12,
-                        background: "#1a1a1a",
-                        border: "1px solid #2a2a2a",
-                        lineHeight: 1.6,
-                    }}
-                >
-                    loading...
-                </div>
+        return (<div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+            <div
+                style={{
+                    padding: 14, borderRadius: 12, background: "#1a1a1a", border: "1px solid #2a2a2a", lineHeight: 1.6,
+                }}
+            >
+                loading...
             </div>
-        );
+        </div>);
     }
-
+    const PAGE_MAX_W = 1460;
+    const MIN_LEFT = 260;   // 왼쪽(티커/보기설정) 최소폭
+    const MIN_RIGHT = 260;  // 오른쪽(차트 영역) 최소폭
+    const GAP = 24;
+    const MIN_MAIN = MIN_LEFT + MIN_RIGHT + GAP; // ✅ main 최소폭
     return (
         <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
-            <div style={{fontWeight: 800, fontSize: 18, marginBottom: 10, opacity: 0.95}}>
-                CFD 차트{" "}
-                <span style={{opacity: 0.6, fontWeight: 700}}>({symbols.join(" / ")})</span>
-            </div>
-
-            {/* 숨김 안내 */}
-            <div style={{marginBottom: 14}}>
-                <div
-                    style={{
-                        padding: "10px 12px",
-                        borderRadius: 12,
-                        background: "#151515",
-                        border: "1px solid #262626",
-                        fontSize: 13,
-                        lineHeight: 1.5,
-                    }}
-                >
-                    <div style={{display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap"}}>
-                        <div style={{fontWeight: 700}}>
-                            표시 기준:{" "}
-                            <span style={{opacity: 0.85}}>
-                ma_threshold ≥ {Number.isFinite(minMaThreshold) ? minMaThreshold : "—"}
-              </span>
-                        </div>
-                        <div style={{opacity: 0.85}}>
-                            표시: <b>{visibleSymbols.length}</b>개 / 숨김: <b>{hiddenSymbols.length}</b>개
-                        </div>
+            {/* ✅ Coin처럼: maxWidth + overflowX + 내부 minWidth */}
+            <div
+                style={{
+                    maxWidth: PAGE_MAX_W,
+                    margin: "0 auto",
+                    overflowX: "auto",
+                    background: "#111",
+                }}
+            >
+                <div style={{minWidth: MIN_MAIN}}>
+                    <div style={{fontWeight: 800, fontSize: 18, marginBottom: 10, opacity: 0.95}}>
+                        CFD 차트 <span style={{opacity: 0.6, fontWeight: 700}}>({symbols.join(" / ")})</span>
                     </div>
 
-                    {hiddenSymbols.length > 0 ? (
-                        <div style={{marginTop: 8, opacity: 0.9}}>
-                            <div style={{fontWeight: 700, marginBottom: 6}}>숨김 목록</div>
-                            <div style={{display: "flex", flexWrap: "wrap", gap: 8}}>
-                                {hiddenSymbols.map((x) => (
-                                    <span
-                                        key={x.symbol}
-                                        style={{
-                                            padding: "6px 10px",
-                                            borderRadius: 999,
-                                            background: "#1f1f1f",
-                                            border: "1px solid #2d2d2d",
-                                            fontSize: 12,
-                                            opacity: 0.95,
-                                        }}
-                                        title={x.reason}
-                                    >
-                    <b style={{marginRight: 6}}>{x.symbol}</b>
-                    <span style={{opacity: 0.7}}>{x.reason}</span>
-                  </span>
-                                ))}
-                            </div>
-                        </div>
-                    ) : null}
-                </div>
-            </div>
+                    {/* ✅ StreamsCenter도 main 최소폭 기준으로 */}
+                    <div style={{marginBottom: 14, minWidth: MIN_MAIN, marginLeft: "auto", marginRight: "auto"}}>
+                        <StreamsCenter
+                            source={cfdSource}
+                            anchorEndUtcSec={anchorEndUtcSec}
+                            dayOffset={dayOffset}
+                            onDayOffsetChange={setDayOffset}
+                            bounds={{min: -7, max: 0}}
+                            priceScale={2}
+                        />
+                    </div>
 
-            {/* 🔥 StreamsCenter - 전체 가로 한줄 */}
-            <StreamsCenter
-                source={cfdSource}
-                anchorEndUtcSec={anchorEndUtcSec}
-                dayOffset={dayOffset}
-                onDayOffsetChange={setDayOffset}
-                bounds={{min: -7, max: 0}}
-                priceScale={2}
-            />
+                    {/* ✅ Coin처럼 minmax 기반 2컬럼 */}
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: `minmax(${MIN_LEFT}px, 1fr) minmax(${MIN_RIGHT}px, 4fr)`,
+                            gap: GAP,
+                            alignItems: "start",
+                            minWidth: 0,
+                        }}
+                    >
+                        {/* 왼쪽 */}
+                        <div style={{minWidth: 0}}>
+                            <div
+                                style={{
+                                    position: "sticky",
+                                    top: 12,
+                                    zIndex: 5,
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 1,
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        padding: "14px 16px",
+                                        borderRadius: 14,
+                                        background: "#1a1a1a",
+                                        marginBottom: 14,
+                                        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+                                    }}
+                                >
+                                    <div style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "baseline"
+                                    }}>
+                                        <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
+                                        <div style={{fontSize: 12, opacity: 0.85}}>
+                                            {selectedDayLabelFromAnchor(anchorEndUtcSec, dayOffset)}
+                                            <span style={{opacity: 0.65}}> (dayOffset: {dayOffset})</span>
+                                        </div>
+                                    </div>
 
-            <div style={{display: "grid", gridTemplateColumns: "320px 1fr", gap: 24}}>
-                {/* 왼쪽 */}
-                <div>
-                    <div style={{
-                        position: "sticky",
-                        top: 12,
-                        zIndex: 5,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 1
-                    }}>
-                        <div
-                            style={{
-                                padding: "14px 16px",
-                                borderRadius: 14,
-                                background: "#1a1a1a",
-                                marginBottom: 14,
-                                boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-                            }}
-                        >
-                            <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline"}}>
-                                <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
-                                <div style={{fontSize: 12, opacity: 0.85}}>
-                                    {selectedDayLabelFromAnchor(anchorEndUtcSec, dayOffset)}
-                                    <span style={{opacity: 0.65}}> (dayOffset: {dayOffset})</span>
+                                    <div style={{display: "flex", gap: 8}}>
+                                        <button
+                                            onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
+                                            disabled={atMin}
+                                            style={disBtnStyle(atMin)}
+                                            title="전날"
+                                        >
+                                            ◀ 전날
+                                        </button>
+
+                                        <button
+                                            onClick={() => setDayOffset(0)}
+                                            style={{
+                                                padding: "8px 12px",
+                                                borderRadius: 10,
+                                                border: 0,
+                                                background: "#00ffcc",
+                                                color: "#000",
+                                                fontWeight: 700,
+                                            }}
+                                            title="오늘"
+                                        >
+                                            오늘
+                                        </button>
+
+                                        <button
+                                            onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
+                                            disabled={atMax}
+                                            style={disBtnStyle(atMax)}
+                                            title="다음날"
+                                        >
+                                            다음날 ▶
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div style={{display: "flex", gap: 8}}>
-                                <button
-                                    onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
-                                    disabled={atMin}
-                                    style={disBtnStyle(atMin)}
-                                    title="전날"
-                                >
-                                    ◀ 전날
-                                </button>
+                            {/* 티커 카드 */}
+                            <div style={{display: "grid", gap: 12}}>
+                                {visibleSymbols.map((sym) => {
+                                    const st = symbolStatsMap[sym];
+                                    const meta = metaMap[sym];
+                                    const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
 
-                                <button
-                                    onClick={() => setDayOffset(0)}
-                                    style={{
-                                        padding: "8px 12px",
-                                        borderRadius: 10,
-                                        border: 0,
-                                        background: "#00ffcc",
-                                        color: "#000",
-                                        fontWeight: 700,
-                                    }}
-                                    title="오늘"
-                                >
-                                    오늘
-                                </button>
-
-                                <button
-                                    onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
-                                    disabled={atMax}
-                                    style={disBtnStyle(atMax)}
-                                    title="다음날"
-                                >
-                                    다음날 ▶
-                                </button>
+                                    return (
+                                        <div key={sym} style={{width: "100%"}}>
+                                            <UnifiedTickerCard
+                                                symbol={sym}
+                                                price={st?.price ?? null}
+                                                ma100={st?.ma100 ?? null}
+                                                chg3mPct={st?.chg3mPct ?? null}
+                                                ps={ps}
+                                                meta={meta}
+                                                closesUnit="minutes"
+                                            />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
-                    </div>
 
-                    {/* 왼쪽 카드: visible만 */}
-                    <div style={{display: "grid", gap: 12}}>
-
-
-                        {visibleSymbols.map((sym) => {
-                            const st = symbolStatsMap[sym];
-                            const meta = metaMap[sym];
-
-                            const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
-
-                            return (
-                                <UnifiedTickerCard
-                                    key={sym}
-                                    symbol={sym}
-                                    price={st?.price ?? null}
-                                    ma100={st?.ma100 ?? null}
-                                    chg3mPct={st?.chg3mPct ?? null}
-                                    ps={ps}
-                                    meta={meta}
-                                    closesUnit="minutes"
-                                />
-                            );
-                        })}
-                    </div>
-
-                    {visibleSymbols.length === 0 ? (
-                        <div
-                            style={{
-                                marginTop: 12,
-                                padding: 12,
-                                borderRadius: 12,
-                                background: "#151515",
-                                border: "1px solid #262626",
-                                opacity: 0.9,
-                                fontSize: 13,
-                            }}
-                        >
-                            현재 표시 조건(ma_threshold ≥ {Number.isFinite(minMaThreshold) ? minMaThreshold.toFixed(4) : "—"})을
-                            만족하는 심볼이 없어.
+                        {/* 오른쪽 */}
+                        <div style={{minWidth: 0, display: "grid", gap: 12}}>
+                            {visibleSymbols.map((s) => (
+                                <div key={s} style={{width: "100%", minWidth: 0}}>
+                                    <ChartPanelCore
+                                        source={cfdSource}
+                                        symbol={s}
+                                        dayOffset={dayOffset}
+                                        anchorEndUtcSec={anchorEndUtcSec}
+                                        thr={metaMap[s]?.ma_threshold}
+                                        crossTimes={metaMap[s]?.cross_times}
+                                        onStats={onStats}
+                                        bounds={{min: -7, max: 0}}
+                                        // ✅ width props는 빼는게 Coin과 동일한 정책(부모 폭에 맞게 자연 확장)
+                                        // width={CHART_W}
+                                    />
+                                </div>
+                            ))}
                         </div>
-                    ) : null}
-                </div>
-
-                {/* 오른쪽 */}
-                <div>
-                    {visibleSymbols.map((s) => (
-                        <ChartPanelCore
-                            key={s}
-                            source={cfdSource}
-                            symbol={s}
-                            dayOffset={dayOffset}
-                            anchorEndUtcSec={anchorEndUtcSec}
-                            thr={metaMap[s]?.ma_threshold}
-                            crossTimes={metaMap[s]?.cross_times}
-                            onStats={onStats}
-                            // bounds 통일한다 했으니 coin과 동일하게
-                            bounds={{min: -7, max: 0}}
-                            width={1100} // coin이랑 화면 통일 원하면 1100 추천
-                        />
-                    ))}
-
-                    {visibleSymbols.length === 0 ? (
-                        <div
-                            style={{
-                                padding: 16,
-                                borderRadius: 14,
-                                background: "#151515",
-                                border: "1px solid #262626",
-                                opacity: 0.9,
-                                fontSize: 14,
-                            }}
-                        >
-                            표시할 차트가 없어. (min_ma_threshold 기준 미달 또는 아직 확인중)
-                        </div>
-                    ) : null}
+                    </div>
                 </div>
             </div>
         </div>
