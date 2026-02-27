@@ -26,11 +26,6 @@ export default function ChartView({
     const sizeRef = useRef({width, height});
     const applyLayoutRef = useRef(() => {
     });
-    useEffect(() => {
-        sizeRef.current = {width, height};
-        requestAnimationFrame(() => applyLayoutRef.current());
-    }, [width, height, applyLayout]);
-
     const candleRef = useRef(null);
     const maRef = useRef(null);
     const upperRef = useRef(null);
@@ -90,6 +85,11 @@ export default function ChartView({
         }
     }, []);
 
+
+    useEffect(() => {
+        sizeRef.current = {width, height};
+        requestAnimationFrame(() => applyLayout());
+    }, [width, height, applyLayout]);
     useEffect(() => {
         applyLayoutRef.current = applyLayout;
     }, [applyLayout]);
