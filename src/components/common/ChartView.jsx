@@ -28,7 +28,7 @@ export default function ChartView({
     useEffect(() => {
         sizeRef.current = {width, height};
         requestAnimationFrame(() => applyLayout());
-    }, [width, height]);
+    }, [width, height, applyLayout]);
 
     const candleRef = useRef(null);
     const maRef = useRef(null);

@@ -114,7 +114,7 @@ export default function Cfd() {
         return arr;
     }, [symbols, metaMap]);
 
-    const {visibleSymbols, hiddenSymbols} = useMemo(() => {
+    const {visibleSymbols} = useMemo(() => {
         const visible = [];
         const hidden = [];
 
