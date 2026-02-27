@@ -24,10 +24,11 @@ export default function ChartView({
 
     // ✅ width/height를 최신값으로 들고있을 ref
     const sizeRef = useRef({width, height});
-
+    const applyLayoutRef = useRef(() => {
+    });
     useEffect(() => {
         sizeRef.current = {width, height};
-        requestAnimationFrame(() => applyLayout());
+        requestAnimationFrame(() => applyLayoutRef.current());
     }, [width, height, applyLayout]);
 
     const candleRef = useRef(null);
@@ -80,9 +81,7 @@ export default function ChartView({
         const spacing = clamp(rawSpacing, 0.1, 3.5);
 
         chart.timeScale().applyOptions({
-            rightOffset: 0,
-            barSpacing: spacing,
-            minBarSpacing: 0.1,
+            rightOffset: 0, barSpacing: spacing, minBarSpacing: 0.1,
         });
 
         try {
@@ -90,6 +89,10 @@ export default function ChartView({
         } catch {
         }
     }, []);
+
+    useEffect(() => {
+        applyLayoutRef.current = applyLayout;
+    }, [applyLayout]);
 
     // ✅ 공통 가격 포맷터
     const fmtPrice = useCallback((v) => {
@@ -126,8 +129,7 @@ export default function ChartView({
             autoSize: false,
             layout: {background: {color: "#111"}, textColor: "#ddd"},
             grid: {
-                vertLines: {color: "rgba(255,255,255,0.06)"},
-                horzLines: {color: "rgba(255,255,255,0.06)"},
+                vertLines: {color: "rgba(255,255,255,0.06)"}, horzLines: {color: "rgba(255,255,255,0.06)"},
             },
             timeScale: {
                 timeVisible: true,
@@ -146,8 +148,7 @@ export default function ChartView({
             rightPriceScale: {borderVisible: false},
             crosshair: {mode: 1},
             localization: {
-                timeFormatter: (t) => fmtKSTFull(getTs(t)),
-                priceFormatter: (p) => fmtPrice(p),
+                timeFormatter: (t) => fmtKSTFull(getTs(t)), priceFormatter: (p) => fmtPrice(p),
             },
             handleScroll: {mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false},
             handleScale: {axisDoubleClickReset: false, axisPressedMouseMove: false, mouseWheel: false, pinch: false},
@@ -296,17 +297,11 @@ export default function ChartView({
         applyLayout();
     }, [visibleRange?.start, visibleRange?.end, applyLayout]);
 
-    return (
-        <div
-            ref={wrapRef}
-            style={{
-                width: "100%",
-                minWidth: 0,     // ✅ 추가: shrink 허용
-                height,
-                borderRadius: 12,
-                overflow: "hidden",
-                background: "#111",
-            }}
-        />
-    );
+    return (<div
+        ref={wrapRef}
+        style={{
+            width: "100%", minWidth: 0,     // ✅ 추가: shrink 허용
+            height, borderRadius: 12, overflow: "hidden", background: "#111",
+        }}
+    />);
 }
