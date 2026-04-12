@@ -277,6 +277,14 @@ export default function Coin() {
         return symbols.map((sym) => ({symbol: sym, market: "linear"}));
     }, [configState]);
 
+    const [selectedSymbol, setSelectedSymbol] = useState(null);
+
+    const visibleSymbols = useMemo(() => {
+        if (!selectedSymbol) return symbolsConfig;
+        return symbolsConfig.filter((s) => s.symbol === selectedSymbol);
+    }, [symbolsConfig, selectedSymbol]);
+
+
     const symbolsReady = symbolsConfig.length > 0;
     const requiredSymbols = useMemo(() => symbolsConfig.map((s) => s.symbol), [symbolsConfig]);
     const requiredSymbolsKey = useMemo(() => requiredSymbols.join(","), [requiredSymbols]);
@@ -573,25 +581,38 @@ export default function Coin() {
                                     const st = statsMap[sym];
                                     const meta = metaMap[sym] || {};
                                     const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
+                                    const active = selectedSymbol === sym;
 
-                                    return (<div key={sym} style={{width: "100%"}}>
-                                        <UnifiedTickerCard
-                                            symbol={sym}
-                                            price={st?.price ?? null}
-                                            ma100={st?.ma100 ?? null}
-                                            chg3mPct={st?.chg3mPct ?? null}
-                                            ps={ps}
-                                            meta={meta}
-                                            closesUnit="minutes"
-                                        />
-                                    </div>);
+                                    return (
+                                        <div
+                                            key={sym}
+                                            style={{
+                                                width: "100%",
+                                                cursor: "pointer",
+                                                opacity: selectedSymbol && !active ? 0.45 : 1,
+                                                border: active ? "1px solid #00ffcc" : "1px solid transparent",
+                                                borderRadius: 12,
+                                            }}
+                                            onClick={() => setSelectedSymbol((prev) => prev === sym ? null : sym)}
+                                        >
+                                            <UnifiedTickerCard
+                                                symbol={sym}
+                                                price={st?.price ?? null}
+                                                ma100={st?.ma100 ?? null}
+                                                chg3mPct={st?.chg3mPct ?? null}
+                                                ps={ps}
+                                                meta={meta}
+                                                closesUnit="minutes"
+                                            />
+                                        </div>
+                                    );
                                 })}
                             </div>
                         </div>
 
                         {/* 오른쪽 */}
                         <div style={{minWidth: 0, display: "grid", gap: 12}}>
-                            {symbolsConfig.map((s) => (
+                            {visibleSymbols.map((s) => (
                                 <div key={s.symbol} style={{width: "100%", minWidth: 0}}>
                                     <ChartPanelCore
                                         source={bybitSource}

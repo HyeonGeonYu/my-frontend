@@ -5,7 +5,7 @@
         serve -s build
 (서버 백엔드씀)
 
-vercel dev
+npx vercel dev
 
 # 게시판 추가
 1. Router.jsx 에서 아래 추가
