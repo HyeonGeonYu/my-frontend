@@ -64,6 +64,8 @@ export default function Cfd() {
     const symbols = useMemo(() => extractSymbolsFromConfig(configState), [configState]);
     const symbolsReady = symbols.length > 0;
 
+    const [selectedSymbol, setSelectedSymbol] = useState(null);
+
     /* ------------------------- threshold meta ------------------------- */
     const [metaMap, setMetaMap] = useState({});
 
@@ -114,7 +116,7 @@ export default function Cfd() {
         return arr;
     }, [symbols, metaMap]);
 
-    const {visibleSymbols} = useMemo(() => {
+   const {filteredSymbols} = useMemo(() => {
         const visible = [];
         const hidden = [];
 
@@ -129,7 +131,8 @@ export default function Cfd() {
 
             if (Number.isFinite(minMaThreshold) && t < minMaThreshold) {
                 hidden.push({
-                    symbol: s, reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
+                    symbol: s,
+                    reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
                 });
                 continue;
             }
@@ -137,8 +140,13 @@ export default function Cfd() {
             visible.push(s);
         }
 
-        return {visibleSymbols: visible, hiddenSymbols: hidden};
+        return {filteredSymbols: visible, hiddenSymbols: hidden};
     }, [symbolsSortedByMa, metaMap, minMaThreshold]);
+
+    const visibleSymbols = useMemo(() => {
+    if (!selectedSymbol) return filteredSymbols;
+    return filteredSymbols.filter((s) => s === selectedSymbol);
+}, [filteredSymbols, selectedSymbol]);
 
     /* ------------------------- stats from panels ------------------------- */
     const [symbolStatsMap, setSymbolStatsMap] = useState({});
@@ -316,26 +324,37 @@ export default function Cfd() {
 
                             {/* 티커 카드 */}
                             <div style={{display: "grid", gap: 12}}>
-                                {visibleSymbols.map((sym) => {
-                                    const st = symbolStatsMap[sym];
-                                    const meta = metaMap[sym];
-                                    const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
+    {filteredSymbols.map((sym) => {
+        const st = symbolStatsMap[sym];
+        const meta = metaMap[sym];
+        const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
+        const active = selectedSymbol === sym;
 
-                                    return (
-                                        <div key={sym} style={{width: "100%"}}>
-                                            <UnifiedTickerCard
-                                                symbol={sym}
-                                                price={st?.price ?? null}
-                                                ma100={st?.ma100 ?? null}
-                                                chg3mPct={st?.chg3mPct ?? null}
-                                                ps={ps}
-                                                meta={meta}
-                                                closesUnit="minutes"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
+        return (
+            <div
+                key={sym}
+                onClick={() => setSelectedSymbol((prev) => prev === sym ? null : sym)}
+                style={{
+                    width: "100%",
+                    cursor: "pointer",
+                    opacity: selectedSymbol && !active ? 0.45 : 1,
+                    border: active ? "1px solid #00ffcc" : "1px solid transparent",
+                    borderRadius: 12,
+                }}
+            >
+                <UnifiedTickerCard
+                    symbol={sym}
+                    price={st?.price ?? null}
+                    ma100={st?.ma100 ?? null}
+                    chg3mPct={st?.chg3mPct ?? null}
+                    ps={ps}
+                    meta={meta}
+                    closesUnit="minutes"
+                />
+            </div>
+        );
+    })}
+</div>
                         </div>
 
                         {/* 오른쪽 */}
