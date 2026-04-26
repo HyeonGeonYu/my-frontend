@@ -27,20 +27,6 @@ function CopyTradingInfoBanner({inviteUrl, startDate, startUsdt, equityUsdt, qrS
     const pnl = typeof equityUsdt === "number" ? equityUsdt - startUsdt : null;
     const pnlPct = typeof equityUsdt === "number" && startUsdt > 0 ? ((equityUsdt - startUsdt) / startUsdt) * 100 : null;
 
-    const onCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(inviteUrl);
-            alert("초대 링크가 복사되었습니다.");
-        } catch {
-            const ta = document.createElement("textarea");
-            ta.value = inviteUrl;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand("copy");
-            document.body.removeChild(ta);
-            alert("초대 링크가 복사되었습니다.");
-        }
-    };
     const onGo = () => {
   window.open(inviteUrl, "_blank");
 };
