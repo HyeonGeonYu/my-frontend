@@ -41,6 +41,9 @@ function CopyTradingInfoBanner({inviteUrl, startDate, startUsdt, equityUsdt, qrS
             alert("초대 링크가 복사되었습니다.");
         }
     };
+    const onGo = () => {
+  window.open(inviteUrl, "_blank");
+};
 
     const pill = {
         display: "inline-flex",
@@ -88,36 +91,48 @@ function CopyTradingInfoBanner({inviteUrl, startDate, startUsdt, equityUsdt, qrS
             </div>
         </div>
 
-        {/* ✅ 2) 둘째 줄: QR + 초대 링크 복사 버튼 (링크 텍스트 박스 제거) */}
-        <div style={{marginTop: 14, display: "flex", gap: 14, alignItems: "center"}}>
-            <div style={{background: "#fff", padding: 10, borderRadius: 12}}>
-                <QRCodeCanvas value={inviteUrl} size={qrSize} includeMargin/>
-            </div>
+        {/* ✅ 2) 둘째 줄: QR + 바로 참여 버튼 */}
+<div style={{marginTop: 14, display: "flex", gap: 14, alignItems: "center"}}>
+    <a
+        href={inviteUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Bybit 초대 링크로 이동"
+        style={{background: "#fff", padding: 10, borderRadius: 12}}
+    >
+        <QRCodeCanvas value={inviteUrl} size={qrSize} includeMargin/>
+    </a>
 
-            <div style={{display: "flex", flexDirection: "column", gap: 8}}>
-                <button
-                    onClick={onCopy}
-                    title="초대 링크 복사"
-                    style={{
-                        padding: "10px 14px",
-                        borderRadius: 14,
-                        border: "1px solid #2a2a2a",
-                        background: "#00ffcc",
-                        color: "#000",
-                        fontWeight: 900,
-                        cursor: "pointer",
-                        fontSize: 14,
-                        width: 160,
-                    }}
-                >
-                    초대 링크 복사
-                </button>
+    <div style={{display: "flex", flexDirection: "column", gap: 8}}>
+        <a
+            href={inviteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Bybit 바로 참여"
+            style={{
+                padding: "10px 14px",
+                borderRadius: 14,
+                border: "1px solid #2a2a2a",
+                background: "#00ffcc",
+                color: "#000",
+                fontWeight: 900,
+                cursor: "pointer",
+                fontSize: 14,
+                width: 160,
+                textAlign: "center",
+                textDecoration: "none",
+                display: "inline-block",
+                boxSizing: "border-box",
+            }}
+        >
+            바로 참여하기
+        </a>
 
-                <div style={{fontSize: 12, opacity: 0.8, lineHeight: 1.4}}>
-                    QR 또는 버튼으로 초대 링크를 공유하세요.
-                </div>
-            </div>
+        <div style={{fontSize: 12, opacity: 0.8, lineHeight: 1.4}}>
+            QR 또는 버튼을 누르면 Bybit 초대 페이지로 이동합니다.
         </div>
+    </div>
+</div>
 
         {/* ✅ 3) 아래: 원래 경고문구 복원 + 한/중/일 */}
         <details style={{marginTop: 14}}>
