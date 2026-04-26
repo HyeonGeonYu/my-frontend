@@ -27,10 +27,6 @@ function CopyTradingInfoBanner({inviteUrl, startDate, startUsdt, equityUsdt, qrS
     const pnl = typeof equityUsdt === "number" ? equityUsdt - startUsdt : null;
     const pnlPct = typeof equityUsdt === "number" && startUsdt > 0 ? ((equityUsdt - startUsdt) / startUsdt) * 100 : null;
 
-    const onGo = () => {
-  window.open(inviteUrl, "_blank");
-};
-
     const pill = {
         display: "inline-flex",
         alignItems: "center",
