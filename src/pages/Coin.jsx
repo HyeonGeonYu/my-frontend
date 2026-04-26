@@ -116,38 +116,47 @@ function CopyTradingInfoBanner({inviteUrl, startDate, startUsdt, equityUsdt, qrS
     </div>
 </div>
 
-        {/* ✅ 3) 아래: 원래 경고문구 복원 + 한/중/일 */}
-        <details style={{marginTop: 14}}>
-            <summary style={{cursor: "pointer", fontSize: 12, opacity: 0.9}}>
-                ⚠️ 리스크 고지 (KR / 中文 / 日本語)
-            </summary>
+        {/* ✅ 3) 아래: 원래 경고문구 복원 + 한/중/일/EN */}
+<details style={{marginTop: 14}}>
+    <summary style={{cursor: "pointer", fontSize: 12, opacity: 0.9}}>
+        ⚠️ 리스크 고지 (KR / 中文 / 日本語 / EN)
+    </summary>
 
-            <div style={{marginTop: 10, fontSize: 12, lineHeight: 1.6, opacity: 0.85}}>
-                <div style={{fontWeight: 800, marginBottom: 4}}>KR</div>
-                <div>
-                    본 페이지는 카피트레이딩 계정 정보를 공유하기 위한 것이며, 참여 여부는 이용자의 자율적 판단에 따릅니다.
-                    카피트레이딩은 손실 또는 청산이 발생할 수 있고, 과거 성과는 미래 수익을 보장하지 않습니다.
-                    모든 투자 결과에 대한 책임은 이용자 본인에게 있습니다.
-                </div>
+    <div style={{marginTop: 10, fontSize: 12, lineHeight: 1.6, opacity: 0.85}}>
+        <div style={{fontWeight: 800, marginBottom: 4}}>KR</div>
+        <div>
+            본 페이지는 카피트레이딩 계정 정보를 공유하기 위한 것이며, 참여 여부는 이용자의 자율적 판단에 따릅니다.
+            카피트레이딩은 손실 또는 청산이 발생할 수 있고, 과거 성과는 미래 수익을 보장하지 않습니다.
+            모든 투자 결과에 대한 책임은 이용자 본인에게 있습니다.
+        </div>
 
-                <div style={{height: 10}}/>
+        <div style={{height: 10}}/>
 
-                <div style={{fontWeight: 800, marginBottom: 4}}>中文</div>
-                <div>
-                    本页面用于分享跟单交易账户相关信息，是否参与由用户自行决定。跟单交易存在亏损或强制平仓的风险，
-                    过往业绩不代表未来表现。所有投资决策及其结果均由用户本人承担责任。
-                </div>
+        <div style={{fontWeight: 800, marginBottom: 4}}>中文</div>
+        <div>
+            本页面用于分享跟单交易账户相关信息，是否参与由用户自行决定。跟单交易存在亏损或强制平仓的风险，
+            过往业绩不代表未来表现。所有投资决策及其结果均由用户本人承担责任。
+        </div>
 
-                <div style={{height: 10}}/>
+        <div style={{height: 10}}/>
 
-                <div style={{fontWeight: 800, marginBottom: 4}}>日本語</div>
-                <div>
-                    本ページはコピートレード口座の情報共有を目的としています。参加の可否は利用者の判断に委ねられます。
-                    コピートレードには損失や強制決済のリスクがあり、過去の実績は将来の成果を保証しません。
-                    投資判断および結果の責任は利用者ご本人にあります。
-                </div>
-            </div>
-        </details>
+        <div style={{fontWeight: 800, marginBottom: 4}}>日本語</div>
+        <div>
+            本ページはコピートレード口座の情報共有を目的としています。参加の可否は利用者の判断に委ねられます。
+            コピートレードには損失や強制決済のリスクがあり、過去の実績は将来の成果を保証しません。
+            投資判断および結果の責任は利用者ご本人にあります。
+        </div>
+
+        <div style={{height: 10}}/>
+
+        <div style={{fontWeight: 800, marginBottom: 4}}>EN</div>
+        <div>
+            This page is intended to share information about a copy trading account, and participation is entirely at the user's own discretion.
+            Copy trading involves risks, including potential losses or liquidation, and past performance does not guarantee future results.
+            All investment decisions and their outcomes are the sole responsibility of the user.
+        </div>
+    </div>
+</details>
 
         <div style={{marginTop: 10, fontSize: 12, opacity: 0.75}}>
             * 본 화면의 자산/성과 표시는 카피트레이딩 계정 기준으로 집계됩니다.
