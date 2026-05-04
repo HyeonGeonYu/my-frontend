@@ -469,12 +469,21 @@ function Archive() {
         });
     };
 
-    const toggleTrading = (date) => {
-        setExpandedTrading((prev) => ({
+    const toggleTrading = (date, day) => {
+    setExpandedTrading((prev) => {
+        const nextExpanded = !prev[date];
+
+        // Trading Snapshot을 닫을 때, 그 날짜의 차트도 같이 닫기
+        if (!nextExpanded && selectedTradeView?.day === day) {
+            setSelectedTradeView(null);
+        }
+
+        return {
             ...prev,
-            [date]: !prev[date],
-        }));
-    };
+            [date]: nextExpanded,
+        };
+    });
+};
 
     const toggleSummary = (key) => {
         setExpandedSummary((prev) => ({
@@ -578,16 +587,16 @@ function Archive() {
                                     selectedTradeView={selectedTradeView}
                                     setSelectedTradeView={setSelectedTradeView}
                                     expanded={!!expandedTrading[date]}
-                                    onToggle={() => toggleTrading(date)}
+                                    onToggle={() => toggleTrading(date, day)}
                                 />
 
-                                {selectedTradeView?.day === day && (
-                                    <ArchiveTradeDetail
-                                        day={day}
-                                        symbol={selectedTradeView.symbol}
-                                        trades={trades.filter((t) => t.symbol === selectedTradeView.symbol)}
-                                    />
-                                )}
+                                {!!expandedTrading[date] && selectedTradeView?.day === day && (
+    <ArchiveTradeDetail
+        day={day}
+        symbol={selectedTradeView.symbol}
+        trades={trades.filter((t) => t.symbol === selectedTradeView.symbol)}
+    />
+)}
 
                                 {(() => {
                                     const youtubeData = data?.youtube_data || {};
