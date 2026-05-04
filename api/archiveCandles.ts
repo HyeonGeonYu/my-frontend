@@ -1,6 +1,10 @@
 // api/archiveCandles.ts
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
+export const config = {
+    regions: ["hnd1"],
+};
+
 function kst0650StartMs(day: string) {
     const [y, m, d] = String(day).split("-").map(Number);
     return Date.UTC(y, m - 1, d, 6 - 9, 50, 0, 0);
