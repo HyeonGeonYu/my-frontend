@@ -12,12 +12,45 @@ function getArchiveWindowMs(day: string) {
     return {startMs, endMs};
 }
 
+async function fetchJsonSafe(url: string) {
+    const res = await fetch(url, {
+        cache: "no-store",
+        headers: {
+            accept: "application/json",
+            "user-agent": "Mozilla/5.0 archive-candles",
+        },
+    });
+
+    const text = await res.text();
+
+    let json: any;
+    try {
+        json = JSON.parse(text);
+    } catch {
+        throw new Error(
+            `Bybit 응답이 JSON이 아님 status=${res.status} body=${text.slice(0, 200)}`
+        );
+    }
+
+    if (!res.ok) {
+        throw new Error(
+            `Bybit HTTP ${res.status}: ${JSON.stringify(json).slice(0, 200)}`
+        );
+    }
+
+    if (json?.retCode !== 0) {
+        throw new Error(
+            `Bybit retCode=${json?.retCode} retMsg=${json?.retMsg || ""}`
+        );
+    }
+
+    return json;
+}
+
 async function fetchBybit1mCandles(symbol: string, day: string) {
     const {startMs, endMs} = getArchiveWindowMs(day);
 
     const all: any[] = [];
-
-    // Bybit limit 1000 때문에 하루를 900분 단위로 쪼갬
     const CHUNK_MS = 900 * 60_000;
 
     let chunkStart = startMs;
@@ -33,9 +66,7 @@ async function fetchBybit1mCandles(symbol: string, day: string) {
         url.searchParams.set("end", String(chunkEnd));
         url.searchParams.set("limit", "1000");
 
-        const res = await fetch(url.toString(), {cache: "no-store"});
-        const json = await res.json();
-
+        const json = await fetchJsonSafe(url.toString());
         const rows = json?.result?.list || [];
 
         if (Array.isArray(rows) && rows.length > 0) {
@@ -61,13 +92,14 @@ async function fetchBybit1mCandles(symbol: string, day: string) {
         chunkStart = chunkEnd;
     }
 
-    const dedup = new Map();
+    const dedup = new Map<number, any>();
     for (const r of all) {
         dedup.set(r.tsMs, r);
     }
 
     return Array.from(dedup.values()).sort((a, b) => a.tsMs - b.tsMs);
 }
+
 export default async function handler(req: any, res: any) {
     try {
         const day = String(req.query.day || "");
@@ -96,6 +128,7 @@ export default async function handler(req: any, res: any) {
             symbol,
             startMs,
             endMs,
+            count: candles.length,
             candles,
         });
     } catch (e: any) {
