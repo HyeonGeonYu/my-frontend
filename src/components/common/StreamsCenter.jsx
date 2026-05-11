@@ -1,7 +1,7 @@
 // src/components/common/StreamsCenter.jsx
-import React, {useEffect, useMemo, useState} from "react";
-import {fmtKSTFull, fmtKSTHMS, fmtComma} from "../../lib/tradeUtils";
-import {signalsRepo} from "../../lib/signalsRepo";
+import React, { useEffect, useMemo, useState } from "react";
+import { fmtKSTFull, fmtKSTHMS, fmtComma } from "../../lib/tradeUtils";
+import { signalsRepo } from "../../lib/signalsRepo";
 
 const ONE_DAY_SEC = 86400;
 
@@ -27,20 +27,100 @@ function toNum(x) {
   return Number.isFinite(n) ? n : null;
 }
 
-function getPnlPct(note) {
-  // ✅ 1) stream이 이미 주는 정규화 필드 우선
-  const direct = toNum(note?.pnl_pct) ?? toNum(note?.pnlPct) ?? toNum(note?.pnl);
-  if (direct != null) return direct;
+const FEE_RATE = 0.0022; // 0.22%
+
+function pickNum(row, keys) {
+  for (const k of keys) {
+    const n = toNum(row?.[k]);
+    if (n != null) return n;
+  }
+  return null;
 }
 
-function compoundEquityFromPnls(pnlsPct, start = 100) {
-  let eq = start;
-  for (const p of pnlsPct) {
-    if (!Number.isFinite(p)) continue;
-    eq *= 1 + p / 100;
+function pickStr(row, keys) {
+  for (const k of keys) {
+    const v = row?.[k];
+    if (v !== undefined && v !== null && v !== "") return String(v);
   }
-  return eq;
+  return "";
 }
+
+function getRealizedPnlUsdt(note) {
+  const sideRaw = pickStr(note, [
+    "side",
+    "position_side",
+    "positionSide",
+    "pos_side",
+    "posSide",
+    "direction",
+  ]).toUpperCase();
+
+  const qty = Math.abs(
+    pickNum(note, [
+      "closed_qty",
+      "closedQty",
+      "close_qty",
+      "closeQty",
+      "qty",
+      "size",
+      "amount",
+      "position_qty",
+      "positionQty",
+      "exec_qty",
+      "execQty",
+    ]) ?? 0
+  );
+
+  const entryPrice = pickNum(note, [
+    "entry_price",
+    "entryPrice",
+    "avg_entry_price",
+    "avgEntryPrice",
+    "open_price",
+    "openPrice",
+    "entry",
+  ]);
+
+  const closePrice = pickNum(note, [
+    "close_price",
+    "closePrice",
+    "avg_close_price",
+    "avgClosePrice",
+    "exit_price",
+    "exitPrice",
+    "avgExitPrice",
+    "close",
+    "price", // EXIT row의 price를 청산가 fallback으로 사용
+  ]);
+
+  if (!qty || !entryPrice || !closePrice) {
+    // 구버전 데이터 fallback: 이미 USDT PNL이 저장된 경우
+    return (
+      toNum(note?.pnl_usdt) ??
+      toNum(note?.realized_pnl) ??
+      toNum(note?.realizedPnl) ??
+      toNum(note?.closed_pnl) ??
+      null
+    );
+  }
+
+  const isShort =
+    sideRaw.includes("SHORT") ||
+    sideRaw === "SELL" ||
+    sideRaw === "S";
+
+  const sign = isShort ? -1 : 1;
+
+  // LONG: (청산가 - 진입가) * 수량
+  // SHORT: (진입가 - 청산가) * 수량
+  const grossPnl = (closePrice - entryPrice) * qty * sign;
+
+  // 진입 거래대금 + 청산 거래대금 양쪽에 0.22% 적용
+  const fee = (entryPrice * qty + closePrice * qty) * FEE_RATE;
+
+  return grossPnl - fee;
+}
+
 
 /** ------------------------- component ------------------------- **/
 export default function StreamsCenter({
@@ -48,7 +128,7 @@ export default function StreamsCenter({
   anchorEndUtcSec, // 06:50 anchor
   dayOffset,
   onDayOffsetChange,
-  bounds = {min: -7, max: 0},
+  bounds = { min: -7, max: 0 },
 
   // 표시는 그냥 2로 두거나, 상위에서 넣어도 됨
   priceScale = 2,
@@ -84,7 +164,7 @@ export default function StreamsCenter({
 
     (async () => {
       try {
-        const data = await signalsRepo.load8d({name, days, limit});
+        const data = await signalsRepo.load8d({ name, days, limit });
         if (!alive) return;
         setAllSignals(data?.signals || []);
       } catch (e) {
@@ -137,21 +217,21 @@ export default function StreamsCenter({
 
   const total = daySignals.length;
 
-  // ✅ pnl -> equity (리스트 펼침 여부와 무관하게 계산)
-  const equity = useMemo(() => {
+  // ✅ 확정 PNL USDT 합산, 수수료 포함
+  const realizedPnlUsdt = useMemo(() => {
     const arr = pnlKind
       ? daySignals.filter(
-          (x) =>
-            String(x?.kind || "").toUpperCase() ===
-            String(pnlKind).toUpperCase()
-        )
+        (x) =>
+          String(x?.kind || "").toUpperCase() ===
+          String(pnlKind).toUpperCase()
+      )
       : daySignals;
 
-    const pnls = arr.map(getPnlPct).filter((p) => Number.isFinite(p));
-    return compoundEquityFromPnls(pnls, 100);
+    return arr.reduce((sum, x) => {
+      const pnl = getRealizedPnlUsdt(x);
+      return sum + (Number.isFinite(pnl) ? pnl : 0);
+    }, 0);
   }, [daySignals, pnlKind]);
-
-  const equityChgPct = equity - 100;
 
   const atMin = dayOffset <= (bounds?.min ?? -7);
   const atMax = dayOffset >= (bounds?.max ?? 0);
@@ -196,20 +276,23 @@ export default function StreamsCenter({
           flexWrap: "wrap",
         }}
       >
-        <div style={{fontWeight: 800, fontSize: 14}}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>
           Streams
-          <span style={{marginLeft: 8, opacity: 0.7, fontWeight: 700}}>
+          <span style={{ marginLeft: 8, opacity: 0.7, fontWeight: 700 }}>
             {name.toUpperCase()} · {dayLabel(anchorEndUtcSec, dayOffset)}{" "}
             (dayOffset {dayOffset})
           </span>
         </div>
 
-        <div style={{display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap"}}>
-          <div style={{fontSize: 12, opacity: 0.85}}>
-            시작 100 → <b>{equity.toFixed(2)}</b>{" "}
-            <span style={{opacity: 0.75}}>
-              ({equityChgPct >= 0 ? "+" : ""}
-              {equityChgPct.toFixed(2)}%{pnlKind ? `, ${pnlKind} 복리` : ""})
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            확정 PNL{" "}
+            <b style={{ color: realizedPnlUsdt >= 0 ? "#16a34a" : "#dc2626" }}>
+              {realizedPnlUsdt >= 0 ? "+" : ""}
+              {fmtComma(realizedPnlUsdt, 2)} USDT
+            </b>
+            <span style={{ opacity: 0.75 }}>
+              {pnlKind ? ` · ${pnlKind} 합산 · 수수료 0.22% 반영` : " · 전체 합산 · 수수료 0.22% 반영"}
             </span>
           </div>
 
@@ -289,22 +372,22 @@ export default function StreamsCenter({
       </div>
 
       {/* list */}
-      <div style={{marginTop: 10}}>
+      <div style={{ marginTop: 10 }}>
         {/* ✅ column header */}
         <div style={CARD}>
-          <div style={{...GRID, fontWeight: 900, opacity: 0.65}}>
+          <div style={{ ...GRID, fontWeight: 900, opacity: 0.65 }}>
             <span>시간</span>
             <span>심볼</span>
             <span>방향</span>
             <span>구분</span>
-            <span style={{textAlign: "right"}}>가격</span>
-            <span style={{textAlign: "right"}}>PNL</span>
+            <span style={{ textAlign: "right" }}>가격</span>
+            <span style={{ textAlign: "right" }}>확정PNL</span>
             <span>근거</span>
           </div>
         </div>
 
         {/* ✅ 항상 보이는 토글 버튼: 기본은 접힘(0개 표시) */}
-        <div style={{display: "flex", justifyContent: "center", marginTop: 8}}>
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
           <button
             onClick={() => setExpanded((v) => !v)}
             disabled={loading}
@@ -327,11 +410,11 @@ export default function StreamsCenter({
         {/* ✅ 펼쳤을 때만 내용 표시 */}
         {expanded && (
           loading ? (
-            <div style={{fontSize: 12, opacity: 0.75, marginTop: 8}}>로딩중...</div>
+            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>로딩중...</div>
           ) : total === 0 ? (
-            <div style={{fontSize: 12, opacity: 0.75, marginTop: 8}}>해당 날짜 시그널 없음</div>
+            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>해당 날짜 시그널 없음</div>
           ) : (
-            <div style={{display: "grid", gap: 8, marginTop: 8}}>
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {daySignals.map((n, idx) => {
                 const side = String(n.side || "").toUpperCase();
                 const kind = String(n.kind || "").toUpperCase();
@@ -345,13 +428,13 @@ export default function StreamsCenter({
                 const reasonsTxt =
                   Array.isArray(reasons) && reasons.length ? reasons.join(", ") : "—";
 
-                const pnl = getPnlPct(n);
-                const pnlTxt = pnl == null ? "—" : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%`;
-
+                const pnl = getRealizedPnlUsdt(n);
+                const pnlTxt =
+                  pnl == null ? "—" : `${pnl >= 0 ? "+" : ""}${fmtComma(pnl, 2)} USDT`;
                 return (
                   <div key={n._id || n.signal_id || idx} style={CARD}>
                     <div
-                      style={{...GRID, lineHeight: 1.5}}
+                      style={{ ...GRID, lineHeight: 1.5 }}
                       title={[
                         timeTxt,
                         n.symbol,
@@ -365,17 +448,17 @@ export default function StreamsCenter({
                         .filter(Boolean)
                         .join(" · ")}
                     >
-                      <span style={{opacity: 0.9}}>{timeTxt}</span>
-                      <b style={{opacity: 0.95}}>{n.symbol || "—"}</b>
-                      <span style={{color: sideColor, fontWeight: 900}}>{side || "—"}</span>
-                      <span style={{opacity: 0.9}}>{kind || "—"}</span>
+                      <span style={{ opacity: 0.9 }}>{timeTxt}</span>
+                      <b style={{ opacity: 0.95 }}>{n.symbol || "—"}</b>
+                      <span style={{ color: sideColor, fontWeight: 900 }}>{side || "—"}</span>
+                      <span style={{ opacity: 0.9 }}>{kind || "—"}</span>
 
-                      <span style={{textAlign: "right"}}>{priceTxt}</span>
-                      <span style={{textAlign: "right", opacity: pnl == null ? 0.6 : 0.95}}>
+                      <span style={{ textAlign: "right" }}>{priceTxt}</span>
+                      <span style={{ textAlign: "right", opacity: pnl == null ? 0.6 : 0.95 }}>
                         {pnlTxt}
                       </span>
 
-                      <span style={{overflow: "hidden", textOverflow: "ellipsis", opacity: 0.9}}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", opacity: 0.9 }}>
                         {reasonsTxt}
                       </span>
                     </div>

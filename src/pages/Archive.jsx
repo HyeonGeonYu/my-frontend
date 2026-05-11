@@ -1,8 +1,8 @@
 // src/pages/Archive.jsx
-import React, {useEffect, useState} from "react";
-import {useSupabaseArchiveData} from "../hooks/useSupabaseArchiveData";
-import {newsParams} from "../constants/newsMeta";
-import {ClipboardCopy, Check} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { useSupabaseArchiveData } from "../hooks/useSupabaseArchiveData";
+import { newsParams } from "../constants/newsMeta";
+import { ClipboardCopy, Check } from "lucide-react";
 import ArchiveChartView from "../components/archive/ArchiveChartView";
 
 /* -------------------------------------------------------------------------- */
@@ -42,17 +42,17 @@ function TradingArchivePanel({
                     userSelect: "none",
                 }}
             >
-                <h4 style={{margin: 0, color: "#00ffcc"}}>
+                <h4 style={{ margin: 0, color: "#00ffcc" }}>
                     {expanded ? "▼" : "▶"} 📈 Trading Snapshot
                 </h4>
 
-                <div style={{fontSize: 13, color: "#aaa"}}>
+                <div style={{ fontSize: 13, color: "#aaa" }}>
                     Signals {trades.length}개 · Symbols {symbols.length}개
                 </div>
             </div>
 
             {expanded && (
-                <div style={{padding: "0 14px 14px"}}>
+                <div style={{ padding: "0 14px 14px" }}>
                     <TradingSnapshotBody
                         day={day}
                         date={date}
@@ -82,9 +82,9 @@ function TradingSnapshotBody({
     const exitTrades = trades.filter((t) => t.kind === "EXIT");
     const entryTrades = trades.filter((t) => t.kind === "ENTRY");
 
-    const pnlSum = exitTrades.reduce((acc, t) => {
-        const n = Number(t.pnl);
-        return Number.isFinite(n) ? acc + n : acc;
+    const realizedPnlUsdt = exitTrades.reduce((acc, t) => {
+        const pnl = getRealizedPnlUsdtFromTrade(t);
+        return Number.isFinite(pnl) ? acc + pnl : acc;
     }, 0);
 
     return (
@@ -97,37 +97,40 @@ function TradingSnapshotBody({
                     marginBottom: 12,
                 }}
             >
-                <ArchiveMetric label="평가 USDT" value={fmtNum(equity, 2)}/>
-                <ArchiveMetric label="미실현 PnL" value={fmtSignedNum(unrealizedPnl, 2)}/>
-                <ArchiveMetric label="Signals" value={String(trades.length)}/>
-                <ArchiveMetric label="ENTRY / EXIT" value={`${entryTrades.length} / ${exitTrades.length}`}/>
-                <ArchiveMetric label="확정 PnL 합산(%)" value={fmtSignedNum(pnlSum, 2)}/>
+                <ArchiveMetric label="평가 USDT" value={fmtNum(equity, 2)} />
+                <ArchiveMetric label="미실현 PnL" value={fmtSignedNum(unrealizedPnl, 2)} />
+                <ArchiveMetric label="Signals" value={String(trades.length)} />
+                <ArchiveMetric label="ENTRY / EXIT" value={`${entryTrades.length} / ${exitTrades.length}`} />
+                <ArchiveMetric
+                    label="확정 PnL 합산"
+                    value={`${fmtSignedNum(realizedPnlUsdt, 2)} USDT`}
+                />
             </div>
 
             {asset?.positions?.length > 0 && (
-                <div style={{marginBottom: 12, overflowX: "auto"}}>
-                    <table style={{width: "100%", borderCollapse: "collapse", fontSize: 12}}>
+                <div style={{ marginBottom: 12, overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                         <thead>
-                        <tr style={{color: "#aaa", borderBottom: "1px solid #333"}}>
-                            <th align="left">Symbol</th>
-                            <th align="left">Side</th>
-                            <th align="right">Qty</th>
-                            <th align="right">Avg Entry</th>
-                            <th align="right">Close</th>
-                            <th align="right">미실현 PnL</th>
-                        </tr>
+                            <tr style={{ color: "#aaa", borderBottom: "1px solid #333" }}>
+                                <th align="left">Symbol</th>
+                                <th align="left">Side</th>
+                                <th align="right">Qty</th>
+                                <th align="right">Avg Entry</th>
+                                <th align="right">Close</th>
+                                <th align="right">미실현 PnL</th>
+                            </tr>
                         </thead>
                         <tbody>
-                        {asset.positions.map((p) => (
-                            <tr key={`${p.symbol}-${p.side}`} style={{borderBottom: "1px solid #222"}}>
-                                <td>{p.symbol}</td>
-                                <td>{p.side}</td>
-                                <td align="right">{fmtNum(p.qty, 4)}</td>
-                                <td align="right">{fmtNum(p.avgEntry, 4)}</td>
-                                <td align="right">{p.closePrice == null ? "-" : fmtNum(p.closePrice, 4)}</td>
-                                <td align="right">{fmtSignedNum(p.unrealizedPnlUsdt, 2)}</td>
-                            </tr>
-                        ))}
+                            {asset.positions.map((p) => (
+                                <tr key={`${p.symbol}-${p.side}`} style={{ borderBottom: "1px solid #222" }}>
+                                    <td>{p.symbol}</td>
+                                    <td>{p.side}</td>
+                                    <td align="right">{fmtNum(p.qty, 4)}</td>
+                                    <td align="right">{fmtNum(p.avgEntry, 4)}</td>
+                                    <td align="right">{p.closePrice == null ? "-" : fmtNum(p.closePrice, 4)}</td>
+                                    <td align="right">{fmtSignedNum(p.unrealizedPnlUsdt, 2)}</td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -135,11 +138,11 @@ function TradingSnapshotBody({
 
             {symbols.length > 0 ? (
                 <div>
-                    <div style={{fontSize: 13, color: "#aaa", marginBottom: 8}}>
+                    <div style={{ fontSize: 13, color: "#aaa", marginBottom: 8 }}>
                         심볼을 누르면 이 Archive 안에서 해당 날짜의 1분봉 차트와 매매기록을 봅니다.
                     </div>
 
-                    <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {symbols.map((symbol) => {
                             const count = trades.filter((t) => t.symbol === symbol).length;
                             const active =
@@ -151,7 +154,7 @@ function TradingSnapshotBody({
                                     key={symbol}
                                     onClick={() => {
                                         if (active) setSelectedTradeView(null);
-                                        else setSelectedTradeView({day, symbol});
+                                        else setSelectedTradeView({ day, symbol });
                                     }}
                                     style={{
                                         padding: "7px 10px",
@@ -163,14 +166,14 @@ function TradingSnapshotBody({
                                         fontWeight: 800,
                                     }}
                                 >
-                                    {symbol} <span style={{opacity: 0.7}}>({count})</span>
+                                    {symbol} <span style={{ opacity: 0.7 }}>({count})</span>
                                 </button>
                             );
                         })}
                     </div>
                 </div>
             ) : (
-                <div style={{color: "#aaa", fontSize: 13}}>
+                <div style={{ color: "#aaa", fontSize: 13 }}>
                     이 날짜에는 저장된 트레이딩 기록이 없습니다.
                 </div>
             )}
@@ -178,7 +181,7 @@ function TradingSnapshotBody({
     );
 }
 
-function ArchiveTradeDetail({day, symbol, trades = []}) {
+function ArchiveTradeDetail({ day, symbol, trades = [], asset = null }) {
     const [candles, setCandles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -195,7 +198,7 @@ function ArchiveTradeDetail({day, symbol, trades = []}) {
             try {
                 const res = await fetch(
                     `/api/archiveCandles?day=${encodeURIComponent(day)}&symbol=${encodeURIComponent(symbol)}`,
-                    {cache: "no-store"}
+                    { cache: "no-store" }
                 );
 
                 const json = await res.json();
@@ -233,71 +236,84 @@ function ArchiveTradeDetail({day, symbol, trades = []}) {
                 border: "1px solid #244",
             }}
         >
-            <h4 style={{margin: "0 0 10px", color: "#00ccff"}}>
+            <h4 style={{ margin: "0 0 10px", color: "#00ccff" }}>
                 📊 {symbol} · {day} 1분봉 / 매매 기록
             </h4>
 
             {loading && (
-                <div style={{color: "#aaa", marginBottom: 10}}>
+                <div style={{ color: "#aaa", marginBottom: 10 }}>
                     1분봉 불러오는 중...
                 </div>
             )}
 
             {error && (
-                <div style={{color: "#ff7777", marginBottom: 10}}>
+                <div style={{ color: "#ff7777", marginBottom: 10 }}>
                     차트 오류: {error.message}
                 </div>
             )}
 
-            <ArchiveChartView candles={candles} trades={trades} height={380}/>
+            <ArchiveChartView
+                candles={candles}
+                trades={trades}
+                symbol={symbol}
+                thresholds={asset?.thresholds || {}}
+                height={380}
+            />
 
             {trades.length === 0 ? (
-                <div style={{color: "#aaa", marginTop: 12}}>해당 심볼의 매매기록이 없습니다.</div>
+                <div style={{ color: "#aaa", marginTop: 12 }}>해당 심볼의 매매기록이 없습니다.</div>
             ) : (
-                <div style={{overflowX: "auto", marginTop: 14}}>
-                    <table style={{width: "100%", borderCollapse: "collapse", fontSize: 12}}>
+                <div style={{ overflowX: "auto", marginTop: 14 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                         <thead>
-                        <tr style={{color: "#aaa", borderBottom: "1px solid #333"}}>
-                            <th align="left">Time</th>
-                            <th align="left">Kind</th>
-                            <th align="left">Side</th>
-                            <th align="right">Price</th>
-                            <th align="right">PnL</th>
-                            <th align="left">Reason</th>
-                        </tr>
+                            <tr style={{ color: "#aaa", borderBottom: "1px solid #333" }}>
+                                <th align="left">Time</th>
+                                <th align="left">Kind</th>
+                                <th align="left">Side</th>
+                                <th align="right">Price</th>
+                                <th align="right">확정 PnL</th>
+                                <th align="left">Reason</th>
+                            </tr>
                         </thead>
                         <tbody>
-                        {trades.map((t) => {
-                            const raw = t.raw_json || {};
-                            const tsMs = Number(raw.ts_ms || raw.timestamp_ms);
-                            const timeText = Number.isFinite(tsMs)
-                                ? new Date(tsMs).toLocaleString()
-                                : "-";
+                            {trades.map((t) => {
+                                const raw = t.raw_json || {};
+                                const tsMs = Number(raw.ts_ms || raw.timestamp_ms);
+                                const timeText = Number.isFinite(tsMs)
+                                    ? new Date(tsMs).toLocaleString()
+                                    : "-";
 
-                            const reasons = Array.isArray(raw.reasons_json)
-                                ? raw.reasons_json.join(" / ")
-                                : "";
+                                const reasons = Array.isArray(raw.reasons_json)
+                                    ? raw.reasons_json.join(" / ")
+                                    : "";
 
-                            return (
-                                <tr key={t.id} style={{borderBottom: "1px solid #222"}}>
-                                    <td>{timeText}</td>
-                                    <td>{t.kind}</td>
-                                    <td>{t.side}</td>
-                                    <td align="right">{t.price ?? "-"}</td>
-                                    <td align="right">{t.pnl ?? "-"}</td>
-                                    <td
-                                        style={{
-                                            maxWidth: 520,
-                                            whiteSpace: "nowrap",
-                                            overflow: "hidden",
-                                            textOverflow: "ellipsis",
-                                        }}
-                                    >
-                                        {reasons}
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                                return (
+                                    <tr key={t.id} style={{ borderBottom: "1px solid #222" }}>
+                                        <td>{timeText}</td>
+                                        <td>{t.kind}</td>
+                                        <td>{t.side}</td>
+                                        <td align="right">{t.price ?? "-"}</td>
+                                        <td align="right">
+                                            {t.kind === "EXIT"
+                                                ? (() => {
+                                                    const pnl = getRealizedPnlUsdtFromTrade(t);
+                                                    return Number.isFinite(pnl) ? `${fmtSignedNum(pnl, 2)} USDT` : "-";
+                                                })()
+                                                : "-"}
+                                        </td>
+                                        <td
+                                            style={{
+                                                maxWidth: 520,
+                                                whiteSpace: "nowrap",
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                            }}
+                                        >
+                                            {reasons}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -306,7 +322,7 @@ function ArchiveTradeDetail({day, symbol, trades = []}) {
     );
 }
 
-function ArchiveMetric({label, value}) {
+function ArchiveMetric({ label, value }) {
     return (
         <div
             style={{
@@ -316,8 +332,8 @@ function ArchiveMetric({label, value}) {
                 border: "1px solid #2a2a2a",
             }}
         >
-            <div style={{fontSize: 12, color: "#aaa"}}>{label}</div>
-            <div style={{fontSize: 18, fontWeight: 900, marginTop: 4}}>{value}</div>
+            <div style={{ fontSize: 12, color: "#aaa" }}>{label}</div>
+            <div style={{ fontSize: 18, fontWeight: 900, marginTop: 4 }}>{value}</div>
         </div>
     );
 }
@@ -326,7 +342,7 @@ function ArchiveMetric({label, value}) {
 /* Copy Button                                                                 */
 /* -------------------------------------------------------------------------- */
 
-function CopyButton({text, size = 18, absolute = true, titleLabel = "복사하기"}) {
+function CopyButton({ text, size = 18, absolute = true, titleLabel = "복사하기" }) {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = async () => {
@@ -355,7 +371,7 @@ function CopyButton({text, size = 18, absolute = true, titleLabel = "복사하�
                 zIndex: 10,
             }}
         >
-            {copied ? <Check size={size}/> : <ClipboardCopy size={size}/>}
+            {copied ? <Check size={size} /> : <ClipboardCopy size={size} />}
         </button>
     );
 }
@@ -385,7 +401,103 @@ function fmtSignedNum(v, digits = 2) {
 
     return `${n >= 0 ? "+" : "-"}${body}`;
 }
+const FEE_RATE = 0.0022; // 0.22%
 
+function pickNum(row, keys) {
+    for (const k of keys) {
+        const n = Number(row?.[k]);
+        if (Number.isFinite(n)) return n;
+    }
+    return null;
+}
+
+function pickStr(row, keys) {
+    for (const k of keys) {
+        const v = row?.[k];
+        if (v !== undefined && v !== null && v !== "") return String(v);
+    }
+    return "";
+}
+
+function getRealizedPnlUsdtFromTrade(t) {
+    const raw = t?.raw_json || {};
+    const merged = { ...raw, ...t };
+
+    const sideRaw = pickStr({ ...raw, ...t }, [
+        "side",
+        "position_side",
+        "positionSide",
+        "pos_side",
+        "posSide",
+        "direction",
+    ]).toUpperCase();
+
+    const qty = Math.abs(
+        pickNum(merged, [
+            "closed_qty",
+            "closedQty",
+            "close_qty",
+            "closeQty",
+            "qty",
+            "size",
+            "amount",
+            "position_qty",
+            "positionQty",
+            "exec_qty",
+            "execQty",
+        ]) ?? 0
+    );
+
+    const entryPrice = pickNum({ ...raw, ...t }, [
+        "entry_price",
+        "entryPrice",
+        "avg_entry_price",
+        "avgEntryPrice",
+        "open_price",
+        "openPrice",
+        "entry",
+    ]);
+
+    const closePrice = pickNum({ ...raw, ...t }, [
+        "close_price",
+        "closePrice",
+        "avg_close_price",
+        "avgClosePrice",
+        "exit_price",
+        "exitPrice",
+        "avgExitPrice",
+        "close",
+        "price",
+    ]);
+
+    if (!qty || !entryPrice || !closePrice) {
+    // 직접 계산용 필드가 없으면, 기존 저장된 pnl 계열 필드 fallback
+    return (
+        pickNum({ ...raw, ...t }, [
+            "pnl_usdt",
+            "realized_pnl",
+            "realizedPnl",
+            "closed_pnl",
+            "closedPnl",
+            "pnl",
+        ]) ?? null
+    );
+}
+
+    const isShort =
+        sideRaw.includes("SHORT") ||
+        sideRaw === "SELL" ||
+        sideRaw === "S";
+
+    const sign = isShort ? -1 : 1;
+
+    const grossPnl = (closePrice - entryPrice) * qty * sign;
+
+    // 진입 거래대금 + 청산 거래대금 양쪽에 0.22% 적용
+    const fee = (entryPrice * qty + closePrice * qty) * FEE_RATE;
+
+    return grossPnl - fee;
+}
 const buildNewsPrompt = (content = "") => {
     const base = (content || "").trim();
     const promptTail =
@@ -430,7 +542,7 @@ function Archive() {
     const [expandedTrading, setExpandedTrading] = useState({});
     const [selectedTradeView, setSelectedTradeView] = useState(null);
 
-    const {data, total, loading, error} = useSupabaseArchiveData(page);
+    const { data, total, loading, error } = useSupabaseArchiveData(page);
 
     const [renderData, setRenderData] = useState([]);
 
@@ -451,10 +563,10 @@ function Archive() {
         const windowIndex = Math.floor((page - 1) / windowSize);
         const start = windowIndex * windowSize + 1;
         const end = Math.min(start + windowSize - 1, totalPages);
-        return {start, end, windowIndex};
+        return { start, end, windowIndex };
     };
 
-    const {start: windowStart, end: windowEnd} = getPageWindow(page, totalPages, pageWindowSize);
+    const { start: windowStart, end: windowEnd } = getPageWindow(page, totalPages, pageWindowSize);
 
     const goPrevPage = () => setPage((p) => Math.max(1, p - 1));
     const goNextPage = () => setPage((p) => Math.min(totalPages, p + 1));
@@ -470,20 +582,20 @@ function Archive() {
     };
 
     const toggleTrading = (date, day) => {
-    setExpandedTrading((prev) => {
-        const nextExpanded = !prev[date];
+        setExpandedTrading((prev) => {
+            const nextExpanded = !prev[date];
 
-        // Trading Snapshot을 닫을 때, 그 날짜의 차트도 같이 닫기
-        if (!nextExpanded && selectedTradeView?.day === day) {
-            setSelectedTradeView(null);
-        }
+            // Trading Snapshot을 닫을 때, 그 날짜의 차트도 같이 닫기
+            if (!nextExpanded && selectedTradeView?.day === day) {
+                setSelectedTradeView(null);
+            }
 
-        return {
-            ...prev,
-            [date]: nextExpanded,
-        };
-    });
-};
+            return {
+                ...prev,
+                [date]: nextExpanded,
+            };
+        });
+    };
 
     const toggleSummary = (key) => {
         setExpandedSummary((prev) => ({
@@ -526,12 +638,12 @@ function Archive() {
     };
 
     return (
-        <div style={{padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh"}}>
-            <h1 style={{color: "#00ffcc"}}>📅 아카이브</h1>
+        <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
+            <h1 style={{ color: "#00ffcc" }}>📅 아카이브</h1>
 
-            {error && <p style={{color: "red"}}>❌ 오류 발생: {error.message}</p>}
+            {error && <p style={{ color: "red" }}>❌ 오류 발생: {error.message}</p>}
 
-            <div style={{position: "relative", minHeight: 600}}>
+            <div style={{ position: "relative", minHeight: 600 }}>
                 {isFetching && (
                     <div
                         style={{
@@ -555,7 +667,7 @@ function Archive() {
 
                 {!loading && (data?.length ?? 0) === 0 && <p>데이터가 없습니다.</p>}
 
-                {renderData.map(({date, day, data, trades = [], symbols = [], asset = null}) => (
+                {renderData.map(({ date, day, data, trades = [], symbols = [], asset = null }) => (
                     <div
                         key={date}
                         style={{
@@ -577,7 +689,7 @@ function Archive() {
                         </h3>
 
                         {expandedDate === date && (
-                            <div style={{paddingLeft: "16px"}}>
+                            <div style={{ paddingLeft: "16px" }}>
                                 <TradingArchivePanel
                                     day={day}
                                     date={date}
@@ -591,12 +703,13 @@ function Archive() {
                                 />
 
                                 {!!expandedTrading[date] && selectedTradeView?.day === day && (
-    <ArchiveTradeDetail
-        day={day}
-        symbol={selectedTradeView.symbol}
-        trades={trades.filter((t) => t.symbol === selectedTradeView.symbol)}
-    />
-)}
+                                    <ArchiveTradeDetail
+                                        day={day}
+                                        symbol={selectedTradeView.symbol}
+                                        trades={trades.filter((t) => t.symbol === selectedTradeView.symbol)}
+                                        asset={asset}
+                                    />
+                                )}
 
                                 {(() => {
                                     const youtubeData = data?.youtube_data || {};
@@ -609,7 +722,7 @@ function Archive() {
 
                                     if (orderedCountries.length === 0) {
                                         return (
-                                            <div style={{color: "#aaa", fontSize: 13, marginTop: 12}}>
+                                            <div style={{ color: "#aaa", fontSize: 13, marginTop: 12 }}>
                                                 저장된 뉴스/유튜브 데이터가 없습니다.
                                             </div>
                                         );
@@ -620,8 +733,8 @@ function Archive() {
                                         const resultKey = `${date}_${country}_result`;
 
                                         return (
-                                            <div key={country} style={{marginBottom: "16px"}}>
-                                                <h4 style={{marginBottom: "4px", color: "#ffcc00"}}>{country}</h4>
+                                            <div key={country} style={{ marginBottom: "16px" }}>
+                                                <h4 style={{ marginBottom: "4px", color: "#ffcc00" }}>{country}</h4>
 
                                                 <div>
                                                     📌 <strong>제목:</strong>{" "}
@@ -629,7 +742,7 @@ function Archive() {
                                                         href={info.url}
                                                         target="_blank"
                                                         rel="noreferrer"
-                                                        style={{color: "#00ccff"}}
+                                                        style={{ color: "#00ccff" }}
                                                     >
                                                         {info.title || info.url}
                                                     </a>
@@ -643,7 +756,7 @@ function Archive() {
                                                 </div>
 
                                                 {info.summary_result && (
-                                                    <div style={{marginTop: "8px"}}>
+                                                    <div style={{ marginTop: "8px" }}>
                                                         <button
                                                             onClick={() => toggleSummary(resultKey)}
                                                             style={{
@@ -670,7 +783,7 @@ function Archive() {
                                                                     position: "relative",
                                                                 }}
                                                             >
-                                                                <CopyButton text={info.summary_result}/>
+                                                                <CopyButton text={info.summary_result} />
                                                                 <strong>🧾 summary_result:</strong>
                                                                 <pre
                                                                     style={{
@@ -686,7 +799,7 @@ function Archive() {
                                                     </div>
                                                 )}
 
-                                                <div style={{marginTop: "8px"}}>
+                                                <div style={{ marginTop: "8px" }}>
                                                     <button
                                                         onClick={() => toggleSummary(summaryKey)}
                                                         style={{
@@ -712,7 +825,7 @@ function Archive() {
                                                                 position: "relative",
                                                             }}
                                                         >
-                                                            <strong style={{color: "#fff", display: "inline-block"}}>
+                                                            <strong style={{ color: "#fff", display: "inline-block" }}>
                                                                 📄 summary_content:
                                                             </strong>
 
@@ -738,7 +851,7 @@ function Archive() {
                                                                 />
                                                             </div>
 
-                                                            <br/>
+                                                            <br />
                                                             {info.summary_content || "내용 없음"}
                                                         </div>
                                                     )}
@@ -764,11 +877,11 @@ function Archive() {
                         flexWrap: "wrap",
                     }}
                 >
-                    <div style={{display: "flex", gap: 10, alignItems: "center"}}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <button
                             onClick={() => setPage(1)}
                             disabled={page === 1}
-                            style={{...pagerBtnBase, ...pagerBtnGhost, ...(page === 1 ? pagerBtnDisabled : null)}}
+                            style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === 1 ? pagerBtnDisabled : null) }}
                             title="첫 페이지"
                         >
                             First
@@ -777,15 +890,15 @@ function Archive() {
                         <button
                             onClick={goPrevPage}
                             disabled={page === 1}
-                            style={{...pagerBtnBase, ...(page === 1 ? pagerBtnDisabled : null)}}
+                            style={{ ...pagerBtnBase, ...(page === 1 ? pagerBtnDisabled : null) }}
                             title="이전 페이지"
                         >
                             ◀ Prev
                         </button>
                     </div>
 
-                    <div style={{display: "flex", gap: 10, alignItems: "center"}}>
-                        {Array.from({length: windowEnd - windowStart + 1}, (_, i) => {
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        {Array.from({ length: windowEnd - windowStart + 1 }, (_, i) => {
                             const pageNum = windowStart + i;
                             const isActive = page === pageNum;
 
@@ -793,23 +906,23 @@ function Archive() {
                                 <button
                                     key={pageNum}
                                     onClick={() => setPage(pageNum)}
-                                    style={{...pagerBtnBase, ...(isActive ? pagerBtnActive : null)}}
+                                    style={{ ...pagerBtnBase, ...(isActive ? pagerBtnActive : null) }}
                                 >
                                     {pageNum}
                                 </button>
                             );
                         })}
 
-                        <span style={{marginLeft: 6, color: "#aaa", fontSize: 14}}>
+                        <span style={{ marginLeft: 6, color: "#aaa", fontSize: 14 }}>
                             {windowStart}-{windowEnd} / {totalPages}
                         </span>
                     </div>
 
-                    <div style={{display: "flex", gap: 10, alignItems: "center"}}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <button
                             onClick={goNextPage}
                             disabled={page === totalPages}
-                            style={{...pagerBtnBase, ...(page === totalPages ? pagerBtnDisabled : null)}}
+                            style={{ ...pagerBtnBase, ...(page === totalPages ? pagerBtnDisabled : null) }}
                             title="다음 페이지"
                         >
                             Next ▶
@@ -818,7 +931,7 @@ function Archive() {
                         <button
                             onClick={() => setPage(totalPages)}
                             disabled={page === totalPages}
-                            style={{...pagerBtnBase, ...pagerBtnGhost, ...(page === totalPages ? pagerBtnDisabled : null)}}
+                            style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === totalPages ? pagerBtnDisabled : null) }}
                             title="마지막 페이지"
                         >
                             Last

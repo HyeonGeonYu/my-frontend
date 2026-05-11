@@ -3,26 +3,14 @@ import {createClient} from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY =
-    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_KEY;
 
 const PER_PAGE = 5;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 function compactDay(day: string) {
     return String(day || "").replaceAll("-", "");
-}
-
-function kst0650StartMs(day: string) {
-    // day = "2026-05-04"
-    // KST 06:50 = UTC 전날/당일 21:50
-    const [y, m, d] = String(day).split("-").map(Number);
-    return Date.UTC(y, m - 1, d, 6 - 9, 50, 0, 0);
-}
-
-function getArchiveWindowMs(day: string) {
-    const startMs = kst0650StartMs(day);
-    const endMs = startMs + ONE_DAY_MS;
-    return {startMs, endMs};
 }
 
 function toNum(v: any, fallback = 0) {
@@ -67,33 +55,43 @@ function extractPositionSymbols(raw: any) {
     );
 }
 
-function extractAssetSummary(raw: any, closePrices: Record<string, number> = {}) {
+function extractAssetSummary(raw: any, assetSnapshot: any = null) {
     if (!raw || typeof raw !== "object") {
         return {
             walletUsdt: 0,
             equityUsdt: 0,
             unrealizedPnlUsdt: 0,
-            positionValueUsdt: 0,
             closePrices: {},
+            closePriceAt: null,
+            thresholds: {},
+            thresholdsSource: null,
             positions: [],
         };
     }
 
-    const walletUsdt = toNum(raw["wallet.USDT"]);
+    const walletUsdt = toNum(raw["wallet.USDT"] ?? assetSnapshot?.wallet_usdt);
+
+    const closePrices = raw.close_prices || {};
+    const thresholds = raw.thresholds || {};
+    const thresholdsSource = raw.thresholds_source || null;
+
+    const savedEquity = Number(raw.equity_usdt ?? assetSnapshot?.equity_usdt);
+    const savedUnrealized = Number(raw.unrealized_pnl_usdt);
+
     const positions = extractPositions(raw);
 
-    let unrealizedPnlUsdt = 0;
-    let positionValueUsdt = 0;
+    let computedUnrealized = 0;
 
     const enrichedPositions = positions.map((p) => {
         const symbol = String(p.symbol || "").toUpperCase();
         const side = p.side;
-        const close = toNum(closePrices[symbol], NaN);
+
+        const closeRaw = closePrices[symbol];
+        const close = closeRaw == null ? null : Number(closeRaw);
 
         let qtySum = 0;
         let entryValue = 0;
-        let pnl = 0;
-        let notional = 0;
+        let pnl = null;
 
         for (const e of p.entries || []) {
             const qty = toNum(e.qty);
@@ -101,95 +99,55 @@ function extractAssetSummary(raw: any, closePrices: Record<string, number> = {})
 
             qtySum += qty;
             entryValue += qty * entry;
+        }
 
-            if (Number.isFinite(close)) {
-                notional += close * qty;
+        const avgEntry = qtySum > 0 ? entryValue / qtySum : null;
 
-                if (side === "LONG") {
-                    pnl += (close - entry) * qty;
-                } else if (side === "SHORT") {
-                    pnl += (entry - close) * qty;
-                }
+        if (
+            close != null &&
+            Number.isFinite(close) &&
+            avgEntry != null &&
+            Number.isFinite(avgEntry)
+        ) {
+            if (side === "LONG") {
+                pnl = (close - avgEntry) * qtySum;
+            } else if (side === "SHORT") {
+                pnl = (avgEntry - close) * qtySum;
+            }
+
+            if (Number.isFinite(pnl)) {
+                computedUnrealized += pnl;
             }
         }
 
-        unrealizedPnlUsdt += pnl;
-        positionValueUsdt += notional;
-
         return {
             ...p,
-            closePrice: Number.isFinite(close) ? close : null,
-            avgEntry: qtySum > 0 ? entryValue / qtySum : null,
+            closePrice: close != null && Number.isFinite(close) ? close : null,
+            avgEntry,
             unrealizedPnlUsdt: pnl,
-            positionValueUsdt: notional,
         };
     });
 
+    const unrealizedPnlUsdt = Number.isFinite(savedUnrealized)
+        ? savedUnrealized
+        : computedUnrealized;
+
+    const equityUsdt = Number.isFinite(savedEquity)
+        ? savedEquity
+        : walletUsdt + unrealizedPnlUsdt;
+
     return {
         walletUsdt,
-        equityUsdt: walletUsdt + unrealizedPnlUsdt,
+        equityUsdt,
         unrealizedPnlUsdt,
-        positionValueUsdt,
         closePrices,
+        closePriceAt: raw.close_price_at || null,
+        thresholds,
+        thresholdsSource,
         positions: enrichedPositions,
     };
 }
 
-async function fetchBybitLastClose(symbol: string, day: string) {
-    const {endMs} = getArchiveWindowMs(day);
-
-    // 마지막 2시간만 조회해서 day_end 직전 마지막 1분봉 close를 잡음
-    const startMs = endMs - 2 * 60 * 60 * 1000;
-
-    const url = new URL("https://api.bybit.com/v5/market/kline");
-    url.searchParams.set("category", "linear");
-    url.searchParams.set("symbol", symbol);
-    url.searchParams.set("interval", "1");
-    url.searchParams.set("start", String(startMs));
-    url.searchParams.set("end", String(endMs));
-    url.searchParams.set("limit", "120");
-
-    const res = await fetch(url.toString(), {cache: "no-store"});
-    const json = await res.json();
-
-    const rows = json?.result?.list || [];
-    if (!Array.isArray(rows) || rows.length === 0) return null;
-
-    // Bybit kline list는 최신순으로 올 수 있으니 정렬
-    const sorted = rows
-        .map((r: any[]) => ({
-            tsMs: Number(r[0]),
-            open: Number(r[1]),
-            high: Number(r[2]),
-            low: Number(r[3]),
-            close: Number(r[4]),
-            volume: Number(r[5]),
-        }))
-        .filter((r) => Number.isFinite(r.tsMs) && Number.isFinite(r.close))
-        .sort((a, b) => a.tsMs - b.tsMs);
-
-    const last = [...sorted].reverse().find((r) => r.tsMs < endMs);
-    return last?.close ?? null;
-}
-
-async function fetchClosePrices(symbols: string[], day: string) {
-    const out: Record<string, number> = {};
-
-    await Promise.all(
-        symbols.map(async (symbol) => {
-            try {
-                const close = await fetchBybitLastClose(symbol, day);
-                if (Number.isFinite(Number(close))) {
-                    out[symbol] = Number(close);
-                }
-            } catch (e) {
-                console.warn("fetch close failed", symbol, e);
-            }
-        })
-    );
-
-    return out;
-}
 
 export default async function handler(req: any, res: any) {
     try {
@@ -280,18 +238,16 @@ export default async function handler(req: any, res: any) {
                     new Set([...tradeSymbols, ...assetSymbols])
                 ).sort();
 
-                const closePrices = await fetchClosePrices(assetSymbols, day);
-
                 return {
-                    date: compactDay(day),
-                    day,
-                    data: row.raw_json || {},
-                    trades: dayTrades,
-                    tradeCount: dayTrades.length,
-                    symbols,
-                    assetSnapshot,
-                    asset: extractAssetSummary(assetRaw, closePrices),
-                };
+    date: compactDay(day),
+    day,
+    data: row.raw_json || {},
+    trades: dayTrades,
+    tradeCount: dayTrades.length,
+    symbols,
+    assetSnapshot,
+    asset: extractAssetSummary(assetRaw, assetSnapshot),
+};
             })
         );
 

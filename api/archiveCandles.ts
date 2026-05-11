@@ -54,10 +54,14 @@ async function fetchJsonSafe(url: string) {
 async function fetchBybit1mCandles(symbol: string, day: string) {
     const {startMs, endMs} = getArchiveWindowMs(day);
 
+    // ✅ MA100 계산용으로 하루 시작 전 100분 추가 조회
+    const MA_BUFFER_MS = 100 * 60_000;
+    const fetchStartMs = startMs - MA_BUFFER_MS;
+
     const all: any[] = [];
     const CHUNK_MS = 900 * 60_000;
 
-    let chunkStart = startMs;
+    let chunkStart = fetchStartMs;
 
     while (chunkStart < endMs) {
         const chunkEnd = Math.min(chunkStart + CHUNK_MS, endMs);
@@ -86,7 +90,7 @@ async function fetchBybit1mCandles(symbol: string, day: string) {
                 }))
                 .filter((r) =>
                     Number.isFinite(r.tsMs) &&
-                    r.tsMs >= startMs &&
+                    r.tsMs >= fetchStartMs &&
                     r.tsMs < endMs
                 );
 
@@ -132,6 +136,8 @@ export default async function handler(req: any, res: any) {
             symbol,
             startMs,
             endMs,
+            visibleStartMs: startMs,
+            visibleEndMs: endMs,
             count: candles.length,
             candles,
         });
