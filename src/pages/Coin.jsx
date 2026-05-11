@@ -336,9 +336,6 @@ function EquityHistoryCard({ currentEquity }) {
         return arr;
     }, [normalizedRows, rangeDays, currentEquity]);
 
-    const chartRowsKey = useMemo(() => {
-        return chartRows.map((r) => `${r.day}:${r.equity}`).join("|");
-    }, [chartRows]);
 
     const minEq = useMemo(() => {
         if (!chartRows.length) return 0;
@@ -458,7 +455,7 @@ function EquityHistoryCard({ currentEquity }) {
             window.removeEventListener("resize", resize);
             chart.remove();
         };
-    }, [chartRowsKey, loading]);
+}, [chartRows, loading]);
     return (
         <div
             style={{
