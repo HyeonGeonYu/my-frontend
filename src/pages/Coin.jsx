@@ -6,7 +6,6 @@ import ChartPanelCore from "../components/common/ChartPanelCore";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec } from "../lib/tradeUtils";
-import StreamsCenter from "../components/common/StreamsCenter";
 import { createChart, ColorType } from "lightweight-charts";
 
 /* ------------------------- 날짜 라벨 ------------------------- */
