@@ -455,7 +455,7 @@ function EquityHistoryCard({ currentEquity }) {
             window.removeEventListener("resize", resize);
             chart.remove();
         };
-}, [chartRows, loading]);
+    }, [chartRows, loading]);
     return (
         <div
             style={{

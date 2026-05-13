@@ -151,6 +151,125 @@ async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, si
   return rows;
 }
 
+
+function toSignalTimeSec(s) {
+  const tsMs = Number(s?.ts_ms ?? s?.timestamp_ms);
+  if (Number.isFinite(tsMs)) return Math.floor(tsMs / 1000);
+
+  const timeSec = Number(s?.timeSec ?? s?.time);
+  if (Number.isFinite(timeSec)) return Math.floor(timeSec);
+
+  return null;
+}
+
+function signalKeyOf(s) {
+  return String(
+    s?.signal_id ||
+    s?.exit_signal_id ||
+    s?.entry_signal_id ||
+    s?.close_open_signal_id ||
+    s?._id ||
+    s?.id ||
+    ""
+  );
+}
+
+function compactSignalMeta(s) {
+  if (!s || typeof s !== "object") return {};
+
+  return {
+    signal_id: s.signal_id ?? s._id ?? s.id,
+    id: s.id,
+    _id: s._id,
+
+    entry_signal_id: s.entry_signal_id,
+    exit_signal_id: s.exit_signal_id,
+    close_open_signal_id: s.close_open_signal_id,
+    open_signal_id: s.open_signal_id,
+    anchor_open_signal_id: s.anchor_open_signal_id,
+
+    kind: s.kind,
+    side: s.side,
+    mode: s.mode,
+    reason: s.reason,
+    reasons: s.reasons,
+    pnl_pct: s.pnl_pct,
+
+    price: s.price,
+    entry_price: s.entry_price,
+    exit_price: s.exit_price,
+    ts_ms: s.ts_ms ?? s.timestamp_ms,
+    timestamp_ms: s.timestamp_ms,
+  };
+}
+
+function enrichAnnotationsWithSignals(sigs = [], markers = [], notes = []) {
+  const byTime = new Map();
+  const byKey = new Map();
+
+  for (const s of sigs || []) {
+    const meta = compactSignalMeta(s);
+
+    const t = toSignalTimeSec(s);
+    if (t != null) {
+      if (!byTime.has(t)) byTime.set(t, []);
+      byTime.get(t).push(meta);
+    }
+
+    const k = signalKeyOf(s);
+    if (k) byKey.set(k, meta);
+  }
+
+  function enrichOne(x) {
+    const k = signalKeyOf(x);
+    let hit = k ? byKey.get(k) : null;
+
+    if (!hit) {
+      const t = Number(x?.time ?? x?.timeSec);
+      const arr = Number.isFinite(t) ? byTime.get(Math.floor(t)) : null;
+
+      if (arr?.length) {
+        const xKind = String(x?.kind || "").toUpperCase();
+        const xText = String(x?.text || "").toUpperCase();
+
+        hit =
+          arr.find((s) => {
+            const kind = String(s?.kind || "").toUpperCase();
+            if (xKind && kind && xKind === kind) return true;
+            if (kind && xText.includes(kind)) return true;
+            return false;
+          }) || arr[0];
+      }
+    }
+
+    if (!hit) return x;
+
+    return {
+      ...hit,
+      ...x,
+
+      // x에 없으면 원본 signal 값 보존
+      signal_id: x.signal_id ?? hit.signal_id,
+      entry_signal_id: x.entry_signal_id ?? hit.entry_signal_id,
+      exit_signal_id: x.exit_signal_id ?? hit.exit_signal_id,
+      close_open_signal_id: x.close_open_signal_id ?? hit.close_open_signal_id,
+      open_signal_id: x.open_signal_id ?? hit.open_signal_id,
+      anchor_open_signal_id: x.anchor_open_signal_id ?? hit.anchor_open_signal_id,
+
+      kind: x.kind ?? hit.kind,
+      side: x.side ?? hit.side,
+      mode: x.mode ?? hit.mode,
+      pnl_pct: x.pnl_pct ?? hit.pnl_pct,
+      ts_ms: x.ts_ms ?? hit.ts_ms,
+    };
+  }
+
+  return {
+    markers: (markers || []).map(enrichOne),
+    notes: (notes || []).map(enrichOne),
+  };
+}
+
 // -------------------- signals (namespaced) --------------------
 
 async function ensureSignalsNamespaced({ sourceId, symUpper, signalName }) {
@@ -164,7 +283,17 @@ async function ensureSignalsNamespaced({ sourceId, symUpper, signalName }) {
     // - cfd : signalName="mt5"
     const sigs = await fetchSignals(symUpper, sigName).catch(() => []);
     const { markers, notes } = buildSignalAnnotations(sigs);
-    signalCache.set(key, { markers: markers || [], notes: notes || [] });
+
+    const enriched = enrichAnnotationsWithSignals(
+      sigs,
+      markers || [],
+      notes || []
+    );
+
+    signalCache.set(key, {
+      markers: enriched.markers || [],
+      notes: enriched.notes || [],
+    });
   }
 
   return signalCache.get(key);

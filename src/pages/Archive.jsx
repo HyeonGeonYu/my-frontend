@@ -225,6 +225,7 @@ function ArchiveTradeDetail({ day, symbol, trades = [], asset = null }) {
             alive = false;
         };
     }, [day, symbol]);
+    const chartTrades = buildChartTrades(trades);
 
     return (
         <div
@@ -254,7 +255,7 @@ function ArchiveTradeDetail({ day, symbol, trades = [], asset = null }) {
 
             <ArchiveChartView
                 candles={candles}
-                trades={trades}
+                trades={chartTrades}
                 symbol={symbol}
                 thresholds={asset?.thresholds || {}}
                 height={380}
@@ -270,36 +271,60 @@ function ArchiveTradeDetail({ day, symbol, trades = [], asset = null }) {
                                 <th align="left">Time</th>
                                 <th align="left">Kind</th>
                                 <th align="left">Side</th>
+                                <th align="left">Signal</th>
+                                <th align="right">Qty</th>
                                 <th align="right">Price</th>
-                                <th align="right">확정 PnL</th>
+                                <th align="right">Fee</th>
+                                <th align="right">Net PnL</th>
                                 <th align="left">Reason</th>
                             </tr>
                         </thead>
                         <tbody>
                             {trades.map((t) => {
                                 const raw = t.raw_json || {};
-                                const tsMs = Number(raw.ts_ms || raw.timestamp_ms);
+                                const tsMs = Number(raw.ts_ms || raw.timestamp_ms || t.ts_ms || t.timestamp_ms);
                                 const timeText = Number.isFinite(tsMs)
                                     ? new Date(tsMs).toLocaleString()
                                     : "-";
 
-                                const reasons = Array.isArray(raw.reasons_json)
-                                    ? raw.reasons_json.join(" / ")
-                                    : "";
+                                const signalType = getSignalTypeFromTrade(t);
+                                const reasons = getReasonsFromTrade(t);
+                                const qty = getTradeQty(t);
+                                const price = getTradePrice(t);
+                                const fee = getTradeFeeUsdt(t);
+                                const pnl = t.kind === "EXIT" ? getRealizedPnlUsdtFromTrade(t) : null;
 
                                 return (
                                     <tr key={t.id} style={{ borderBottom: "1px solid #222" }}>
                                         <td>{timeText}</td>
                                         <td>{t.kind}</td>
                                         <td>{t.side}</td>
-                                        <td align="right">{t.price ?? "-"}</td>
+                                        <td>{signalType}</td>
+                                        <td align="right">{Number.isFinite(qty) ? fmtNum(qty, 4) : "-"}</td>
+                                        <td align="right">{Number.isFinite(price) ? fmtNum(price, 4) : "-"}</td>
                                         <td align="right">
-                                            {t.kind === "EXIT"
-                                                ? (() => {
-                                                    const pnl = getRealizedPnlUsdtFromTrade(t);
-                                                    return Number.isFinite(pnl) ? `${fmtSignedNum(pnl, 2)} USDT` : "-";
-                                                })()
-                                                : "-"}
+                                            {Number.isFinite(fee) ? `${fmtNum(fee, 4)} USDT` : "-"}
+                                        </td>
+                                        <td align="right">
+                                            {(() => {
+                                                const pnlPct = t.kind === "EXIT" ? getNetPnlPctFromTrade(t) : null;
+
+                                                if (t.kind !== "EXIT") return "-";
+
+                                                if (Number.isFinite(pnl) && Number.isFinite(pnlPct)) {
+                                                    return `${fmtSignedNum(pnl, 2)} USDT (${fmtSignedNum(pnlPct, 2)}%)`;
+                                                }
+
+                                                if (Number.isFinite(pnl)) {
+                                                    return `${fmtSignedNum(pnl, 2)} USDT`;
+                                                }
+
+                                                if (Number.isFinite(pnlPct)) {
+                                                    return `${fmtSignedNum(pnlPct, 2)}%`;
+                                                }
+
+                                                return "-";
+                                            })()}
                                         </td>
                                         <td
                                             style={{
@@ -308,8 +333,9 @@ function ArchiveTradeDetail({ day, symbol, trades = [], asset = null }) {
                                                 overflow: "hidden",
                                                 textOverflow: "ellipsis",
                                             }}
+                                            title={reasons.join(" / ")}
                                         >
-                                            {reasons}
+                                            {reasons.join(" / ")}
                                         </td>
                                     </tr>
                                 );
@@ -320,6 +346,60 @@ function ArchiveTradeDetail({ day, symbol, trades = [], asset = null }) {
             )}
         </div>
     );
+}
+
+function getReasonsFromTrade(t) {
+    const raw = t?.raw_json || {};
+
+    if (Array.isArray(raw.reasons_json)) {
+        return raw.reasons_json.map(String).filter(Boolean);
+    }
+
+    if (Array.isArray(t?.reasons_json)) {
+        return t.reasons_json.map(String).filter(Boolean);
+    }
+
+    const reasonText =
+        raw.reason ||
+        raw.reasons ||
+        raw.reason_text ||
+        t?.reason ||
+        t?.reasons ||
+        "";
+
+    if (!reasonText) return [];
+
+    return String(reasonText)
+        .split("/")
+        .map((v) => v.trim())
+        .filter(Boolean);
+}
+
+function getSignalTypeFromTrade(t) {
+    const reasons = getReasonsFromTrade(t);
+    return reasons[0] || t?.kind || "-";
+}
+
+function getTradeQty(t) {
+    const n = toNumOrNull(t?.qty);
+    return n == null ? null : Math.abs(n);
+}
+
+function getEntryPriceFromTrade(t) {
+    return toNumOrNull(t?.raw_json?.entry_price);
+}
+
+function getClosePriceFromTrade(t) {
+    return toNumOrNull(t?.raw_json?.exit_price);
+}
+
+
+function getTradePrice(t) {
+    return toNumOrNull(t?.price);
+}
+
+function getTradeFeeUsdt(t) {
+    return toNumOrNull(t?.raw_json?.fee_usdt);
 }
 
 function ArchiveMetric({ label, value }) {
@@ -401,103 +481,112 @@ function fmtSignedNum(v, digits = 2) {
 
     return `${n >= 0 ? "+" : "-"}${body}`;
 }
-const FEE_RATE = 0.0022; // 0.22%
+const ROUND_TRIP_FEE_PCT = 0.11;
 
-function pickNum(row, keys) {
-    for (const k of keys) {
-        const n = Number(row?.[k]);
-        if (Number.isFinite(n)) return n;
-    }
-    return null;
+function getNetPnlPctFromTrade(t) {
+    const pnlPct = getPnlPctFromTrade(t);
+    if (!Number.isFinite(pnlPct)) return null;
+    return pnlPct - ROUND_TRIP_FEE_PCT;
 }
 
-function pickStr(row, keys) {
-    for (const k of keys) {
-        const v = row?.[k];
-        if (v !== undefined && v !== null && v !== "") return String(v);
-    }
-    return "";
+function toNumOrNull(v) {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
 }
 
 function getRealizedPnlUsdtFromTrade(t) {
-    const raw = t?.raw_json || {};
-    const merged = { ...raw, ...t };
-
-    const sideRaw = pickStr({ ...raw, ...t }, [
-        "side",
-        "position_side",
-        "positionSide",
-        "pos_side",
-        "posSide",
-        "direction",
-    ]).toUpperCase();
-
-    const qty = Math.abs(
-        pickNum(merged, [
-            "closed_qty",
-            "closedQty",
-            "close_qty",
-            "closeQty",
-            "qty",
-            "size",
-            "amount",
-            "position_qty",
-            "positionQty",
-            "exec_qty",
-            "execQty",
-        ]) ?? 0
-    );
-
-    const entryPrice = pickNum({ ...raw, ...t }, [
-        "entry_price",
-        "entryPrice",
-        "avg_entry_price",
-        "avgEntryPrice",
-        "open_price",
-        "openPrice",
-        "entry",
-    ]);
-
-    const closePrice = pickNum({ ...raw, ...t }, [
-        "close_price",
-        "closePrice",
-        "avg_close_price",
-        "avgClosePrice",
-        "exit_price",
-        "exitPrice",
-        "avgExitPrice",
-        "close",
-        "price",
-    ]);
-
-    if (!qty || !entryPrice || !closePrice) {
-    // 직접 계산용 필드가 없으면, 기존 저장된 pnl 계열 필드 fallback
-    return (
-        pickNum({ ...raw, ...t }, [
-            "pnl_usdt",
-            "realized_pnl",
-            "realizedPnl",
-            "closed_pnl",
-            "closedPnl",
-            "pnl",
-        ]) ?? null
-    );
+    return toNumOrNull(t?.pnl);
 }
 
-    const isShort =
-        sideRaw.includes("SHORT") ||
-        sideRaw === "SELL" ||
-        sideRaw === "S";
-
-    const sign = isShort ? -1 : 1;
-
-    const grossPnl = (closePrice - entryPrice) * qty * sign;
-
-    // 진입 거래대금 + 청산 거래대금 양쪽에 0.22% 적용
-    const fee = (entryPrice * qty + closePrice * qty) * FEE_RATE;
-
-    return grossPnl - fee;
+function getPnlPctFromTrade(t) {
+    return toNumOrNull(t?.raw_json?.pnl_pct);
 }
+
+function buildChartTrades(trades = []) {
+    return trades.map((t) => {
+        const raw = t.raw_json || {};
+
+        const tsMs = Number(raw.ts_ms || raw.timestamp_ms || t.ts_ms || t.timestamp_ms);
+        const signalType = getSignalTypeFromTrade(t);
+        const reasons = getReasonsFromTrade(t);
+
+        const qty = getTradeQty(t);
+        const price = getTradePrice(t);
+        const entryPrice = getEntryPriceFromTrade(t);
+        const closePrice = getClosePriceFromTrade(t);
+        const fee = getTradeFeeUsdt(t);
+        const netPnl = t.kind === "EXIT" ? getRealizedPnlUsdtFromTrade(t) : null;
+        const netPnlPct = t.kind === "EXIT" ? getNetPnlPctFromTrade(t) : null;
+
+        const pnlText =
+            Number.isFinite(netPnl) && Number.isFinite(netPnlPct)
+                ? `${fmtSignedNum(netPnl, 2)} USDT (${fmtSignedNum(netPnlPct, 2)}%)`
+                : Number.isFinite(netPnl)
+                    ? `${fmtSignedNum(netPnl, 2)} USDT`
+                    : Number.isFinite(netPnlPct)
+                        ? `${fmtSignedNum(netPnlPct, 2)}%`
+                        : "-";
+
+        return {
+            ...t,
+            tsMs,
+            timeSec: Number.isFinite(tsMs) ? Math.floor(tsMs / 1000) : null,
+
+            signalType,
+            reasonText: reasons.join(" / "),
+
+            qty,
+            price,
+            entryPrice,
+            closePrice,
+            feeUsdt: fee,
+            netPnlUsdt: netPnl,
+            netPnlPct,
+            // 차트 라벨용
+            chartLabel:
+                t.kind === "EXIT"
+                    ? [
+                        signalType,
+                        Number.isFinite(netPnl) && Number.isFinite(netPnlPct)
+                            ? `${fmtSignedNum(netPnl, 2)} USDT (${fmtSignedNum(netPnlPct, 2)}%)`
+                            : Number.isFinite(netPnl)
+                                ? `${fmtSignedNum(netPnl, 2)} USDT`
+                                : Number.isFinite(netPnlPct)
+                                    ? `${fmtSignedNum(netPnlPct, 2)}%`
+                                    : null,
+                    ].filter(Boolean).join(" · ")
+                    : [
+                        signalType,
+                        Number.isFinite(qty) && qty > 0 ? `qty ${fmtNum(qty, 4)}` : null,
+                    ].filter(Boolean).join(" · "),
+
+
+
+
+            // 툴팁용
+            chartTooltip:
+                t.kind === "EXIT"
+                    ? [
+                        `${t.kind} ${t.side || ""}`,
+                        `Signal: ${signalType}`,
+                        `Qty: ${fmtNum(qty, 4)}`,
+                        `Entry: ${entryPrice ? fmtNum(entryPrice, 4) : "-"}`,
+                        `Close: ${closePrice ? fmtNum(closePrice, 4) : "-"}`,
+                        `Fee: ${fee ? fmtNum(fee, 4) : "-"} USDT`,
+                        `Net PnL: ${pnlText}`,
+                    ].join("\n")
+                    : [
+                        `${t.kind} ${t.side || ""}`,
+                        `Signal: ${signalType}`,
+                        `Qty: ${fmtNum(qty, 4)}`,
+                        `Price: ${price ? fmtNum(price, 4) : "-"}`,
+                    ].join("\n"),
+        };
+    });
+}
+
+
 const buildNewsPrompt = (content = "") => {
     const base = (content || "").trim();
     const promptTail =

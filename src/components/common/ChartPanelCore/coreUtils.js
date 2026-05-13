@@ -3,7 +3,25 @@
 export const ONE_DAY_SEC = 86400;
 export const MA_BUF = 99;
 export const MAX_1M_BARS = 43200;
+export const ROUND_TRIP_FEE_PCT = 0.11;
 
+export function toNumOrNull(v) {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+export function getNetPnlPctFromSignal(s) {
+    const pnlPct = toNumOrNull(s?.pnl_pct);
+    if (!Number.isFinite(pnlPct)) return null;
+    return pnlPct - ROUND_TRIP_FEE_PCT;
+}
+
+export function fmtSignedPct(v, digits = 2) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}%`;
+}
 // ✅ digits cache (ChartPanelCore 전용)
 export const digitsCache = new Map(); // key: `${sourceKey}|${symbol}` -> digits
 

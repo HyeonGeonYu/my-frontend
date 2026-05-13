@@ -11,7 +11,15 @@ function inferPriceScale(candles = [], trades = []) {
     }
 
     for (const t of trades) {
-        nums.push(t.price, t.raw_json?.price, t.raw_json?.entry_price);
+        nums.push(
+            t.price,
+            t.entryPrice,
+            t.closePrice,
+            t.raw_json?.price,
+            t.raw_json?.entry_price,
+            t.raw_json?.close_price,
+            t.raw_json?.exit_price
+        );
     }
 
     let maxDigits = 2;
@@ -76,24 +84,113 @@ function markerStyle(kind, side) {
 }
 
 function buildMarkers(trades = []) {
+    const stacked = new Map();
+
     return trades
         .map((t) => {
             const raw = t.raw_json || {};
-            const tsMs = Number(raw.ts_ms || raw.timestamp_ms);
-            if (!Number.isFinite(tsMs)) return null;
 
-            const time = Math.floor(tsMs / 1000);
+            const tsMs = Number(
+                t.tsMs ||
+                t.timestampMs ||
+                t.timestamp_ms ||
+                raw.ts_ms ||
+                raw.timestamp_ms
+            );
+
+            const timeSec = Number(t.timeSec);
+
+            const time = Number.isFinite(timeSec)
+                ? timeSec
+                : Number.isFinite(tsMs)
+                    ? Math.floor(tsMs / 1000)
+                    : null;
+
+            if (!Number.isFinite(time)) return null;
+
             const kind = String(t.kind || raw.kind || "").toUpperCase();
             const side = String(t.side || raw.side || "").toUpperCase();
-
             const style = markerStyle(kind, side);
+
+            const signalType = String(t.signalType || "").trim();
+            const rawQty = t.qty;
+            const qty =
+                rawQty === null || rawQty === undefined || rawQty === ""
+                    ? null
+                    : Number(rawQty);
+
+            const rawNetPnl = t.netPnlUsdt;
+            const netPnl =
+                rawNetPnl === null || rawNetPnl === undefined || rawNetPnl === ""
+                    ? null
+                    : Number(rawNetPnl);
+
+            const rawNetPnlPct = t.netPnlPct;
+            const netPnlPct =
+                rawNetPnlPct === null || rawNetPnlPct === undefined || rawNetPnlPct === ""
+                    ? null
+                    : Number(rawNetPnlPct);
+
+            const hasPnl = Number.isFinite(netPnl);
+            const hasPnlPct = Number.isFinite(netPnlPct);
+
+            const isExit = kind === "EXIT";
+            const hasQty = Number.isFinite(qty) && qty > 0;
+
+            const baseText = `${kind || "SIGNAL"}${side ? ` ${side}` : ""}`;
+            const pnlText =
+                hasPnl && hasPnlPct
+                    ? `${netPnl >= 0 ? "+" : ""}${netPnl.toFixed(2)} USDT (${netPnlPct >= 0 ? "+" : ""}${netPnlPct.toFixed(2)}%)`
+                    : hasPnl
+                        ? `${netPnl >= 0 ? "+" : ""}${netPnl.toFixed(2)} USDT`
+                        : hasPnlPct
+                            ? `${netPnlPct >= 0 ? "+" : ""}${netPnlPct.toFixed(2)}%`
+                            : null;
+            const detailText = isExit
+                ? [
+                    signalType,
+                    pnlText,
+                ].filter(Boolean).join(" · ")
+                : [
+                    signalType,
+                    hasQty ? `${qty.toFixed(4)}` : null,
+                ].filter(Boolean).join(" · ");
+
+            const text = detailText ? `${baseText} · ${detailText}` : baseText;
+
+            const stackKey = `${time}_${style.position}`;
+            const stackIndex = stacked.get(stackKey) || 0;
+            stacked.set(stackKey, stackIndex + 1);
+
+            const markerPrice = Number(
+                t.price ??
+                t.closePrice ??
+                t.entryPrice ??
+                raw.price ??
+                raw.close_price ??
+                raw.entry_price ??
+                raw.exit_price
+            );
 
             return {
                 time,
                 position: style.position,
-                color: style.color,
+                color:
+                    isExit && hasPnl
+                        ? netPnl >= 0
+                            ? "#33ff77"
+                            : "#ff5577"
+                        : style.color,
                 shape: style.shape,
-                text: `${kind || "SIGNAL"}${side ? ` ${side}` : ""}`,
+                text,
+
+                // ✅ ChartView overlay 위치 계산용
+                price: Number.isFinite(markerPrice) ? markerPrice : undefined,
+                entryPrice: t.entryPrice,
+                closePrice: t.closePrice,
+                raw_json: raw,
+
+                stackIndex,
             };
         })
         .filter(Boolean)

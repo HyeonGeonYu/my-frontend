@@ -118,7 +118,7 @@ export default function ChartPanelCore({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              zIndex: 5,
+              zIndex: 200,
               fontWeight: 800,
               borderRadius: 12,
               backdropFilter: "blur(2px)",
@@ -129,7 +129,6 @@ export default function ChartPanelCore({
         ) : null}
 
         <ChartView
-          // ✅ 핵심: 숫자 width를 내려줘야 ChartView가 resize 가능
           width={chartWidth}
           height={height}
           tickFormatter={tickFormatter}
@@ -139,6 +138,7 @@ export default function ChartPanelCore({
           markers={markers}
           priceScale={autoDigits}
           visibleRange={visibleRange}
+          loading={loading}
         />
 
         <SignalNotesPanel
