@@ -258,7 +258,7 @@ function enrichAnnotationsWithSignals(sigs = [], markers = [], notes = []) {
       open_signal_id: x.open_signal_id ?? hit.open_signal_id,
       anchor_open_signal_id: x.anchor_open_signal_id ?? hit.anchor_open_signal_id,
 
-      kind: x.kind ?? hit.kind, kind: x.kind ?? hit.kind,
+      kind: x.kind ?? hit.kind,
       side: x.side ?? hit.side,
 
       mode: x.mode ?? hit.mode,
