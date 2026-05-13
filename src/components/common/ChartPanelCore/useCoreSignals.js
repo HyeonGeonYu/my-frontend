@@ -26,20 +26,59 @@ function withPnlPctText(item) {
 }
 
 
-function getSignalType(item) {
-    const reasons = item?.reasons;
+function parseReasonsJson(v) {
+    if (!v) return [];
 
-    if (Array.isArray(reasons) && reasons.length > 0) {
-        return String(reasons[0] || "").trim();
+    if (Array.isArray(v)) return v;
+
+    if (typeof v === "string") {
+        try {
+            const parsed = JSON.parse(v);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+
+    return [];
+}
+
+function getSignalType(item, exec) {
+    const candidates = [
+        item?.reasons,
+        item?.reasons_json,
+        item?.raw_json?.reasons,
+        item?.raw_json?.reasons_json,
+        exec?.reasons,
+        exec?.reasons_json,
+        exec?.raw_json?.reasons,
+        exec?.raw_json?.reasons_json,
+    ];
+
+    for (const c of candidates) {
+        const arr = Array.isArray(c) ? c : parseReasonsJson(c);
+        if (arr.length > 0) {
+            return String(arr[0] || "").trim();
+        }
     }
 
     return String(
         item?.mode ||
         item?.reason ||
         item?.signalType ||
+        item?.raw_json?.mode ||
+        item?.raw_json?.reason ||
+        item?.raw_json?.signalType ||
+        exec?.mode ||
+        exec?.reason ||
+        exec?.signalType ||
+        exec?.raw_json?.mode ||
+        exec?.raw_json?.reason ||
+        exec?.raw_json?.signalType ||
         ""
     ).trim();
 }
+
 
 function getKindSideText(item, exec) {
     const kind = String(item?.kind || exec?.kind || "").toUpperCase();
@@ -52,7 +91,7 @@ function getKindSideText(item, exec) {
 
 function buildBaseArchiveLikeText(item, exec) {
     const kindSide = getKindSideText(item, exec);
-    const signalType = getSignalType(item);
+    const signalType = getSignalType(item, exec);
 
     return [
         kindSide,

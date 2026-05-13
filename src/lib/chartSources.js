@@ -193,6 +193,8 @@ function compactSignalMeta(s) {
     mode: s.mode,
     reason: s.reason,
     reasons: s.reasons,
+    reasons_json: s.reasons_json,
+    signalType: s.signalType,
     pnl_pct: s.pnl_pct,
 
     price: s.price,
@@ -256,9 +258,15 @@ function enrichAnnotationsWithSignals(sigs = [], markers = [], notes = []) {
       open_signal_id: x.open_signal_id ?? hit.open_signal_id,
       anchor_open_signal_id: x.anchor_open_signal_id ?? hit.anchor_open_signal_id,
 
-      kind: x.kind ?? hit.kind,
+      kind: x.kind ?? hit.kind, kind: x.kind ?? hit.kind,
       side: x.side ?? hit.side,
+
       mode: x.mode ?? hit.mode,
+      reason: x.reason ?? hit.reason,
+      reasons: x.reasons ?? hit.reasons,
+      reasons_json: x.reasons_json ?? hit.reasons_json,
+      signalType: x.signalType ?? hit.signalType,
+
       pnl_pct: x.pnl_pct ?? hit.pnl_pct,
       ts_ms: x.ts_ms ?? hit.ts_ms,
     };
