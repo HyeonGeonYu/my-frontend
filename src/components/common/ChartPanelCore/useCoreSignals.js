@@ -4,27 +4,6 @@ import { buildCrossMarkers } from "../../../lib/tradeUtils";
 import { signalsRepo } from "../../../lib/signalsRepo";
 import { getNetPnlPctFromSignal, fmtSignedPct } from "./coreUtils";
 
-function withPnlPctText(item) {
-    const kind = String(item?.kind || "").toUpperCase();
-    if (kind !== "EXIT") return item;
-
-    const netPnlPct = getNetPnlPctFromSignal(item);
-    const pnlPctText = fmtSignedPct(netPnlPct, 2);
-
-    if (!pnlPctText) return item;
-
-    const oldText = String(item?.text || item?.label || "").trim();
-
-    // 이미 같은 문구가 있으면 중복 방지
-    if (oldText.includes(pnlPctText)) return item;
-
-    return {
-        ...item,
-        netPnlPct,
-        text: oldText ? `${oldText} · ${pnlPctText}` : pnlPctText,
-    };
-}
-
 
 function parseReasonsJson(v) {
     if (!v) return [];
