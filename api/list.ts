@@ -1,5 +1,5 @@
 // api/list.ts
-import {createClient} from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY =
@@ -163,13 +163,13 @@ export default async function handler(req: any, res: any) {
         const to = from + PER_PAGE - 1;
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
-            auth: {persistSession: false},
+            auth: { persistSession: false },
         });
 
-        const {data: dailyRows, error: dailyError, count} = await supabase
+        const { data: dailyRows, error: dailyError, count } = await supabase
             .from("daily_collections")
-            .select("*", {count: "exact"})
-            .order("day", {ascending: false})
+            .select("*", { count: "exact" })
+            .order("day", { ascending: false })
             .range(from, to);
 
         if (dailyError) throw dailyError;
@@ -180,17 +180,17 @@ export default async function handler(req: any, res: any) {
             days.length
                 ? supabase
                     .from("trade_records")
-                    .select("*")
+                    .select("id, day, symbol, side, kind, signal, display_label, price, qty, pnl, raw_json")
                     .in("day", days)
-                : Promise.resolve({data: [], error: null}),
+                : Promise.resolve({ data: [], error: null }),
 
             days.length
                 ? supabase
                     .from("asset_snapshots")
                     .select("*")
                     .in("day", days)
-                    .order("created_at", {ascending: false})
-                : Promise.resolve({data: [], error: null}),
+                    .order("created_at", { ascending: false })
+                : Promise.resolve({ data: [], error: null }),
         ]);
 
         const trades = tradeResult.data || [];
@@ -239,15 +239,15 @@ export default async function handler(req: any, res: any) {
                 ).sort();
 
                 return {
-    date: compactDay(day),
-    day,
-    data: row.raw_json || {},
-    trades: dayTrades,
-    tradeCount: dayTrades.length,
-    symbols,
-    assetSnapshot,
-    asset: extractAssetSummary(assetRaw, assetSnapshot),
-};
+                    date: compactDay(day),
+                    day,
+                    data: row.raw_json || {},
+                    trades: dayTrades,
+                    tradeCount: dayTrades.length,
+                    symbols,
+                    assetSnapshot,
+                    asset: extractAssetSummary(assetRaw, assetSnapshot),
+                };
             })
         );
 

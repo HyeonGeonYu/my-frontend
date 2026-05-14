@@ -348,36 +348,65 @@ function ArchiveTradeDetail({ day, symbol, trades = [], asset = null }) {
     );
 }
 
+function normalizeReasons(value) {
+    if (Array.isArray(value)) {
+        return value.map(String).filter(Boolean);
+    }
+
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) {
+                return parsed.map(String).filter(Boolean);
+            }
+        } catch {
+            // JSON 문자열이 아니면 아래에서 일반 텍스트로 처리
+        }
+
+        return value
+            .split("/")
+            .map((v) => v.trim())
+            .filter(Boolean);
+    }
+
+    return [];
+}
+
 function getReasonsFromTrade(t) {
     const raw = t?.raw_json || {};
 
-    if (Array.isArray(raw.reasons_json)) {
-        return raw.reasons_json.map(String).filter(Boolean);
-    }
+    const reasons =
+        normalizeReasons(raw.reasons_json).length > 0
+            ? normalizeReasons(raw.reasons_json)
+            : normalizeReasons(t?.reasons_json).length > 0
+                ? normalizeReasons(t?.reasons_json)
+                : normalizeReasons(
+                    raw.reasons ||
+                    raw.reason_text ||
+                    t?.reasons ||
+                    ""
+                );
 
-    if (Array.isArray(t?.reasons_json)) {
-        return t.reasons_json.map(String).filter(Boolean);
-    }
-
-    const reasonText =
-        raw.reason ||
-        raw.reasons ||
-        raw.reason_text ||
-        t?.reason ||
-        t?.reasons ||
-        "";
-
-    if (!reasonText) return [];
-
-    return String(reasonText)
-        .split("/")
-        .map((v) => v.trim())
-        .filter(Boolean);
+    return reasons;
 }
 
 function getSignalTypeFromTrade(t) {
+    const raw = t?.raw_json || {};
     const reasons = getReasonsFromTrade(t);
-    return reasons[0] || t?.kind || "-";
+
+    return (
+        t?.signal ||
+        raw?.signal ||
+        raw?.signal_kind ||
+        raw?.display_kind ||
+        raw?.reason ||
+        raw?.signal_type ||
+        raw?.entry_reason ||
+        raw?.exit_reason ||
+        reasons?.[0] ||
+        t?.kind ||
+        "-"
+    );
 }
 
 function getTradeQty(t) {
