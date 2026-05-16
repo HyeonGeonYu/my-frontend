@@ -75,11 +75,11 @@ function toUpperOrUndef(x: string | null): string | undefined {
 function getSignalKey(msg: Record<string, any>, id: string): string {
   return String(
     msg.signal_id ||
-      msg.exit_signal_id ||
-      msg.entry_signal_id ||
-      msg.close_open_signal_id ||
-      id ||
-      ""
+    msg.exit_signal_id ||
+    msg.entry_signal_id ||
+    msg.close_open_signal_id ||
+    id ||
+    ""
   );
 }
 
@@ -93,6 +93,144 @@ function getTsMs(msg: Record<string, any>, id: string): number | undefined {
 
   const fromId = id && id.includes("-") ? Number(id.split("-")[0]) : undefined;
   return typeof fromId === "number" && Number.isFinite(fromId) ? fromId : undefined;
+}
+
+function firstNum(...xs: any[]): number | null {
+  for (const x of xs) {
+    const n = numOrNull(x);
+    if (n !== null && Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function positiveNum(...xs: any[]): number | null {
+  for (const x of xs) {
+    const n = numOrNull(x);
+    if (n !== null && Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function resolveTradePrice(
+  msg: Record<string, any>,
+  sourceSignal?: Record<string, any> | null
+): { price: number | null; source: string | null } {
+  const kind = String(msg.kind || msg.action || "").toUpperCase();
+
+  if (kind === "ENTRY") {
+    const candidates: Array<[string, any]> = [
+      ["trade_record.entry_price", msg.entry_price],
+      ["trade_record.price", msg.price],
+      ["source_signal.price", sourceSignal?.price],
+    ];
+
+    for (const [src, value] of candidates) {
+      const n = positiveNum(value);
+      if (n !== null) return { price: n, source: src };
+    }
+  }
+
+  if (kind === "EXIT") {
+    const candidates: Array<[string, any]> = [
+      ["trade_record.exit_price", msg.exit_price],
+      ["trade_record.price", msg.price],
+      ["source_signal.price", sourceSignal?.price],
+    ];
+
+    for (const [src, value] of candidates) {
+      const n = positiveNum(value);
+      if (n !== null) return { price: n, source: src };
+    }
+  }
+
+  const candidates: Array<[string, any]> = [
+    ["trade_record.price", msg.price],
+    ["trade_record.exit_price", msg.exit_price],
+    ["trade_record.entry_price", msg.entry_price],
+    ["source_signal.price", sourceSignal?.price],
+  ];
+
+  for (const [src, value] of candidates) {
+    const n = positiveNum(value);
+    if (n !== null) return { price: n, source: src };
+  }
+
+  return { price: null, source: null };
+}
+
+function calcResolvedPnlUsdt(
+  msg: Record<string, any>,
+  sourceSignal?: Record<string, any> | null
+): {
+  gross_pnl_usdt: number | null;
+  fee_usdt: number | null;
+  pnl_usdt: number | null;
+  pnl_source: string | null;
+  resolved_price: number | null;
+  resolved_price_source: string | null;
+} {
+  const existingPnl = numOrNull(msg.pnl_usdt);
+  const existingGross = numOrNull(msg.gross_pnl_usdt);
+  const existingFee = numOrNull(msg.fee_usdt);
+
+  const resolved = resolveTradePrice(msg, sourceSignal);
+
+  if (existingPnl !== null) {
+    return {
+      gross_pnl_usdt: existingGross,
+      fee_usdt: existingFee,
+      pnl_usdt: existingPnl,
+      pnl_source: "trade_record.pnl_usdt",
+      resolved_price: resolved.price,
+      resolved_price_source: resolved.source,
+    };
+  }
+
+  const kind = String(msg.kind || msg.action || "").toUpperCase();
+  if (kind !== "EXIT") {
+    return {
+      gross_pnl_usdt: existingGross,
+      fee_usdt: existingFee,
+      pnl_usdt: null,
+      pnl_source: null,
+      resolved_price: resolved.price,
+      resolved_price_source: resolved.source,
+    };
+  }
+
+  const side = String(msg.side || "").toUpperCase();
+  const qty = positiveNum(msg.qty);
+  const entryPrice = positiveNum(msg.entry_price, sourceSignal?.entry_price);
+  const exitPrice = resolved.price;
+  const feeRate = firstNum(msg.fee_rate) ?? 0.00055;
+
+  if (!qty || !entryPrice || !exitPrice || !["LONG", "SHORT"].includes(side)) {
+    return {
+      gross_pnl_usdt: existingGross,
+      fee_usdt: existingFee,
+      pnl_usdt: null,
+      pnl_source: null,
+      resolved_price: resolved.price,
+      resolved_price_source: resolved.source,
+    };
+  }
+
+  const gross =
+    side === "LONG"
+      ? (exitPrice - entryPrice) * qty
+      : (entryPrice - exitPrice) * qty;
+
+  const fee = (entryPrice * qty + exitPrice * qty) * feeRate;
+  const pnl = gross - fee;
+
+  return {
+    gross_pnl_usdt: gross,
+    fee_usdt: fee,
+    pnl_usdt: pnl,
+    pnl_source: `calculated_from_${resolved.source}`,
+    resolved_price: resolved.price,
+    resolved_price_source: resolved.source,
+  };
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -135,6 +273,40 @@ export async function GET(req: Request): Promise<Response> {
     const toId = streamIdToMs(toMs);
 
     const raw = await redis.xrange(keyStream, fromId, toId, limit);
+
+    const signalKeyStream = "trading:bybit:signals";
+    const signalRaw = await redis.xrange(signalKeyStream, fromId, toId, Math.min(limit * 3, 5000));
+
+    const signalsById = new Map<string, Record<string, any>>();
+
+    const signalEntriesArr: Array<{ id: string; message: any }> = [];
+
+    if (Array.isArray(signalRaw)) {
+      for (const ent of signalRaw as any[]) {
+        if (ent?.id != null && ent?.message != null) {
+          signalEntriesArr.push({ id: String(ent.id), message: ent.message });
+          continue;
+        }
+
+        if (Array.isArray(ent) && ent.length >= 2) {
+          signalEntriesArr.push({ id: String(ent[0]), message: ent[1] });
+          continue;
+        }
+      }
+    } else if (signalRaw && typeof signalRaw === "object") {
+      for (const [id, message] of Object.entries(signalRaw as Record<string, any>)) {
+        signalEntriesArr.push({ id, message });
+      }
+    }
+
+    for (const ent of signalEntriesArr) {
+      const msg = parseStreamEntryValue(ent.message);
+      const sid = String(msg.signal_id || msg.id || msg._id || "");
+      if (!sid) continue;
+      if (!signalsById.has(sid)) {
+        signalsById.set(sid, { ...msg, _id: ent.id });
+      }
+    }
 
     const entriesArr: Array<{ id: string; message: any }> = [];
 
@@ -185,11 +357,16 @@ export async function GET(req: Request): Promise<Response> {
       const tsMs = getTsMs(msg, id);
       const timeSec = typeof tsMs === "number" && Number.isFinite(tsMs) ? Math.floor(tsMs / 1000) : undefined;
 
+      const signalKey = getSignalKey(msg, id);
+      const sourceSignal = signalsById.get(String(signalKey)) || null;
+
+      const resolved = calcResolvedPnlUsdt(msg, sourceSignal);
+
       records.push({
         ...msg,
 
         _id: id,
-        signalKey: getSignalKey(msg, id),
+        signalKey,
 
         symbol,
         side,
@@ -199,13 +376,22 @@ export async function GET(req: Request): Promise<Response> {
         timeSec,
 
         qty: numOrNull(msg.qty),
+
+        // 원본 가격
         price: numOrNull(msg.price),
         entry_price: numOrNull(msg.entry_price),
         exit_price: numOrNull(msg.exit_price),
 
-        gross_pnl_usdt: numOrNull(msg.gross_pnl_usdt),
-        fee_usdt: numOrNull(msg.fee_usdt),
-        pnl_usdt: numOrNull(msg.pnl_usdt),
+        // 표시/계산용 복구 가격
+        resolved_price: resolved.resolved_price,
+        resolved_price_source: resolved.resolved_price_source,
+
+        gross_pnl_usdt: resolved.gross_pnl_usdt,
+        fee_usdt: resolved.fee_usdt,
+        pnl_usdt: resolved.pnl_usdt,
+        pnl_source: resolved.pnl_source,
+
+        source_signal: sourceSignal,
       });
     }
 
