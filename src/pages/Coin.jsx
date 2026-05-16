@@ -67,7 +67,7 @@ function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qr
             </div>
 
             <div style={pill}>
-                현재(지갑):{" "}
+                현재(평가):{" "}
                 <b>
                     {typeof equityUsdt === "number" ? `${fmt(equityUsdt, 2)} USDT` : "—"}
                     {typeof pnl === "number" && typeof pnlPct === "number" ? ` (${pnl >= 0 ? "+" : ""}${fmt(pnl, 2)} / ${pnlPct >= 0 ? "+" : ""}${fmt(pnlPct, 2)}%)` : ""}
@@ -757,6 +757,63 @@ export default function Coin() {
         return Number.isFinite(v) ? v : null;
     }, [asset]);
 
+    const equityUsdt = useMemo(() => {
+        const wallet = Number(asset?.wallet?.USDT ?? 0);
+        if (!Number.isFinite(wallet)) return null;
+
+        const positions = asset?.positions || {};
+        let unrealized = 0;
+
+        for (const [symbol, posBySide] of Object.entries(positions)) {
+            const sym = String(symbol || "").toUpperCase();
+            const price = Number(statsMap?.[sym]?.price);
+
+            if (!Number.isFinite(price) || price <= 0) continue;
+            if (!posBySide || typeof posBySide !== "object") continue;
+
+            for (const side of ["LONG", "SHORT"]) {
+                const sidePos = posBySide?.[side];
+                if (!sidePos || typeof sidePos !== "object") continue;
+
+                const entries = Array.isArray(sidePos.entries) ? sidePos.entries : [];
+
+                // entries가 있으면 lot별 평가
+                if (entries.length > 0) {
+                    for (const e of entries) {
+                        const qty = Number(e.qty ?? e.qty_total ?? 0);
+                        const entry = Number(e.price ?? e.entry_price ?? 0);
+
+                        if (!Number.isFinite(qty) || qty <= 0) continue;
+                        if (!Number.isFinite(entry) || entry <= 0) continue;
+
+                        if (side === "LONG") {
+                            unrealized += (price - entry) * qty;
+                        } else {
+                            unrealized += (entry - price) * qty;
+                        }
+                    }
+
+                    continue;
+                }
+
+                // entries가 없을 때 fallback
+                const qty = Number(sidePos.qty ?? 0);
+                const entry = Number(sidePos.price ?? sidePos.entry_price ?? sidePos.avg_price ?? 0);
+
+                if (!Number.isFinite(qty) || qty <= 0) continue;
+                if (!Number.isFinite(entry) || entry <= 0) continue;
+
+                if (side === "LONG") {
+                    unrealized += (price - entry) * qty;
+                } else {
+                    unrealized += (entry - price) * qty;
+                }
+            }
+        }
+
+        return wallet + unrealized;
+    }, [asset, statsMap]);
+
     /* ------------------------- bounds (dayOffset clamp) ------------------------- */
     const [perSymbolBounds, setPerSymbolBounds] = useState({});
     const onBounds = useCallback((symbol, bounds) => {
@@ -842,7 +899,7 @@ export default function Coin() {
                         minWidth: 0,
                     }}
                 >
-                    <EquityHistoryCard currentEquity={walletUsdt} />
+                    <EquityHistoryCard currentEquity={equityUsdt} />
                 </div>
 
                 {/* ✅ 상단 2줄: 계정 안내 + 자산/포지션 카드 */}
@@ -862,7 +919,7 @@ export default function Coin() {
                         inviteUrl={inviteUrl}
                         startDate={startDate}
                         startUsdt={START_USDT}
-                        equityUsdt={walletUsdt}
+                        equityUsdt={equityUsdt}
                         qrSize={82}
                     />
 
