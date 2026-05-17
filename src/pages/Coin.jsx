@@ -752,11 +752,6 @@ export default function Coin() {
     /* ------------------------- equity (현재 평가액) ------------------------- */
     const START_USDT = 500;
 
-    const walletUsdt = useMemo(() => {
-        const v = Number(asset?.wallet?.USDT ?? 0);
-        return Number.isFinite(v) ? v : null;
-    }, [asset]);
-
     const equityUsdt = useMemo(() => {
         const wallet = Number(asset?.wallet?.USDT ?? 0);
         if (!Number.isFinite(wallet)) return null;

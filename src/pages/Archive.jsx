@@ -510,12 +510,8 @@ function fmtSignedNum(v, digits = 2) {
 
     return `${n >= 0 ? "+" : "-"}${body}`;
 }
-const ROUND_TRIP_FEE_PCT = 0.11;
-
 function getNetPnlPctFromTrade(t) {
-    const pnlPct = getPnlPctFromTrade(t);
-    if (!Number.isFinite(pnlPct)) return null;
-    return pnlPct - ROUND_TRIP_FEE_PCT;
+    return getPnlPctFromTrade(t);
 }
 
 function toNumOrNull(v) {
@@ -529,7 +525,35 @@ function getRealizedPnlUsdtFromTrade(t) {
 }
 
 function getPnlPctFromTrade(t) {
-    return toNumOrNull(t?.raw_json?.pnl_pct);
+    const raw = t?.raw_json || {};
+
+    // 1) 이미 저장된 퍼센트가 있으면 우선 사용
+    const savedPct =
+        toNumOrNull(raw.pnl_pct) ??
+        toNumOrNull(raw.pnlPct) ??
+        toNumOrNull(raw.pnl_pct_resolved) ??
+        toNumOrNull(t?.pnl_pct);
+
+    if (savedPct != null) {
+        return savedPct;
+    }
+
+    // 2) 없으면 pnl USDT / 진입 명목금액으로 계산
+    const pnl = getRealizedPnlUsdtFromTrade(t);
+    const qty = getTradeQty(t);
+    const entryPrice = getEntryPriceFromTrade(t);
+
+    if (!Number.isFinite(pnl) || !Number.isFinite(qty) || !Number.isFinite(entryPrice)) {
+        return null;
+    }
+
+    const notional = Math.abs(qty) * entryPrice;
+
+    if (!Number.isFinite(notional) || notional <= 0) {
+        return null;
+    }
+
+    return (pnl / notional) * 100;
 }
 
 function buildChartTrades(trades = []) {
