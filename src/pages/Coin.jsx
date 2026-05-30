@@ -561,6 +561,646 @@ function EquityHistoryCard({ currentEquity }) {
     );
 }
 
+/* ------------------------- 트레이딩 로직 설명 탭 ------------------------- */
+function TradingLogicTabs() {
+    const [activeTab, setActiveTab] = useState("formula");
+
+    const tabs = [
+        { key: "formula", label: "기준 수식" },
+        { key: "entry", label: "진입" },
+        { key: "boost", label: "BOOST" },
+        { key: "exit", label: "청산" },
+        { key: "risk", label: "리스크 컨트롤" },
+    ];
+
+    const wrapStyle = {
+        padding: 16,
+        borderRadius: 16,
+        background: "#151515",
+        border: "1px solid #2a2a2a",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+        width: "100%",
+        boxSizing: "border-box",
+    };
+
+    const btnStyle = (active) => ({
+        padding: "8px 12px",
+        borderRadius: 999,
+        border: `1px solid ${active ? "#00ffcc" : "#333"}`,
+        background: active ? "rgba(0,255,204,0.13)" : "#1a1a1a",
+        color: active ? "#00ffcc" : "#ddd",
+        fontWeight: 900,
+        fontSize: 12,
+        cursor: "pointer",
+    });
+
+    return (
+        <div style={wrapStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                    <div style={{ fontSize: 17, fontWeight: 900 }}>트레이딩 로직 설명</div>
+                    <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7, lineHeight: 1.5 }}>
+                        LONG 기준 설명입니다. SHORT은 같은 조건을 반대 방향으로 적용합니다.
+                    </div>
+                </div>
+
+                <div style={{ fontSize: 11, opacity: 0.6, alignSelf: "flex-end" }}>
+                    MA100 · momentum · BOOST · RISK CONTROL
+                </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+                {tabs.map((t) => (
+                    <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setActiveTab(t.key)}
+                        style={btnStyle(activeTab === t.key)}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+                {activeTab === "formula" && <LogicFormulaTab />}
+                {activeTab === "entry" && <LogicEntryTab />}
+                {activeTab === "boost" && <LogicBoostTab />}
+                {activeTab === "exit" && <LogicExitTab />}
+                {activeTab === "risk" && <LogicRiskTab />}
+            </div>
+        </div>
+    );
+}
+
+function TradingLogicFloatingButton() {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                style={{
+                    position: "fixed",
+                    right: 18,
+                    bottom: 18,
+                    zIndex: 1000,
+                    padding: "11px 14px",
+                    borderRadius: 999,
+                    border: "1px solid #00ffcc",
+                    background: "rgba(0,255,204,0.16)",
+                    color: "#00ffcc",
+                    fontWeight: 900,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                    backdropFilter: "blur(8px)",
+                }}
+                title="트레이딩 로직 설명 보기"
+            >
+                전략 설명
+            </button>
+
+            {open && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={() => setOpen(false)}
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 2000,
+                        background: "rgba(0,0,0,0.72)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 18,
+                    }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            width: "min(980px, 96vw)",
+                            maxHeight: "88vh",
+                            overflowY: "auto",
+                            borderRadius: 18,
+                            background: "#111",
+                            border: "1px solid #2a2a2a",
+                            boxShadow: "0 20px 60px rgba(0,0,0,0.65)",
+                        }}
+                    >
+                        <div
+                            style={{
+                                position: "sticky",
+                                top: 0,
+                                zIndex: 1,
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: 12,
+                                padding: "12px 14px",
+                                background: "rgba(17,17,17,0.94)",
+                                borderBottom: "1px solid #2a2a2a",
+                                backdropFilter: "blur(8px)",
+                            }}
+                        >
+                            <div style={{ fontWeight: 900, fontSize: 15 }}>
+                                트레이딩 로직 설명
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setOpen(false)}
+                                style={{
+                                    border: "1px solid #333",
+                                    background: "#1a1a1a",
+                                    color: "#fff",
+                                    borderRadius: 10,
+                                    padding: "7px 10px",
+                                    fontWeight: 900,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                닫기
+                            </button>
+                        </div>
+
+                        <div style={{ padding: 14 }}>
+                            <TradingLogicTabs />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}
+
+
+function MiniLogicChart({ title, lines = [], points = [], note }) {
+    const W = 560;
+    const H = 190;
+
+    return (
+        <div
+            style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 14,
+                background: "#0f0f0f",
+                border: "1px solid #282828",
+                overflow: "hidden",
+            }}
+        >
+            <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 8 }}>
+                {title}
+            </div>
+
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 680 }}>
+                <line x1="48" y1="30" x2="520" y2="30" stroke="#222" />
+                <line x1="48" y1="70" x2="520" y2="70" stroke="#222" />
+                <line x1="48" y1="110" x2="520" y2="110" stroke="#222" />
+                <line x1="48" y1="150" x2="520" y2="150" stroke="#222" />
+
+                {lines.map((ln, idx) => (
+                    <g key={idx}>
+                        <line
+                            x1="48"
+                            y1={ln.y}
+                            x2="520"
+                            y2={ln.y}
+                            stroke={ln.color || "#aaa"}
+                            strokeWidth="2"
+                            strokeDasharray={ln.dash || ""}
+                        />
+                        <text x="6" y={ln.y + 4} fill={ln.color || "#aaa"} fontSize="11">
+                            {ln.label}
+                        </text>
+                    </g>
+                ))}
+
+                {points.length > 1 && (
+                    <polyline
+                        fill="none"
+                        stroke="#eee"
+                        strokeWidth="2"
+                        points={points.map((p) => `${p.x},${p.y}`).join(" ")}
+                    />
+                )}
+
+                {points.map((p, idx) => (
+                    <g key={idx}>
+                        <circle cx={p.x} cy={p.y} r="4" fill={p.color || "#00ffcc"} />
+                        {p.label && (
+                            <text x={p.x + 7} y={p.y - 7} fill={p.color || "#00ffcc"} fontSize="11">
+                                {p.label}
+                            </text>
+                        )}
+                    </g>
+                ))}
+            </svg>
+
+            {note && (
+                <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75, lineHeight: 1.6 }}>
+                    {note}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function LogicFormulaTab() {
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div><b>MA100</b> = 최근 100개 캔들의 평균 가격</div>
+            <div><b>ma_thr_eff</b> = MA100에서 얼마나 벗어나야 신호로 볼지 정한 기준 거리</div>
+            <div><b>ma_thr_eff / 2</b> = MA100 기준 거리의 절반</div>
+
+            <div style={{ marginTop: 10 }}>
+                예시: <b>MA100 = 100</b>, <b>ma_thr_eff = 0.6%</b>
+            </div>
+
+            <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+                <li>LONG INIT 기준 = 100 × (1 - 0.006) = <b>99.4</b></li>
+                <li>SCALE_IN 보조 기준 = 100 × (1 - 0.003) = <b>99.7</b></li>
+                <li>NORMAL 청산 기준 = 100 × (1 + 0.006) = <b>100.6</b></li>
+                <li>SHORT은 위/아래 방향만 반대로 적용</li>
+            </ul>
+
+            <MiniLogicChart
+                title="MA100 기준선 예시"
+                lines={[
+                    { y: 45, label: "100.6", color: "#00ffcc" },
+                    { y: 85, label: "100.0", color: "#ffd166" },
+                    { y: 115, label: "99.7", color: "#7ee787", dash: "4 4" },
+                    { y: 145, label: "99.4", color: "#ff8080" },
+                ]}
+                points={[
+                    { x: 80, y: 82 },
+                    { x: 170, y: 110 },
+                    { x: 260, y: 146, label: "LONG INIT", color: "#ff8080" },
+                    { x: 360, y: 118, label: "SCALE 기준", color: "#7ee787" },
+                    { x: 470, y: 45, label: "청산", color: "#00ffcc" },
+                ]}
+                note="ma_thr_eff / 2는 MA100 기준 이격의 절반입니다. 예시에서는 0.6%의 절반인 0.3%입니다."
+            />
+        </div>
+    );
+}
+
+function LogicEntryTab() {
+    const conditionBox = {
+        marginTop: 8,
+        padding: 10,
+        borderRadius: 12,
+        background: "#101010",
+        border: "1px solid #2a2a2a",
+        fontSize: 12,
+        lineHeight: 1.7,
+    };
+
+    const andStyle = {
+        display: "inline-block",
+        margin: "4px 0",
+        padding: "2px 8px",
+        borderRadius: 999,
+        background: "rgba(0,255,204,0.12)",
+        border: "1px solid rgba(0,255,204,0.35)",
+        color: "#00ffcc",
+        fontWeight: 900,
+        fontSize: 11,
+    };
+
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>LONG 진입</div>
+
+            <div style={conditionBox}>
+                <b>INIT</b>
+                <div>1. 포지션이 없음</div>
+                <div style={andStyle}>AND</div>
+                <div>2. price &lt; MA100 × (1 - ma_thr_eff)</div>
+                <div style={andStyle}>AND</div>
+                <div>3. 3분 모멘텀 &lt; -momentum_threshold</div>
+            </div>
+
+            <div style={conditionBox}>
+                <b>INIT2 / INIT3</b>
+                <div>1. INIT 이후 15분 이내</div>
+                <div style={andStyle}>AND</div>
+                <div>2. INIT2: price ≤ INIT_PRICE × (1 - ma_thr_eff)</div>
+                <div>3. INIT3: price ≤ INIT_PRICE × (1 - ma_thr_eff × 2)</div>
+            </div>
+
+            <div style={conditionBox}>
+                <b>SCALE_IN</b>
+                <div>1. 최근 진입 후 30분 경과</div>
+                <div style={andStyle}>AND</div>
+                <div>2. price &lt; newest_entry</div>
+                <div style={andStyle}>AND</div>
+                <div>3. price ≤ MA100 × (1 - ma_thr_eff / 2)</div>
+                <div style={andStyle}>AND</div>
+                <div>4. 3분 모멘텀 &lt; -momentum_threshold</div>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                예시: INIT_PRICE = 100, ma_thr_eff = 0.6%라면 INIT2는 99.4 이하, INIT3는 98.8 이하에서 발생합니다.
+            </div>
+
+            <MiniLogicChart
+                title="LONG 단계 진입 예시"
+                lines={[
+                    { y: 50, label: "MA100", color: "#ffd166" },
+                    { y: 95, label: "INIT", color: "#ff8080" },
+                    { y: 125, label: "INIT2", color: "#ff8080", dash: "4 4" },
+                    { y: 155, label: "INIT3", color: "#ff8080", dash: "4 4" },
+                ]}
+                points={[
+                    { x: 60, y: 55 },
+                    { x: 140, y: 96, label: "INIT", color: "#ff8080" },
+                    { x: 240, y: 125, label: "INIT2", color: "#ff8080" },
+                    { x: 340, y: 155, label: "INIT3", color: "#ff8080" },
+                    { x: 460, y: 118 },
+                ]}
+                note="진입 조건은 대부분 AND 조건입니다. 가격 조건과 모멘텀 조건을 동시에 만족해야 합니다."
+            />
+        </div>
+    );
+}
+
+function LogicBoostTab() {
+    const conditionBox = {
+        marginTop: 8,
+        padding: 10,
+        borderRadius: 12,
+        background: "#101010",
+        border: "1px solid #2a2a2a",
+        fontSize: 12,
+        lineHeight: 1.7,
+    };
+
+    const andStyle = {
+        display: "inline-block",
+        margin: "4px 0",
+        padding: "2px 8px",
+        borderRadius: 999,
+        background: "rgba(0,255,204,0.12)",
+        border: "1px solid rgba(0,255,204,0.35)",
+        color: "#00ffcc",
+        fontWeight: 900,
+        fontSize: 11,
+    };
+
+    const orStyle = {
+        display: "inline-block",
+        margin: "4px 0",
+        padding: "2px 8px",
+        borderRadius: 999,
+        background: "rgba(255,184,108,0.12)",
+        border: "1px solid rgba(255,184,108,0.35)",
+        color: "#ffb86c",
+        fontWeight: 900,
+        fontSize: 11,
+    };
+
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>BOOST 진입</div>
+
+            <div style={conditionBox}>
+                <b>BOOST_ENTRY</b>
+                <div>1. anchor = INIT 또는 SCALE_IN</div>
+                <div style={andStyle}>AND</div>
+                <div>2. anchor 발생 후 2분~15분 사이</div>
+                <div style={andStyle}>AND</div>
+                <div>3. 현재 열려 있는 BOOST 수 &lt; 2</div>
+                <div style={andStyle}>AND</div>
+                <div>4. 마지막 BOOST 이후 5분 이상 경과</div>
+                <div style={andStyle}>AND</div>
+                <div>5. 아래 둘 중 하나 만족</div>
+                <div style={orStyle}>OR</div>
+                <div style={{ paddingLeft: 12 }}>
+                    A. 3분 모멘텀 &lt; -momentum_threshold<br />
+                    B. price ≤ anchor_entry
+                </div>
+            </div>
+
+            <div style={conditionBox}>
+                <b>BOOST 청산</b>
+                <div>1. 전체 평균가 기준 +0.3% → BOOST 전부 청산</div>
+                <div style={orStyle}>OR</div>
+                <div>2. anchor + BOOST 평균가 기준 +0.5% → BOOST 전부 청산</div>
+                <div style={orStyle}>OR</div>
+                <div>3. anchor 후 20분 경과 + price ≥ anchor+BOOST 평균가 → BOOST 전부 청산</div>
+                <div style={orStyle}>OR</div>
+                <div>4. anchor 후 30분 경과 → BOOST 강제 청산</div>
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+                SHORT은 반대로 적용됩니다. 상승 모멘텀 또는 price ≥ anchor_entry이면 BOOST 후보가 됩니다.
+            </div>
+
+            <MiniLogicChart
+                title="BOOST 시간 구조"
+                lines={[
+                    { y: 95, label: "anchor", color: "#ffd166" },
+                ]}
+                points={[
+                    { x: 60, y: 95, label: "Anchor", color: "#ffd166" },
+                    { x: 120, y: 120, label: "2분", color: "#aaa" },
+                    { x: 190, y: 135, label: "BOOST1", color: "#00ffcc" },
+                    { x: 310, y: 150, label: "BOOST2", color: "#00ffcc" },
+                    { x: 400, y: 118, label: "15분", color: "#aaa" },
+                    { x: 455, y: 100, label: "20분", color: "#ffb86c" },
+                    { x: 510, y: 82, label: "30분", color: "#ff8080" },
+                ]}
+                note="2분 전에는 BOOST 진입 금지, 15분 이후에는 신규 BOOST 금지, 20분 이후에는 실패 BOOST 정리 조건, 30분 이후에는 강제 정리입니다."
+            />
+        </div>
+    );
+}
+
+function LogicExitTab() {
+    const conditionBox = {
+        marginTop: 8,
+        padding: 10,
+        borderRadius: 12,
+        background: "#101010",
+        border: "1px solid #2a2a2a",
+        fontSize: 12,
+        lineHeight: 1.7,
+    };
+
+    const andStyle = {
+        display: "inline-block",
+        margin: "4px 0",
+        padding: "2px 8px",
+        borderRadius: 999,
+        background: "rgba(0,255,204,0.12)",
+        border: "1px solid rgba(0,255,204,0.35)",
+        color: "#00ffcc",
+        fontWeight: 900,
+        fontSize: 11,
+    };
+
+    const orStyle = {
+        display: "inline-block",
+        margin: "4px 0",
+        padding: "2px 8px",
+        borderRadius: 999,
+        background: "rgba(255,184,108,0.12)",
+        border: "1px solid rgba(255,184,108,0.35)",
+        color: "#ffb86c",
+        fontWeight: 900,
+        fontSize: 11,
+    };
+
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>청산 기준</div>
+
+            <div style={conditionBox}>
+                <b>STOP_LOSS / TAKE_PROFIT</b>
+                <div>STOP_LOSS: oldest 손익률 ≤ -(ma_thr_eff × 7)</div>
+                <div>TAKE_PROFIT: oldest 손익률 ≥ ma_thr_eff × 2</div>
+                <div style={{ marginTop: 6, opacity: 0.75 }}>
+                    예시: oldest_entry = 100, ma_thr_eff = 0.6%라면 SL은 95.8 이하, TP는 101.2 이상입니다.
+                </div>
+            </div>
+
+            <div style={conditionBox}>
+                <b>NORMAL</b>
+                <div>1. newest 진입 후 30분 초과</div>
+                <div style={andStyle}>AND</div>
+                <div>2. price ≥ MA100 × (1 + ma_thr_eff)</div>
+                <div>결과: 전체 청산</div>
+            </div>
+
+            <div style={conditionBox}>
+                <b>SCALE_OUT</b>
+                <div>1. 포지션 2개 이상</div>
+                <div style={andStyle}>AND</div>
+                <div>2. price ≥ prev_entry</div>
+                <div style={andStyle}>AND</div>
+                <div>3. price ≥ MA100 × (1 + ma_thr_eff / 2)</div>
+                <div>결과: newest 1개 청산</div>
+            </div>
+
+            <div style={conditionBox}>
+                <b>NEAR_TOUCH</b>
+                <div>1. newest 진입 후 30분 이내</div>
+                <div style={andStyle}>AND</div>
+                <div>2. 아래 둘 중 하나 만족</div>
+                <div style={orStyle}>OR</div>
+                <div style={{ paddingLeft: 12 }}>
+                    A. price ≥ MA100 × (1 - exit_easing)<br />
+                    B. price ≥ newest_entry × (1 + ma_thr_eff × 0.7)
+                </div>
+                <div>결과: newest 1개 청산</div>
+            </div>
+
+            <MiniLogicChart
+                title="TP / SL 예시"
+                lines={[
+                    { y: 45, label: "TP", color: "#00ffcc" },
+                    { y: 95, label: "Entry", color: "#ffd166" },
+                    { y: 150, label: "SL", color: "#ff8080" },
+                ]}
+                points={[
+                    { x: 80, y: 95, label: "진입" },
+                    { x: 180, y: 130 },
+                    { x: 280, y: 100 },
+                    { x: 390, y: 70 },
+                    { x: 470, y: 45, label: "TP", color: "#00ffcc" },
+                ]}
+                note="TP/SL은 oldest 포지션 기준 손익률로 계산됩니다."
+            />
+
+            <MiniLogicChart
+                title="NORMAL / SCALE_OUT / NEAR_TOUCH 회복 청산"
+                lines={[
+                    { y: 45, label: "NORMAL", color: "#00ffcc" },
+                    { y: 75, label: "SCALE_OUT", color: "#7ee787", dash: "4 4" },
+                    { y: 105, label: "MA100", color: "#ffd166" },
+                    { y: 135, label: "NEAR_TOUCH", color: "#ffb86c", dash: "4 4" },
+                ]}
+                points={[
+                    { x: 70, y: 155, label: "진입" },
+                    { x: 160, y: 142, label: "30분 이내" },
+                    { x: 250, y: 135, label: "NEAR", color: "#ffb86c" },
+                    { x: 350, y: 75, label: "SCALE", color: "#7ee787" },
+                    { x: 470, y: 45, label: "NORMAL", color: "#00ffcc" },
+                ]}
+                note="NEAR_TOUCH는 진입 직후 빠른 회복 청산, SCALE_OUT은 여러 포지션 중 최신 포지션 일부 청산, NORMAL은 MA100 목표선 회복 시 전체 청산입니다."
+            />
+        </div>
+    );
+}
+
+function LogicRiskTab() {
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>RISK CONTROL 청산</div>
+
+            <ul style={{ paddingLeft: 18 }}>
+                <li><b>조건</b>: 보유 포지션 5개 이상</li>
+                <li><b>수익 기준</b>: price ≥ 전체 평균가 × 1.003</li>
+                <li><b>청산 대상</b>: oldest부터 일부 청산</li>
+            </ul>
+
+            <div
+                style={{
+                    marginTop: 10,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+                    gap: 8,
+                    fontSize: 12,
+                }}
+            >
+                {[
+                    ["5개", "1개 청산"],
+                    ["6개", "2개 청산"],
+                    ["7개", "3개 청산"],
+                    ["8개", "4개 청산"],
+                    ["9개", "4개 청산"],
+                    ["10개", "5개 청산"],
+                ].map(([n, txt]) => (
+                    <div
+                        key={n}
+                        style={{
+                            padding: 10,
+                            borderRadius: 12,
+                            background: "#101010",
+                            border: "1px solid #2a2a2a",
+                        }}
+                    >
+                        <div style={{ fontWeight: 900, color: "#00ffcc" }}>{n}</div>
+                        <div style={{ opacity: 0.8 }}>{txt}</div>
+                    </div>
+                ))}
+            </div>
+
+            <MiniLogicChart
+                title="RISK CONTROL 예시"
+                lines={[
+                    { y: 70, label: "+0.3%", color: "#00ffcc" },
+                    { y: 105, label: "평균가", color: "#ffd166" },
+                ]}
+                points={[
+                    { x: 70, y: 150, label: "1" },
+                    { x: 145, y: 135, label: "2" },
+                    { x: 220, y: 120, label: "3" },
+                    { x: 295, y: 110, label: "4" },
+                    { x: 370, y: 105, label: "평균" },
+                    { x: 465, y: 70, label: "청산", color: "#00ffcc" },
+                ]}
+                note="5개 이상 쌓인 상태에서 전체 평균가보다 0.3% 이상 유리해지면 oldest부터 일부 포지션을 줄입니다."
+            />
+        </div>
+    );
+}
+
+
 /* ------------------------- threshold meta ------------------------- */
 async function fetchThresholdMeta(symbol, ns) {
     const qs = new URLSearchParams({ symbol: String(symbol || "") });
@@ -922,7 +1562,6 @@ export default function Coin() {
                         <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState} />
                     </div>
                 </div>
-
                 {/* ✅ 하단: 보기설정/티커(기존 폭 유지) + 차트(그대로) */}
                 <div style={{
                     display: "grid",
@@ -1078,6 +1717,7 @@ export default function Coin() {
                 </div>
             </div>
         </div>
+        <TradingLogicFloatingButton />
     </div>
     );
 }
