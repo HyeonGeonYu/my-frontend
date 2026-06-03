@@ -7,6 +7,85 @@ import { fmtKSTFull, getTs, fmtComma } from "../../lib/tradeUtils";
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 function OverlayLabel({ label: l }) {
+    const [hover, setHover] = useState(false);
+
+    if (l.layer === "signal") {
+        const up = !!l.up;
+
+        // 작게 조정
+        const w = 14;
+        const h = 12;
+
+        const points = up
+            ? `${w / 2},1 ${w - 1},${h - 1} 1,${h - 1}`
+            : `1,1 ${w - 1},1 ${w / 2},${h - 1}`;
+
+        const fill = l.fillColor || l.color || "#aaa";
+        const stroke = l.borderColor && l.borderColor !== "none"
+            ? l.borderColor
+            : "none";
+
+        return (
+            <div
+                onMouseEnter={() => setHover(true)}
+                onMouseLeave={() => setHover(false)}
+                style={{
+                    position: "absolute",
+                    left: l.x,
+                    top: l.y,
+                    transform: "translate(-50%, -50%)",
+                    cursor: "pointer",
+                    pointerEvents: "auto",
+                    zIndex: 1,
+                }}
+            >
+                <svg
+                    width={w}
+                    height={h}
+                    viewBox={`0 0 ${w} ${h}`}
+                    style={{
+                        display: "block",
+                        overflow: "visible",
+                        filter: "drop-shadow(0 0 3px rgba(0,0,0,0.9))",
+                    }}
+                >
+                    <polygon
+                        points={points}
+                        fill={fill}
+                        stroke={stroke}
+                        strokeWidth={l.isExit ? 0 : 1.1}
+                        strokeLinejoin="round"
+                    />
+                </svg>
+
+                {hover && (
+                    <div
+                        style={{
+                            position: "absolute",
+                            left: 14,
+                            top: -12,
+                            minWidth: 260,
+                            maxWidth: 520,
+                            whiteSpace: "pre-line",
+                            padding: "8px 10px",
+                            borderRadius: 10,
+                            background: "rgba(10,10,10,0.97)",
+                            border: "1px solid #333",
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            lineHeight: 1.45,
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                            zIndex: 100,
+                        }}
+                    >
+                        {l.tooltip || ""}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div
             style={{
@@ -32,6 +111,154 @@ function OverlayLabel({ label: l }) {
             {l.text}
         </div>
     );
+}
+function isTradeSignalMarker(m) {
+    const kind = String(m?.kind || "").toUpperCase();
+    return kind === "ENTRY" || kind === "EXIT";
+}
+
+function isExitSignalMarker(m) {
+    return String(m?.kind || "").toUpperCase() === "EXIT";
+}
+
+// ▲ = 위 방향 베팅, ▼ = 아래 방향 베팅
+function isUpBetMarker(m) {
+    const side = String(m?.side || "").toUpperCase();
+    const kind = String(m?.kind || "").toUpperCase();
+
+    // LONG 진입 = 상승 베팅
+    if (kind === "ENTRY" && side === "LONG") return true;
+
+    // SHORT 청산 = 상승 방향 정리
+    if (kind === "EXIT" && side === "SHORT") return true;
+
+    return false;
+}
+
+function parseReasonArray(v) {
+    if (!v) return [];
+
+    if (Array.isArray(v)) {
+        return v.map((x) => String(x || "").trim()).filter(Boolean);
+    }
+
+    if (typeof v === "string") {
+        try {
+            const parsed = JSON.parse(v);
+            if (Array.isArray(parsed)) {
+                return parsed.map((x) => String(x || "").trim()).filter(Boolean);
+            }
+        } catch {
+            return v.split(",").map((x) => x.trim()).filter(Boolean);
+        }
+    }
+
+    return [];
+}
+
+function getMarkerReasons(m) {
+    const a = parseReasonArray(m?.reasons);
+    if (a.length) return a;
+
+    const b = parseReasonArray(m?.reasons_json);
+    if (b.length) return b;
+
+    const c = parseReasonArray(m?.raw_json?.reasons);
+    if (c.length) return c;
+
+    const d = parseReasonArray(m?.raw_json?.reasons_json);
+    if (d.length) return d;
+
+    return [];
+}
+
+function getFirstReason(m) {
+    return String(
+        m?.firstReason ||
+        getMarkerReasons(m)[0] ||
+        m?.mode ||
+        m?.reason ||
+        m?.signalType ||
+        ""
+    ).trim();
+}
+
+function getSignalFillColor(m) {
+    const side = String(m?.side || "").toUpperCase();
+
+    if (side === "LONG") return "#22c55e";   // 선명한 초록
+    if (side === "SHORT") return "#ef4444";  // 선명한 빨강
+
+    return "#e5e7eb";
+}
+
+function getSignalBorderColor(m) {
+    const first = getFirstReason(m).toUpperCase();
+
+    if (first.includes("BOOST")) return "#facc15";
+
+    return "none";
+}
+
+function fmtSignedNumber(v, digits = 2) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "";
+    return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}`;
+}
+
+function buildSignalTooltip(m) {
+    const side = String(m?.side || "").toUpperCase();
+    const kind = String(m?.kind || "").toUpperCase();
+
+    const reasons = getMarkerReasons(m);
+    const firstReason = getFirstReason(m);
+
+    const pnlUsdt =
+        m?.pnlUsdt ??
+        m?.pnl_usdt ??
+        m?.exec?.pnl_usdt ??
+        m?.raw_json?.pnl_usdt;
+
+    const pnlPct =
+        m?.pnl_pct ??
+        m?.pnlPct ??
+        m?.exec?.pnl_pct ??
+        m?.raw_json?.pnl_pct;
+
+    const qty =
+        m?.qty ??
+        m?.exec?.qty ??
+        m?.raw_json?.qty;
+
+    const usdtPctText =
+        Number.isFinite(Number(pnlUsdt)) && Number.isFinite(Number(pnlPct))
+            ? `${fmtSignedNumber(pnlUsdt, 2)} USDT (${fmtSignedNumber(pnlPct, 2)}%)`
+            : Number.isFinite(Number(pnlUsdt))
+                ? `${fmtSignedNumber(pnlUsdt, 2)} USDT`
+                : Number.isFinite(Number(pnlPct))
+                    ? `${fmtSignedNumber(pnlPct, 2)}%`
+                    : "";
+
+    const qtyText =
+        kind === "ENTRY" && Number.isFinite(Number(qty))
+            ? `qty ${Number(qty).toFixed(4)}`
+            : "";
+
+    // 예: EXIT LONG · SL(ID 3D) · -29.70 USDT (-4.23%)
+    const fallbackMainLine = [
+        [kind, side].filter(Boolean).join(" "),
+        firstReason,
+        usdtPctText || qtyText,
+    ].filter(Boolean).join(" · ");
+
+    const detailLine = reasons.length ? reasons.join(", ") : "";
+
+    const mainLine = String(m?.tooltipText || "").trim() || fallbackMainLine;
+
+    return [
+        mainLine,
+        detailLine,
+    ].filter(Boolean).join("\n");
 }
 
 function isCrossNumberMarker(m) {
@@ -210,8 +437,12 @@ export default function ChartView({
         }
 
         for (const m of safeMarkers) {
-            if (!m?.time || !m?.text) continue;
+            if (!m?.time) continue;
 
+            const isSignal = isTradeSignalMarker(m);
+            const isCross = isCrossNumberMarker(m);
+
+            if (!isSignal && !m?.text) continue;
             const markerTime = normalizeMarkerTimeToCandle(m.time, safeCandles);
             if (!Number.isFinite(markerTime)) continue;
 
@@ -271,9 +502,6 @@ export default function ChartView({
             if (y == null || !Number.isFinite(y)) {
                 y = m.position === "belowBar" ? heightNow * 0.65 : heightNow * 0.35;
             }
-
-            // 같은 시간대 근처에 있는 텍스트끼리 겹치지 않게 스택
-            const isCross = isCrossNumberMarker(m);
 
             // ✅ 보라색 번호 cross marker는 다른 신호 라벨 때문에 밀리지 않게 별도 처리
             let stackIndex = 0;
@@ -338,15 +566,20 @@ export default function ChartView({
             labelY = Math.max(20, Math.min(heightNow - 20, labelY));
 
             labels.push({
-                key: `${m.time}_${m.text}_${stackIndex}`,
-                x: labelX,
-                y: labelY,
+                key: `${m.time}_${m.text || m.displayNo || m.signalNo || m.seq || ""}_${stackIndex}`,
+                x: isSignal ? x : labelX,
+                y: isSignal ? y : labelY,
                 text: m.text,
                 color: m.color || "#fff",
+                fillColor: getSignalFillColor(m),
+                borderColor: getSignalBorderColor(m),
+                tooltip: isSignal ? buildSignalTooltip(m) : m.text,
+                isExit: isExitSignalMarker(m),
+                up: isSignal ? isUpBetMarker(m) : false,
                 transform,
                 textAlign,
                 fontSize,
-                layer: getOverlayLayer(m),
+                layer: isSignal ? "signal" : getOverlayLayer(m),
             });
         }
 
@@ -552,7 +785,9 @@ export default function ChartView({
                 })
                 .filter(Boolean);
 
-        candleSeries.setMarkers?.(shapeOnlyMarkers);
+        candleSeries.setMarkers?.(
+            shapeOnlyMarkers.filter((m) => !isTradeSignalMarker(m))
+        );
 
         applyLayout();
 
@@ -623,7 +858,7 @@ export default function ChartView({
                     position: "absolute",
                     inset: 0,
                     zIndex: 70,
-                    pointerEvents: "none",
+                    pointerEvents: "auto",
                 }}
             >
                 {signalLabels.map((l) => (

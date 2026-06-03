@@ -822,7 +822,8 @@ function LogicFormulaTab() {
 
             <ul style={{ marginTop: 6, paddingLeft: 18 }}>
                 <li>LONG INIT 기준 = 100 × (1 - 0.006) = <b>99.4</b></li>
-                <li>SCALE_IN 보조 기준 = 100 × (1 - 0.003) = <b>99.7</b></li>
+                <li>SCALE_IN 기존 기준 = 100 × (1 - 0.003) = <b>99.7</b> + 하락 모멘텀</li>
+                <li>SCALE_IN 추가 기준 = 100 × (1 - 0.006) = <b>99.4</b> 도달</li>
                 <li>NORMAL 청산 기준 = 100 × (1 + 0.006) = <b>100.6</b></li>
                 <li>SHORT은 위/아래 방향만 반대로 적용</li>
             </ul>
@@ -842,7 +843,7 @@ function LogicFormulaTab() {
                     { x: 360, y: 118, label: "SCALE 기준", color: "#7ee787" },
                     { x: 470, y: 45, label: "청산", color: "#00ffcc" },
                 ]}
-                note="ma_thr_eff / 2는 MA100 기준 이격의 절반입니다. 예시에서는 0.6%의 절반인 0.3%입니다."
+                note="ma_thr_eff / 2는 MA100 기준 이격의 절반입니다. SCALE_IN은 기존의 절반 기준+모멘텀 또는 ma_thr_eff 전체 도달 기준으로 발생합니다."
             />
         </div>
     );
@@ -898,13 +899,28 @@ function LogicEntryTab() {
                 <div style={andStyle}>AND</div>
                 <div>2. price &lt; newest_entry</div>
                 <div style={andStyle}>AND</div>
-                <div>3. price ≤ MA100 × (1 - ma_thr_eff / 2)</div>
-                <div style={andStyle}>AND</div>
-                <div>4. 3분 모멘텀 &lt; -momentum_threshold</div>
+                <div>3. 아래 둘 중 하나 만족</div>
+                <div style={{
+                    display: "inline-block",
+                    margin: "4px 0",
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    background: "rgba(255,184,108,0.12)",
+                    border: "1px solid rgba(255,184,108,0.35)",
+                    color: "#ffb86c",
+                    fontWeight: 900,
+                    fontSize: 11,
+                }}>
+                    OR
+                </div>
+                <div style={{ paddingLeft: 12 }}>
+                    A. 기존 기준: price ≤ MA100 × (1 - ma_thr_eff / 2) AND 3분 모멘텀 &lt; -momentum_threshold<br />
+                    B. 추가 기준: price ≤ MA100 × (1 - ma_thr_eff)
+                </div>
             </div>
 
             <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                예시: INIT_PRICE = 100, ma_thr_eff = 0.6%라면 INIT2는 99.4 이하, INIT3는 98.8 이하에서 발생합니다.
+                예시: ma_thr_eff = 0.6%라면 SCALE_IN은 MA100 -0.3% + 하락 모멘텀 또는 MA100 -0.6% 도달 시 발생합니다.
             </div>
 
             <MiniLogicChart
@@ -973,7 +989,10 @@ function LogicBoostTab() {
                 <div style={andStyle}>AND</div>
                 <div>2. anchor 발생 후 2분~15분 사이</div>
                 <div style={andStyle}>AND</div>
-                <div>3. 현재 열려 있는 BOOST 수 &lt; 2</div>
+                <div>3. 같은 anchor 기준 누적 BOOST 진입 수 &lt; 2</div>
+                <div style={{ marginTop: 6, opacity: 0.75 }}>
+                    * BOOST가 청산되어도 같은 INIT/SCALE_IN anchor로는 최대 2회까지만 재진입 가능합니다.
+                </div>
                 <div style={andStyle}>AND</div>
                 <div>4. 마지막 BOOST 이후 5분 이상 경과</div>
                 <div style={andStyle}>AND</div>
@@ -987,9 +1006,14 @@ function LogicBoostTab() {
 
             <div style={conditionBox}>
                 <b>BOOST 청산</b>
-                <div>1. 전체 평균가 기준 +0.3% → BOOST 전부 청산</div>
-                <div style={orStyle}>OR</div>
-                <div>2. anchor + BOOST 평균가 기준 +0.5% → BOOST 전부 청산</div>
+                <div style={conditionBox}>
+                    <b>BOOST 청산</b>
+                    <div>1. anchor + BOOST 평균가 기준 +0.3% → 해당 BOOST 묶음 청산</div>
+                    <div style={orStyle}>OR</div>
+                    <div>2. anchor 후 20분 경과 + price ≥ anchor+BOOST 평균가 → BOOST 정리</div>
+                    <div style={orStyle}>OR</div>
+                    <div>3. anchor 후 30분 경과 → BOOST 강제 청산</div>
+                </div>
                 <div style={orStyle}>OR</div>
                 <div>3. anchor 후 20분 경과 + price ≥ anchor+BOOST 평균가 → BOOST 전부 청산</div>
                 <div style={orStyle}>OR</div>
