@@ -1006,18 +1006,11 @@ function LogicBoostTab() {
 
             <div style={conditionBox}>
                 <b>BOOST 청산</b>
-                <div style={conditionBox}>
-                    <b>BOOST 청산</b>
-                    <div>1. anchor + BOOST 평균가 기준 +0.3% → 해당 BOOST 묶음 청산</div>
-                    <div style={orStyle}>OR</div>
-                    <div>2. anchor 후 20분 경과 + price ≥ anchor+BOOST 평균가 → BOOST 정리</div>
-                    <div style={orStyle}>OR</div>
-                    <div>3. anchor 후 30분 경과 → BOOST 강제 청산</div>
-                </div>
+                <div>1. anchor + BOOST 평균가 기준 +0.3% → 해당 BOOST 묶음 청산</div>
                 <div style={orStyle}>OR</div>
-                <div>3. anchor 후 20분 경과 + price ≥ anchor+BOOST 평균가 → BOOST 전부 청산</div>
+                <div>2. anchor 후 20분 경과 + price ≥ anchor+BOOST 평균가 → BOOST 정리</div>
                 <div style={orStyle}>OR</div>
-                <div>4. anchor 후 30분 경과 → BOOST 강제 청산</div>
+                <div>3. anchor 후 30분 경과 → BOOST 강제 청산</div>
             </div>
 
             <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>

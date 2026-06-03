@@ -294,35 +294,6 @@ function assignWindowSignalNumbers(items = [], { markerText = true } = {}) {
         });
 }
 
-function withSignalNumbers(items = []) {
-    return [...items]
-        .sort((a, b) => {
-            const ta = Number(a?.time ?? a?.timeSec ?? 0);
-            const tb = Number(b?.time ?? b?.timeSec ?? 0);
-
-            if (ta !== tb) return ta - tb;
-
-            return String(a?.tooltipText || a?.noteText || "").localeCompare(
-                String(b?.tooltipText || b?.noteText || "")
-            );
-        })
-        .map((item, idx) => {
-            const no = idx + 1;
-            const tooltipText = item?.tooltipText || item?.noteText || "";
-
-            return {
-                ...item,
-                signalNo: no,
-
-                text: `#${no}`,
-
-                // ✅ hover에서는 번호 포함된 설명이 뜨게
-                tooltipText: [`#${no}`, tooltipText].filter(Boolean).join(" · "),
-                noteText: [`#${no}`, tooltipText].filter(Boolean).join(" · "),
-            };
-        });
-}
-
 async function fetchTradeRecordsForChart({ symbol, dayOffset }) {
     const qs = new URLSearchParams({
         ns: TRADE_RECORDS_NS,
