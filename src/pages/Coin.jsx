@@ -1097,10 +1097,28 @@ function LogicExitTab() {
                 <b>SCALE_OUT</b>
                 <div>1. 포지션 2개 이상</div>
                 <div style={andStyle}>AND</div>
-                <div>2. price ≥ prev_entry</div>
+                <div>2. scale out 쿨다운이 끝난 상태</div>
                 <div style={andStyle}>AND</div>
-                <div>3. price ≥ MA100 × (1 + ma_thr_eff / 2)</div>
-                <div>결과: newest 1개 청산</div>
+                <div>3. price와 prev_entry 비교에 따라 아래 기준 적용</div>
+
+                <div style={orStyle}>CASE</div>
+
+                <div style={{ paddingLeft: 12 }}>
+                    A. price ≥ prev_entry인 경우<br />
+                    → price ≥ MA100 × (1 + ma_thr_eff / 2)
+                    <br /><br />
+                    B. price &lt; prev_entry인 경우<br />
+                    → price ≥ MA100 × (1 + ma_thr_eff × 2 / 3)
+                </div>
+
+                <div style={{ marginTop: 6 }}>
+                    결과: newest 1개 청산
+                </div>
+
+                <div style={{ marginTop: 6, opacity: 0.75 }}>
+                    prev_entry보다 유리한 가격이면 더 빠르게 일부 청산하고, 아직 prev_entry를 회복하지 못한 경우에는
+                    더 높은 MA100 회복 기준을 요구한 뒤 리스크 축소 목적으로 newest 포지션만 줄입니다.
+                </div>
             </div>
 
             <div style={conditionBox}>
