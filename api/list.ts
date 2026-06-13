@@ -55,6 +55,16 @@ function extractPositionSymbols(raw: any) {
     );
 }
 
+function stripTranscript(rawJson: any) {
+    if (!rawJson?.youtube_data) return rawJson;
+    const youtube_data: Record<string, any> = {};
+    for (const [country, info] of Object.entries(rawJson.youtube_data as Record<string, any>)) {
+        const { summary_content, ...rest } = info || {};
+        youtube_data[country] = rest;
+    }
+    return { ...rawJson, youtube_data };
+}
+
 function extractAssetSummary(raw: any, assetSnapshot: any = null) {
     if (!raw || typeof raw !== "object") {
         return {
@@ -241,7 +251,7 @@ export default async function handler(req: any, res: any) {
                 return {
                     date: compactDay(day),
                     day,
-                    data: row.raw_json || {},
+                    data: stripTranscript(row.raw_json) || {},
                     trades: dayTrades,
                     tradeCount: dayTrades.length,
                     symbols,

@@ -681,6 +681,8 @@ function Archive() {
     const [page, setPage] = useState(1);
     const [expandedDate, setExpandedDate] = useState(null);
     const [expandedSummary, setExpandedSummary] = useState({});
+    const [contentCache, setContentCache] = useState({});
+    const [contentLoading, setContentLoading] = useState({});
     const [expandedTrading, setExpandedTrading] = useState({});
     const [selectedTradeView, setSelectedTradeView] = useState(null);
 
@@ -744,6 +746,23 @@ function Archive() {
             ...prev,
             [key]: !prev[key],
         }));
+    };
+
+    const toggleContent = async (key, day, country) => {
+        const isOpen = expandedSummary[key];
+        toggleSummary(key);
+        if (isOpen || contentCache[key] !== undefined || contentLoading[key]) return;
+
+        setContentLoading((prev) => ({ ...prev, [key]: true }));
+        try {
+            const res = await fetch(`/api/youtube-content?day=${day}&country=${encodeURIComponent(country)}`);
+            const json = await res.json();
+            setContentCache((prev) => ({ ...prev, [key]: json.content || "내용 없음" }));
+        } catch {
+            setContentCache((prev) => ({ ...prev, [key]: "불러오기 실패" }));
+        } finally {
+            setContentLoading((prev) => ({ ...prev, [key]: false }));
+        }
     };
 
     const pagerBtnBase = {
@@ -943,7 +962,7 @@ function Archive() {
 
                                                 <div style={{ marginTop: "8px" }}>
                                                     <button
-                                                        onClick={() => toggleSummary(summaryKey)}
+                                                        onClick={() => toggleContent(summaryKey, day, country)}
                                                         style={{
                                                             backgroundColor: "#222",
                                                             color: "#00ffcc",
@@ -954,7 +973,11 @@ function Archive() {
                                                             fontSize: "0.9rem",
                                                         }}
                                                     >
-                                                        {expandedSummary[summaryKey] ? "전문 닫기" : "전문 보기"}
+                                                        {contentLoading[summaryKey]
+                                                            ? "불러오는 중..."
+                                                            : expandedSummary[summaryKey]
+                                                            ? "전문 닫기"
+                                                            : "전문 보기"}
                                                     </button>
 
                                                     {expandedSummary[summaryKey] && (
@@ -982,19 +1005,19 @@ function Archive() {
                                                                 }}
                                                             >
                                                                 <CopyButton
-                                                                    text={info.summary_content || ""}
+                                                                    text={contentCache[summaryKey] || ""}
                                                                     absolute={false}
                                                                     titleLabel="원문 복사"
                                                                 />
                                                                 <CopyButton
-                                                                    text={buildNewsPrompt(info.summary_content || "")}
+                                                                    text={buildNewsPrompt(contentCache[summaryKey] || "")}
                                                                     absolute={false}
                                                                     titleLabel="원문+프롬프트 복사"
                                                                 />
                                                             </div>
 
                                                             <br />
-                                                            {info.summary_content || "내용 없음"}
+                                                            {contentCache[summaryKey] ?? "불러오는 중..."}
                                                         </div>
                                                     )}
                                                 </div>
