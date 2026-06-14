@@ -104,7 +104,16 @@ async function fetchCandlesForWindowBybit(symUpper, interval, startSec, endSec, 
 
 // -------------------- CFD REST --------------------
 
-const CFD_API_BASE = "https://api.hyeongeonnoil.com";
+const CFD_PROXY = "/api/cfd";
+
+function makeCfdUrl(path, params = {}) {
+  const url = new URL(CFD_PROXY, window.location.origin);
+  url.searchParams.set("_path", path);
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null) url.searchParams.set(k, String(v));
+  }
+  return url;
+}
 
 /**
  * CFD: start~end(+MA buffer) 충분히 커버될 때까지 페이지 로드
@@ -117,11 +126,12 @@ async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, si
   let nextCursor = null;
 
   for (let i = 0; i < 12; i++) {
-    const url = new URL("/v5/market/candles/with-gaps", CFD_API_BASE);
-    url.searchParams.set("symbol", symUpper);
-    url.searchParams.set("interval", String(interval));
-    url.searchParams.set("limit", String(PAGE_LIMIT));
-    if (nextCursor != null) url.searchParams.set("end", String(nextCursor));
+    const url = makeCfdUrl("/v5/market/candles/with-gaps", {
+      symbol: symUpper,
+      interval: String(interval),
+      limit: String(PAGE_LIMIT),
+      ...(nextCursor != null ? { end: String(nextCursor) } : {}),
+    });
 
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -370,12 +380,60 @@ export function makeBybitSource({ signalName = "bybit" } = {}) {
   };
 }
 
+// -------------------- TokenWsHub --------------------
+// API key를 브라우저에 노출하지 않고 WS 연결을 위한 단기 토큰을 서버사이드에서 발급받아 사용
+
+class TokenWsHub {
+  constructor(wsBaseUrl, tokenApiPath) {
+    this._wsBaseUrl = wsBaseUrl;
+    this._tokenApiPath = tokenApiPath;
+    this._hubPromise = null;
+  }
+
+  _getHub() {
+    if (this._hubPromise) return this._hubPromise;
+    this._hubPromise = fetch(this._tokenApiPath)
+      .then((r) => r.json())
+      .then((d) => {
+        const token = d?.token;
+        const url = token
+          ? `${this._wsBaseUrl}?token=${encodeURIComponent(token)}`
+          : this._wsBaseUrl;
+        return getWsHub(url);
+      })
+      .catch(() => {
+        this._hubPromise = null;
+        return getWsHub(this._wsBaseUrl);
+      });
+    return this._hubPromise;
+  }
+
+  subscribe(topic, fn) {
+    let unsub = null;
+    let cancelled = false;
+
+    this._getHub().then((hub) => {
+      if (!cancelled) {
+        unsub = hub.subscribe(topic, fn);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }
+}
+
 /**
  * CFD Source (HNO)
  * - signalName: "mt5" 고정(원하면 바꿀 수 있게 해둠)
  */
 export function makeCfdSource({ signalName = "mt5" } = {}) {
-  const wsHub = getWsHub("wss://api.hyeongeonnoil.com/ws");
+  const wsHub = new TokenWsHub(
+    "wss://api.hyeongeonnoil.com/ws",
+    "/api/cfd-ws-token"
+  );
   const id = "cfd";
 
   return {
