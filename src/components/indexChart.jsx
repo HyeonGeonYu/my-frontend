@@ -65,31 +65,13 @@ function IndexChart({ processedData, dataName, envelope }) {
   const howLongAgo = processedKST.fromNow();
   const data = processedData.data;
 
-  if (!data?.length) {
-    return <p>Loading chart data...</p>;
-  }
-
-  const hasShortRatio = data.some(d => d.short_ratio !== undefined);
-  const lastItem = data[data.length - 1];
-  const close = lastItem?.close ?? 0;
-  const ma100 = lastItem?.ma100;
-  const diff = Math.abs(close - (ma100 ?? close));
-  const maxDiff = (ma100 ?? close) * 0.1;
-  const intensity = Math.min(1, maxDiff > 0 ? diff / maxDiff : 0);
-
-  const baseColor = close > (ma100 ?? close) ? "0, 195, 83" : "255, 82, 82";
-  const borderColor = `rgba(${baseColor}, ${0.4 + intensity * 0.6})`;
-
-  // 데이터가 2개 미만이면 전일 대비 계산 불가
-  const prevClose = data.length >= 2 ? (data[data.length - 2]?.close ?? close) : close;
-  const diffValue = close - prevClose;
-  const diffPercentage = close > 0 ? ((diffValue / close) * 100).toFixed(2) : "0.00";
-  const diffColor = diffValue >= 0 ? "#00c853" : "#ff5252";
+  // ── 모든 Hook은 early return 앞에 위치해야 함 (Rules of Hooks) ──
+  const hasShortRatio = (data || []).some(d => d.short_ratio !== undefined);
+  const lastItem = data?.length ? data[data.length - 1] : null;
 
   const [customTooltip, setCustomTooltip] = useState(null);
-  const { firstDaysByMonth, firstDaysByYear } = useMemo(() => getLabelMap(data), [data]);
+  const { firstDaysByMonth, firstDaysByYear } = useMemo(() => getLabelMap(data || []), [data]);
 
-  // chartLines를 useMemo로 메모이제이션
   const chartLines = useMemo(() => [
     { dataKey: "close", stroke: "#FFA500", strokeWidth: 3, yAxisId: "left" },
     { dataKey: "ma100", stroke: "#00bfff", yAxisId: "left" },
@@ -99,7 +81,6 @@ function IndexChart({ processedData, dataName, envelope }) {
       : [])
   ], [envelope, hasShortRatio]);
 
-  // 마지막 데이터로 초기 툴팁 설정 (렌더 중 setState 제거 → useEffect로 이동)
   useEffect(() => {
     if (!data?.length) return;
     const last = data[data.length - 1];
@@ -137,6 +118,25 @@ function IndexChart({ processedData, dataName, envelope }) {
       })),
     });
   }, [chartLines, lastItem]);
+
+  // ── Hook 이후에 early return ──
+  if (!data?.length) {
+    return <p>Loading chart data...</p>;
+  }
+
+  const close = lastItem?.close ?? 0;
+  const ma100 = lastItem?.ma100;
+  const diff = Math.abs(close - (ma100 ?? close));
+  const maxDiff = (ma100 ?? close) * 0.1;
+  const intensity = Math.min(1, maxDiff > 0 ? diff / maxDiff : 0);
+
+  const baseColor = close > (ma100 ?? close) ? "0, 195, 83" : "255, 82, 82";
+  const borderColor = `rgba(${baseColor}, ${0.4 + intensity * 0.6})`;
+
+  const prevClose = data.length >= 2 ? (data[data.length - 2]?.close ?? close) : close;
+  const diffValue = close - prevClose;
+  const diffPercentage = close > 0 ? ((diffValue / close) * 100).toFixed(2) : "0.00";
+  const diffColor = diffValue >= 0 ? "#00c853" : "#ff5252";
 
   const Cell = ({
     label,
