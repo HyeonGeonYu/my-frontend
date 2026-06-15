@@ -6,19 +6,8 @@ import ChartPanelCore from "../components/common/ChartPanelCore";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec } from "../lib/tradeUtils";
+import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
-
-/* ------------------------- 날짜 라벨 ------------------------- */
-function selectedDayLabel(offsetDays = 0) {
-    const end = next0650EndBoundaryUtcSec() + offsetDays * 86400;
-    const start = end - 86400;
-    const kstSec = start + 9 * 3600;
-    const d = new Date(kstSec * 1000);
-    const month = d.getUTCMonth() + 1;
-    const date = d.getUTCDate();
-    const dow = ["일", "월", "화", "수", "목", "금", "토"][d.getUTCDay()];
-    return `${month}월 ${date}일(${dow})`;
-}
 
 /* ------------------------- 상단 배너 ------------------------- */
 function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qrSize = 92 }) {
@@ -1634,7 +1623,7 @@ export default function Coin() {
                                     alignItems: "baseline"
                                 }}>
                                     <div style={{ fontWeight: 700, marginBottom: 10 }}>보기 설정</div>
-                                    <div style={{ fontSize: 12, opacity: 0.85 }}>{selectedDayLabel(dayOffset)}</div>
+                                    <div style={{ fontSize: 12, opacity: 0.85 }}>{getDayLabel(anchorEndUtcSec, dayOffset)}</div>
                                 </div>
 
                                 {/* 1분봉 버튼 */}

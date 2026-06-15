@@ -1,25 +1,9 @@
 // src/components/common/StreamsCenter.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { fmtKSTFull, fmtKSTHMS, fmtComma } from "../../lib/tradeUtils";
+import { getDayWindowByOffset } from "./ChartPanelCore/coreUtils";
+import { getDayLabel } from "../../utils/date";
 import { signalsRepo } from "../../lib/signalsRepo";
-
-const ONE_DAY_SEC = 86400;
-
-/** ------------------------- day window/label ------------------------- **/
-function dayWindow(anchorEndUtcSec, dayOffset) {
-  const end = Number(anchorEndUtcSec) + Number(dayOffset) * ONE_DAY_SEC;
-  return [end - ONE_DAY_SEC, end]; // [startSec, endSec)
-}
-
-function dayLabel(anchorEndUtcSec, dayOffset) {
-  const [startSec] = dayWindow(anchorEndUtcSec, dayOffset);
-  const kstSec = startSec + 9 * 3600;
-  const d = new Date(kstSec * 1000);
-  const m = d.getUTCMonth() + 1;
-  const dd = d.getUTCDate();
-  const dow = ["일", "월", "화", "수", "목", "금", "토"][d.getUTCDay()];
-  return `${m}월 ${dd}일(${dow})`;
-}
 
 /** ------------------------- pnl parse helpers ------------------------- **/
 function toNum(x) {
@@ -189,7 +173,7 @@ export default function StreamsCenter({
   }, [allSignals]);
 
   const [startSec, endSec] = useMemo(
-    () => dayWindow(anchorEndUtcSec, dayOffset),
+    () => getDayWindowByOffset(anchorEndUtcSec, dayOffset),
     [anchorEndUtcSec, dayOffset]
   );
 
@@ -279,7 +263,7 @@ export default function StreamsCenter({
         <div style={{ fontWeight: 800, fontSize: 14 }}>
           Streams
           <span style={{ marginLeft: 8, opacity: 0.7, fontWeight: 700 }}>
-            {name.toUpperCase()} · {dayLabel(anchorEndUtcSec, dayOffset)}{" "}
+            {name.toUpperCase()} · {getDayLabel(anchorEndUtcSec, dayOffset)}{" "}
             (dayOffset {dayOffset})
           </span>
         </div>

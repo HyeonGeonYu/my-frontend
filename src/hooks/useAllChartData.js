@@ -22,6 +22,7 @@ export const useAllChartData = (endpointInput) => {
           endpointList.map(async (endpointPath) => {
             const endpoint = `${API_BASE_URL}/chartdata/${endpointPath}`;
             const res = await fetch(endpoint);
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${endpoint}`);
             const chartData = await res.json();
 
             const parsedData = typeof chartData === "string" ? JSON.parse(chartData) : chartData;

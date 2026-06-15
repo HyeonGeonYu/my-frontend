@@ -1,47 +1,40 @@
 // src/components/ChartPage.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import IndexChart from "../components/indexChart";
 import { useAllChartData } from "../hooks/useAllChartData";
 import { chartParams } from "../constants/chartMeta"; // chartMeta.js에서 import
 
 const ChartPage = ({ chartType, title, envelop }) => {
 
-  // `chartType`에 따라 데이터를 가져옵니다.
   const { processedData, loading, error } = useAllChartData(chartType);
 
   const envelope = envelop;
   const chartTypeList = Array.isArray(chartType) ? chartType : [chartType];
 
   const selectedList = chartTypeList.flatMap((type) => chartParams[type] || []);
-  // 그리드 열 수를 동적으로 설정
-  const [gridColumns, setGridColumns] = useState("1fr"); // 기본 1개의 열로 설정
+  const [gridColumns, setGridColumns] = useState("1fr");
 
-  // 화면 크기 변경에 따라 그리드 열 수를 업데이트
-  const updateGridColumns = () => {
+  const updateGridColumns = useCallback(() => {
     const width = window.innerWidth;
     if (width > 1900) {
-      setGridColumns("repeat(4, 1fr)"); // 큰 화면에서 3개의 열
-    }
-    else if (width > 1400) {
-      setGridColumns("repeat(3, 1fr)"); // 큰 화면에서 3개의 열
+      setGridColumns("repeat(4, 1fr)");
+    } else if (width > 1400) {
+      setGridColumns("repeat(3, 1fr)");
     } else if (width > 1000) {
-      setGridColumns("repeat(2, 1fr)"); // 중간 화면에서 2개의 열
+      setGridColumns("repeat(2, 1fr)");
     } else {
-      setGridColumns("1fr"); // 작은 화면에서 1개의 열
+      setGridColumns("1fr");
     }
-  };
+  }, []);
 
-  // 컴포넌트가 처음 렌더링될 때와 화면 크기 변경 시에 updateGridColumns 호출
   useEffect(() => {
-    updateGridColumns(); // 초기 렌더링 시 실행
-    window.addEventListener("resize", updateGridColumns); // 화면 크기 변경 시 실행
-
-    // cleanup: 화면 크기 이벤트 리스너 제거
+    updateGridColumns();
+    window.addEventListener("resize", updateGridColumns);
     return () => {
       window.removeEventListener("resize", updateGridColumns);
     };
-  }, []);
+  }, [updateGridColumns]);
 
   if (loading) return <p>📊 로딩 중...</p>;
   if (error) return <p>❌ {error}</p>;

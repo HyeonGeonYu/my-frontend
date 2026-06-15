@@ -4,6 +4,7 @@ import ChartPanelCore from "../components/common/ChartPanelCore";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec} from "../lib/tradeUtils";
+import { getDayLabel } from "../utils/date";
 import StreamsCenter from "../components/common/StreamsCenter";
 
 
@@ -23,20 +24,6 @@ async function fetchThresholdMeta(symbol, name) {
     const res = await fetch(url, {cache: "no-store"});
     if (!res.ok) return null;
     return (await res.json()) || null;
-}
-
-/* ------------------------- day label (KST 06:50 경계 기반) ------------------------- */
-function selectedDayLabelFromAnchor(anchorEndUtcSec, offsetDays = 0) {
-    const end = Number(anchorEndUtcSec) + Number(offsetDays) * 86400;
-    const start = end - 86400;
-
-    // start를 KST로 바꿔서 날짜 라벨
-    const kstSec = start + 9 * 3600;
-    const d = new Date(kstSec * 1000);
-    const month = d.getUTCMonth() + 1;
-    const date = d.getUTCDate();
-    const dow = ["일", "월", "화", "수", "목", "금", "토"][d.getUTCDay()];
-    return `${month}월 ${date}일(${dow})`;
 }
 
 export default function Cfd() {
@@ -280,7 +267,7 @@ export default function Cfd() {
                                     }}>
                                         <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
                                         <div style={{fontSize: 12, opacity: 0.85}}>
-                                            {selectedDayLabelFromAnchor(anchorEndUtcSec, dayOffset)}
+                                            {getDayLabel(anchorEndUtcSec, dayOffset)}
                                             <span style={{opacity: 0.65}}> (dayOffset: {dayOffset})</span>
                                         </div>
                                     </div>

@@ -84,12 +84,8 @@ export default function ChartPanelCore({
     const ro = new ResizeObserver(() => update());
     ro.observe(el);
 
-    // 창 리사이즈에서도 한번 더 안전하게
-    window.addEventListener("resize", update);
-
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", update);
     };
   }, [fixedWidth]);
 
