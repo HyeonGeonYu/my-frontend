@@ -290,7 +290,10 @@ export function buildSignalAnnotations(sigs) {
         const shortLabel = isLong ? (isEntry ? "진입 L" : "청산 L") : (isEntry ? "진입 S" : "청산 S");
 
         markers.push({
-            time: s.timeSec, position, color, shape, text: `#${s.seq} ${shortLabel}`, size: 2,
+            time: s.timeSec,
+            kind: kindStd,  // ENTRY/EXIT로 정규화 (OPEN/CLOSE 포함) → isTradeSignalMarker 인식용
+            side: s.side,   // isUpBetMarker 방향 판단용
+            position, color, shape, text: `#${s.seq} ${shortLabel}`, size: 2,
         });
 
         notes.push({
