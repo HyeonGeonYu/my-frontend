@@ -507,13 +507,14 @@ export default function ChartView({
             let stackIndex = 0;
 
             if (!isCross) {
-                // 긴 ENTRY/EXIT 라벨끼리만 스택
-                const stackKey = `${Math.round(x / 110)}_${m.position}`;
+                // 같은 캔들 시간+방향끼리만 스택 (픽셀 버킷 X → 정확한 candle time 기준)
+                const stackKey = `${markerTime}_${m.position}`;
                 const autoStackIndex = stackMap.get(stackKey) || 0;
                 stackMap.set(stackKey, autoStackIndex + 1);
 
+                // m.stackIndex(미리 계산된 정확한 값)가 있으면 우선 사용
                 stackIndex = Number.isFinite(Number(m.stackIndex))
-                    ? Math.max(Number(m.stackIndex), autoStackIndex)
+                    ? Number(m.stackIndex)
                     : autoStackIndex;
             }
 
@@ -565,10 +566,15 @@ export default function ChartView({
 
             labelY = Math.max(20, Math.min(heightNow - 20, labelY));
 
+            // 신호 삼각형(isSignal)은 같은 캔들에 여러 개 겹칠 때 14px씩 오프셋
+            const signalY = stackIndex > 0
+                ? Math.max(10, Math.min(heightNow - 10, y + direction * stackIndex * 14))
+                : y;
+
             labels.push({
                 key: `${m.time}_${m.text || m.displayNo || m.signalNo || m.seq || ""}_${stackIndex}`,
                 x: isSignal ? x : labelX,
-                y: isSignal ? y : labelY,
+                y: isSignal ? signalY : labelY,
                 text: m.text,
                 color: m.color || "#fff",
                 fillColor: getSignalFillColor(m),
@@ -785,8 +791,12 @@ export default function ChartView({
                 })
                 .filter(Boolean);
 
+        // lightweight-charts setMarkers는 time 오름차순 정렬 필수
+        // normalizeMarkerTimeToCandle 후 순서가 바뀔 수 있으므로 재정렬
         candleSeries.setMarkers?.(
-            shapeOnlyMarkers.filter((m) => !isTradeSignalMarker(m))
+            shapeOnlyMarkers
+                .filter((m) => !isTradeSignalMarker(m))
+                .sort((a, b) => Number(a.time) - Number(b.time))
         );
 
         applyLayout();
