@@ -3,6 +3,7 @@ import { useYoutubeData } from "../hooks/useYoutubeData";
 
 import VideoCard from "../components/VideoCard";
 import CalendarComponent from "../components/CalendarComponent"; // 경로에 맞게 수정
+import WorldRelationMap from "../components/home/WorldRelationMap";
 import { newsParams } from "../constants/newsMeta";
 function Home() {
   const youtubeData = useYoutubeData();
@@ -14,6 +15,10 @@ function Home() {
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif", backgroundColor: "#1a1a1a", color: "#fff", minHeight: "100vh" }}>
+
+      {/* 세계 정세 현황판 */}
+      <WorldRelationMap />
+
         {/* 뉴스 카드 영역*/}
       {youtubeData  ? (
         <div style={{ display: "flex", justifyContent: "center", gap: "20px", flexWrap: "wrap" }}>
