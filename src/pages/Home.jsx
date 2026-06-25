@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { useYoutubeData } from "../hooks/useYoutubeData";
 
 import VideoCard from "../components/VideoCard";
@@ -7,11 +7,7 @@ import WorldRelationMap from "../components/home/WorldRelationMap";
 import { newsParams } from "../constants/newsMeta";
 function Home() {
   const youtubeData = useYoutubeData();
-  const [expanded, setExpanded] = useState({});
   const { order } = newsParams;
-  const toggle = (country) => {
-    setExpanded((prev) => ({ ...prev, [country]: !prev[country] }));
-  };
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif", backgroundColor: "#1a1a1a", color: "#fff", minHeight: "100vh" }}>
@@ -30,8 +26,6 @@ function Home() {
               key={country}
               country={country}
               video={video}
-              isExpanded={!!expanded[country]}
-              onToggle={toggle}
             />
           );
         })}

@@ -4,6 +4,7 @@ import { useSupabaseArchiveData } from "../hooks/useSupabaseArchiveData";
 import { newsParams } from "../constants/newsMeta";
 import { ClipboardCopy, Check } from "lucide-react";
 import ArchiveChartView from "../components/archive/ArchiveChartView";
+import NewsSummary from "../components/common/NewsSummary";
 
 /* -------------------------------------------------------------------------- */
 /* Trading Archive Panel                                                       */
@@ -916,7 +917,7 @@ function Archive() {
                                                         : "없음"}
                                                 </div>
 
-                                                {info.summary_result && (
+                                                {(info.summary_items?.length || info.summary_result) && (
                                                     <div style={{ marginTop: "8px" }}>
                                                         <button
                                                             onClick={() => toggleSummary(resultKey)}
@@ -938,23 +939,32 @@ function Archive() {
                                                             <div
                                                                 style={{
                                                                     marginTop: "6px",
-                                                                    backgroundColor: "#222",
+                                                                    backgroundColor: "#1a1a1a",
                                                                     padding: "10px 12px",
                                                                     borderRadius: "8px",
-                                                                    position: "relative",
                                                                 }}
                                                             >
-                                                                <CopyButton text={info.summary_result} />
-                                                                <strong>🧾 summary_result:</strong>
-                                                                <pre
+                                                                <div
                                                                     style={{
-                                                                        whiteSpace: "pre-wrap",
-                                                                        marginTop: "6px",
-                                                                        color: "#ccc",
+                                                                        display: "flex",
+                                                                        justifyContent: "space-between",
+                                                                        alignItems: "center",
+                                                                        marginBottom: "8px",
                                                                     }}
                                                                 >
-                                                                    {info.summary_result}
-                                                                </pre>
+                                                                    <strong style={{ color: "#fff" }}>🧾 뉴스 요약</strong>
+                                                                    {info.summary_result && (
+                                                                        <CopyButton
+                                                                            text={info.summary_result}
+                                                                            absolute={false}
+                                                                            titleLabel="요약 복사"
+                                                                        />
+                                                                    )}
+                                                                </div>
+                                                                <NewsSummary
+                                                                    items={info.summary_items}
+                                                                    summaryText={info.summary_result}
+                                                                />
                                                             </div>
                                                         )}
                                                     </div>
