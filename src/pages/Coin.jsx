@@ -552,15 +552,14 @@ function EquityHistoryCard({ currentEquity }) {
 
 /* ------------------------- 트레이딩 로직 설명 탭 ------------------------- */
 function TradingLogicTabs() {
-    const [activeTab, setActiveTab] = useState("formula");
+    const [activeTab, setActiveTab] = useState("overview");
 
     const tabs = [
-        { key: "formula", label: "기준 수식" },
-        { key: "entry", label: "진입" },
-        { key: "boost", label: "BOOST" },
-        { key: "exit", label: "청산" },
-        { key: "risk", label: "리스크 컨트롤" },
-        { key: "s1", label: "S1 (σ복귀)" },
+        { key: "overview", label: "개요" },
+        { key: "model", label: "공통 수식" },
+        { key: "s1", label: "S1 추세" },
+        { key: "s2", label: "S2 역추세" },
+        { key: "live", label: "심볼·라이브" },
     ];
 
     const wrapStyle = {
@@ -590,12 +589,12 @@ function TradingLogicTabs() {
                 <div>
                     <div style={{ fontSize: 17, fontWeight: 900 }}>트레이딩 로직 설명</div>
                     <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7, lineHeight: 1.5 }}>
-                        LONG 기준 설명입니다. SHORT은 같은 조건을 반대 방향으로 적용합니다.
+                        z-score(σ) 기반 2전략 × 2방향. S1=추세(모멘텀 자산), S2=역추세(평균회귀 자산).
                     </div>
                 </div>
 
                 <div style={{ fontSize: 11, opacity: 0.6, alignSelf: "flex-end" }}>
-                    MA100 · momentum · BOOST · RISK CONTROL · S1(σ)
+                    z-score · win 7일 · TP/SL 대칭 · 동시보유 · 14일 청산
                 </div>
             </div>
 
@@ -613,12 +612,11 @@ function TradingLogicTabs() {
             </div>
 
             <div style={{ marginTop: 14 }}>
-                {activeTab === "formula" && <LogicFormulaTab />}
-                {activeTab === "entry" && <LogicEntryTab />}
-                {activeTab === "boost" && <LogicBoostTab />}
-                {activeTab === "exit" && <LogicExitTab />}
-                {activeTab === "risk" && <LogicRiskTab />}
-                {activeTab === "s1" && <LogicS1Tab />}
+                {activeTab === "overview" && <LogicOverviewTab />}
+                {activeTab === "model" && <LogicModelTab />}
+                {activeTab === "s1" && <LogicS1TrendTab />}
+                {activeTab === "s2" && <LogicS2ReversionTab />}
+                {activeTab === "live" && <LogicLiveTab />}
             </div>
         </div>
     );
@@ -800,574 +798,296 @@ function MiniLogicChart({ title, lines = [], points = [], note }) {
     );
 }
 
-function LogicFormulaTab() {
+/* ------------------------- S1/S2 (z-score) 전략 설명 ------------------------- */
+const LBOX = {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 12,
+    background: "#101010",
+    border: "1px solid #2a2a2a",
+    fontSize: 12,
+    lineHeight: 1.7,
+};
+const LWARN = {
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 10,
+    background: "rgba(255,184,108,0.08)",
+    border: "1px solid rgba(255,184,108,0.3)",
+    fontSize: 12,
+    opacity: 0.9,
+    lineHeight: 1.6,
+};
+
+function LogicOverviewTab() {
+    const cell = { padding: "8px 10px", borderBottom: "1px solid #222", fontSize: 12, verticalAlign: "top" };
+    const head = { ...cell, fontWeight: 900, color: "#00ffcc", borderBottom: "1px solid #2a2a2a" };
     return (
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div><b>MA100</b> = 최근 100개 캔들의 평균 가격</div>
-            <div><b>ma_thr_eff</b> = MA100에서 얼마나 벗어나야 신호로 볼지 정한 기준 거리</div>
-            <div><b>ma_thr_eff / 2</b> = MA100 기준 거리의 절반</div>
-
-            <div style={{ marginTop: 10 }}>
-                예시: <b>MA100 = 100</b>, <b>ma_thr_eff = 0.6%</b>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — 2전략 × 2방향</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
+                가격이 7일 이동평균에서 표준편차(σ) 기준 얼마나 떨어졌는지(z-score)로 진입을 판단합니다.
+                자산 성격에 따라 <b>추세(S1)</b>와 <b>역추세(S2)</b>를 다른 심볼군에 적용합니다.
             </div>
 
-            <ul style={{ marginTop: 6, paddingLeft: 18 }}>
-                <li>LONG INIT 기준 = 100 × (1 - 0.006) = <b>99.4</b></li>
-                <li>SCALE_IN 기존 기준 = 100 × (1 - 0.003) = <b>99.7</b> + 하락 모멘텀</li>
-                <li>SCALE_IN 추가 기준 = 100 × (1 - 0.006) = <b>99.4</b> 도달</li>
-                <li>NORMAL 청산 기준 = 100 × (1 + 0.006) = <b>100.6</b></li>
-                <li>SHORT은 위/아래 방향만 반대로 적용</li>
-            </ul>
+            <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 420 }}>
+                    <thead>
+                        <tr>
+                            <th style={head}></th>
+                            <th style={head}>S1 · 추세 (trend)</th>
+                            <th style={head}>S2 · 역추세 (reversion)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style={{ ...cell, fontWeight: 900 }}>롱</td>
+                            <td style={cell}>z ≥ +K1 진입 (상승 지속에 베팅)</td>
+                            <td style={cell}>z ≤ −K1 진입 (되돌림 상승에 베팅)</td>
+                        </tr>
+                        <tr>
+                            <td style={{ ...cell, fontWeight: 900 }}>숏</td>
+                            <td style={cell}>z ≤ −K1 진입 (하락 지속에 베팅)</td>
+                            <td style={cell}>z ≥ +K1 진입 (되돌림 하락에 베팅)</td>
+                        </tr>
+                        <tr>
+                            <td style={{ ...cell, fontWeight: 900 }}>대상</td>
+                            <td style={cell}>모멘텀 자산<br />SOL·금·은·ETH·BTC</td>
+                            <td style={cell}>평균회귀 자산<br />지수·BTC·XRP·WTI</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
-            <MiniLogicChart
-                title="MA100 기준선 예시"
-                lines={[
-                    { y: 45, label: "100.6", color: "#00ffcc" },
-                    { y: 85, label: "100.0", color: "#ffd166" },
-                    { y: 115, label: "99.7", color: "#7ee787", dash: "4 4" },
-                    { y: 145, label: "99.4", color: "#ff8080" },
-                ]}
-                points={[
-                    { x: 80, y: 82 },
-                    { x: 170, y: 110 },
-                    { x: 260, y: 146, label: "LONG INIT", color: "#ff8080" },
-                    { x: 360, y: 118, label: "SCALE 기준", color: "#7ee787" },
-                    { x: 470, y: 45, label: "청산", color: "#00ffcc" },
-                ]}
-                note="ma_thr_eff / 2는 MA100 기준 이격의 절반입니다. SCALE_IN은 기존의 절반 기준+모멘텀 또는 ma_thr_eff 전체 도달 기준으로 발생합니다."
-            />
+            <div style={{ marginTop: 12, fontSize: 12, opacity: 0.85, lineHeight: 1.7 }}>
+                <b>핵심 아이디어</b><br />
+                • 추세(S1): 이미 한쪽으로 크게 움직인(과열/급락) 자산은 그 방향으로 더 간다고 보고 따라붙음.<br />
+                • 역추세(S2): 과하게 벌어진 자산은 평균으로 되돌아온다고 보고 반대로 잡음.<br />
+                • 같은 z 신호라도 자산군에 따라 추세가 맞는 자산, 역추세가 맞는 자산이 갈립니다.
+            </div>
+
+            <div style={LWARN}>
+                ⚠ 내부 시그널 로그(signals_s1/s2.jsonl)는 과거 명명 때문에 라벨이 반대로 기록됩니다
+                (코드 s1=역추세, s2=추세). 이 화면은 <b>연구 문서 기준(S1=추세, S2=역추세)</b>으로 설명합니다.
+            </div>
         </div>
     );
 }
 
-function LogicEntryTab() {
-    const conditionBox = {
-        marginTop: 8,
-        padding: 10,
-        borderRadius: 12,
-        background: "#101010",
-        border: "1px solid #2a2a2a",
-        fontSize: 12,
-        lineHeight: 1.7,
-    };
-
-    const andStyle = {
-        display: "inline-block",
-        margin: "4px 0",
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: "rgba(0,255,204,0.12)",
-        border: "1px solid rgba(0,255,204,0.35)",
-        color: "#00ffcc",
-        fontWeight: 900,
-        fontSize: 11,
-    };
-
+function LogicModelTab() {
     return (
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>LONG 진입</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>공통 모델 (v2)</div>
 
-            <div style={conditionBox}>
-                <b>INIT</b>
-                <div>1. 포지션이 없음</div>
-                <div style={andStyle}>AND</div>
-                <div>2. price &lt; MA100 × (1 - ma_thr_eff)</div>
-                <div style={andStyle}>AND</div>
-                <div>3. 3분 모멘텀 &lt; -momentum_threshold</div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>INIT2 / INIT3</b>
-                <div>1. INIT 이후 15분 이내</div>
-                <div style={andStyle}>AND</div>
-                <div>2. INIT2: price ≤ INIT_PRICE × (1 - ma_thr_eff)</div>
-                <div>3. INIT3: price ≤ INIT_PRICE × (1 - ma_thr_eff × 2)</div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>SCALE_IN</b>
-                <div>1. 최근 진입 후 30분 경과</div>
-                <div style={andStyle}>AND</div>
-                <div>2. price &lt; newest_entry</div>
-                <div style={andStyle}>AND</div>
-                <div>3. 아래 둘 중 하나 만족</div>
-                <div style={{
-                    display: "inline-block",
-                    margin: "4px 0",
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    background: "rgba(255,184,108,0.12)",
-                    border: "1px solid rgba(255,184,108,0.35)",
-                    color: "#ffb86c",
-                    fontWeight: 900,
-                    fontSize: 11,
-                }}>
-                    OR
-                </div>
-                <div style={{ paddingLeft: 12 }}>
-                    A. 기존 기준: price ≤ MA100 × (1 - ma_thr_eff / 2) AND 3분 모멘텀 &lt; -momentum_threshold<br />
-                    B. 추가 기준: price ≤ MA100 × (1 - ma_thr_eff)
-                </div>
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                예시: ma_thr_eff = 0.6%라면 SCALE_IN은 MA100 -0.3% + 하락 모멘텀 또는 MA100 -0.6% 도달 시 발생합니다.
-            </div>
-
-            <div style={{
-                marginTop: 8,
-                padding: 8,
-                borderRadius: 10,
-                background: "rgba(255,184,108,0.08)",
-                border: "1px solid rgba(255,184,108,0.3)",
-                fontSize: 12,
-                opacity: 0.9,
-            }}>
-                ⚠ 추가 진입 게이트: 이미 포지션이 있을 때는 그 묶음에 <b>INIT 포지션이 남아 있을 때만</b> SCALE_IN /
-                INIT2·3 / BOOST 같은 추가 진입이 허용됩니다. INIT이 모두 청산되면 신규 추가 진입은 멈춥니다.
-            </div>
-
-            <MiniLogicChart
-                title="LONG 단계 진입 예시"
-                lines={[
-                    { y: 50, label: "MA100", color: "#ffd166" },
-                    { y: 95, label: "INIT", color: "#ff8080" },
-                    { y: 125, label: "INIT2", color: "#ff8080", dash: "4 4" },
-                    { y: 155, label: "INIT3", color: "#ff8080", dash: "4 4" },
-                ]}
-                points={[
-                    { x: 60, y: 55 },
-                    { x: 140, y: 96, label: "INIT", color: "#ff8080" },
-                    { x: 240, y: 125, label: "INIT2", color: "#ff8080" },
-                    { x: 340, y: 155, label: "INIT3", color: "#ff8080" },
-                    { x: 460, y: 118 },
-                ]}
-                note="진입 조건은 대부분 AND 조건입니다. 가격 조건과 모멘텀 조건을 동시에 만족해야 합니다."
-            />
-        </div>
-    );
-}
-
-function LogicBoostTab() {
-    const conditionBox = {
-        marginTop: 8,
-        padding: 10,
-        borderRadius: 12,
-        background: "#101010",
-        border: "1px solid #2a2a2a",
-        fontSize: 12,
-        lineHeight: 1.7,
-    };
-
-    const andStyle = {
-        display: "inline-block",
-        margin: "4px 0",
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: "rgba(0,255,204,0.12)",
-        border: "1px solid rgba(0,255,204,0.35)",
-        color: "#00ffcc",
-        fontWeight: 900,
-        fontSize: 11,
-    };
-
-    const orStyle = {
-        display: "inline-block",
-        margin: "4px 0",
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: "rgba(255,184,108,0.12)",
-        border: "1px solid rgba(255,184,108,0.35)",
-        color: "#ffb86c",
-        fontWeight: 900,
-        fontSize: 11,
-    };
-
-    return (
-        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>BOOST 진입</div>
-
-            <div style={conditionBox}>
-                <b>BOOST_ENTRY</b>
-                <div>1. anchor = INIT 또는 SCALE_IN</div>
-                <div style={andStyle}>AND</div>
-                <div>2. anchor 발생 후 2분~15분 사이</div>
-                <div style={andStyle}>AND</div>
-                <div>3. 같은 anchor 기준 누적 BOOST 진입 수 &lt; 2</div>
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    * BOOST가 청산되어도 같은 INIT/SCALE_IN anchor로는 최대 2회까지만 재진입 가능합니다.
-                </div>
-                <div style={andStyle}>AND</div>
-                <div>4. 마지막 BOOST 이후 5분 이상 경과</div>
-                <div style={andStyle}>AND</div>
-                <div>5. 아래 둘 중 하나 만족</div>
-                <div style={orStyle}>OR</div>
-                <div style={{ paddingLeft: 12 }}>
-                    A. 3분 모멘텀 &lt; -momentum_threshold<br />
-                    B. price ≤ anchor_entry
-                </div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>BOOST 청산</b>
-                <div>1. anchor + BOOST 평균가 기준 +0.3% → 해당 BOOST 묶음 청산</div>
-                <div style={orStyle}>OR</div>
-                <div>2. anchor 후 20분 경과 + price ≥ anchor+BOOST 평균가 → BOOST 정리</div>
-                <div style={orStyle}>OR</div>
-                <div>3. anchor 후 30분 경과 → BOOST 강제 청산</div>
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-                SHORT은 반대로 적용됩니다. 상승 모멘텀 또는 price ≥ anchor_entry이면 BOOST 후보가 됩니다.
-            </div>
-
-            <MiniLogicChart
-                title="BOOST 시간 구조"
-                lines={[
-                    { y: 95, label: "anchor", color: "#ffd166" },
-                ]}
-                points={[
-                    { x: 60, y: 95, label: "Anchor", color: "#ffd166" },
-                    { x: 120, y: 120, label: "2분", color: "#aaa" },
-                    { x: 190, y: 135, label: "BOOST1", color: "#00ffcc" },
-                    { x: 310, y: 150, label: "BOOST2", color: "#00ffcc" },
-                    { x: 400, y: 118, label: "15분", color: "#aaa" },
-                    { x: 455, y: 100, label: "20분", color: "#ffb86c" },
-                    { x: 510, y: 82, label: "30분", color: "#ff8080" },
-                ]}
-                note="2분 전에는 BOOST 진입 금지, 15분 이후에는 신규 BOOST 금지, 20분 이후에는 실패 BOOST 정리 조건, 30분 이후에는 강제 정리입니다."
-            />
-        </div>
-    );
-}
-
-function LogicExitTab() {
-    const conditionBox = {
-        marginTop: 8,
-        padding: 10,
-        borderRadius: 12,
-        background: "#101010",
-        border: "1px solid #2a2a2a",
-        fontSize: 12,
-        lineHeight: 1.7,
-    };
-
-    const andStyle = {
-        display: "inline-block",
-        margin: "4px 0",
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: "rgba(0,255,204,0.12)",
-        border: "1px solid rgba(0,255,204,0.35)",
-        color: "#00ffcc",
-        fontWeight: 900,
-        fontSize: 11,
-    };
-
-    const orStyle = {
-        display: "inline-block",
-        margin: "4px 0",
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: "rgba(255,184,108,0.12)",
-        border: "1px solid rgba(255,184,108,0.35)",
-        color: "#ffb86c",
-        fontWeight: 900,
-        fontSize: 11,
-    };
-
-    return (
-        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>청산 기준</div>
-
-            <div style={{ marginBottom: 8, fontSize: 12, opacity: 0.7 }}>
-                아래 순서대로 우선 평가됩니다. TIME_LIMIT → SL → BOOST 청산 → TP → RISK CONTROL → NORMAL/SCALE_OUT/INIT_OUT/NEAR_TOUCH.
-            </div>
-
-            <div style={conditionBox}>
-                <b>TIME_LIMIT</b>
-                <div>1. oldest 보유 시간 &gt; position_max_hold (기본 7일)</div>
-                <div>결과: oldest 1개 청산 (가장 먼저 평가되는 안전장치)</div>
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    손익과 무관하게 너무 오래 묶인 포지션을 강제로 회전시키는 시간 제한입니다.
-                </div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>STOP_LOSS / TAKE_PROFIT</b>
-                <div>STOP_LOSS: oldest 손익률 ≤ -(ma_thr_eff × 7)</div>
-                <div style={{ marginTop: 4 }}>TAKE_PROFIT (보유시간에 따라 완화):</div>
-                <div style={{ paddingLeft: 12 }}>
-                    A. oldest 보유 1시간 미만 → oldest 손익률 ≥ ma_thr_eff × 2<br />
-                    B. oldest 보유 1시간 이상 → oldest 손익률 ≥ ma_thr_eff × 1
-                </div>
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    예시: oldest_entry = 100, ma_thr_eff = 0.6%라면 SL은 95.8 이하, TP는 1시간 미만이면 101.2 이상,
-                    1시간 이상이면 100.6 이상입니다. 오래 들고 있을수록 더 작은 이익에도 익절합니다.
-                </div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>NORMAL</b>
-                <div>1. newest 진입 후 30분 초과</div>
-                <div style={andStyle}>AND</div>
-                <div>2. price ≥ MA100 × (1 + ma_thr_eff)</div>
-                <div>결과: 전체 청산</div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>SCALE_OUT</b>
-                <div>1. 포지션 2개 이상</div>
-                <div style={andStyle}>AND</div>
-                <div>2. scale out 쿨다운이 끝난 상태</div>
-                <div style={andStyle}>AND</div>
-                <div>3. price와 prev_entry 비교에 따라 아래 기준 적용</div>
-
-                <div style={orStyle}>CASE</div>
-
-                <div style={{ paddingLeft: 12 }}>
-                    A. price ≥ prev_entry인 경우<br />
-                    → price ≥ MA100 × (1 + ma_thr_eff / 2)
-                    <br /><br />
-                    B. price &lt; prev_entry인 경우<br />
-                    → price ≥ MA100 × (1 + ma_thr_eff × 2 / 3)
-                </div>
-
-                <div style={{ marginTop: 6 }}>
-                    결과: newest 1개 청산
-                </div>
-
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    prev_entry보다 유리한 가격이면 더 빠르게 일부 청산하고, 아직 prev_entry를 회복하지 못한 경우에는
-                    더 높은 MA100 회복 기준을 요구한 뒤 리스크 축소 목적으로 newest 포지션만 줄입니다.
-                </div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>INIT_OUT</b>
-                <div>1. 포지션이 정확히 1개</div>
-                <div style={andStyle}>AND</div>
-                <div>2. scale out 쿨다운이 끝난 상태</div>
-                <div style={andStyle}>AND</div>
-                <div>3. price ≥ MA100 × (1 + ma_thr_eff / 2)</div>
-                <div style={andStyle}>AND</div>
-                <div>4. 3분 모멘텀 &gt; +momentum_threshold</div>
-                <div style={{ marginTop: 6 }}>결과: 단일 포지션 청산</div>
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    INIT 1개만 들고 있을 때, MA100 절반 회복 + 상승 모멘텀이 함께 나오면 기대수익의 절반 수준에서
-                    가볍게 정리하는 빠른 청산입니다. (SHORT은 반대 방향)
-                </div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>NEAR_TOUCH</b>
-                <div>1. newest 진입 후 30분 이내</div>
-                <div style={andStyle}>AND</div>
-                <div>2. 아래 둘 중 하나 만족</div>
-                <div style={orStyle}>OR</div>
-                <div style={{ paddingLeft: 12 }}>
-                    A. price ≥ MA100 × (1 - exit_easing)<br />
-                    B. price ≥ newest_entry × (1 + ma_thr_eff × 0.7)
-                </div>
-                <div>결과: newest 1개 청산</div>
-            </div>
-
-            <MiniLogicChart
-                title="TP / SL 예시"
-                lines={[
-                    { y: 45, label: "TP", color: "#00ffcc" },
-                    { y: 95, label: "Entry", color: "#ffd166" },
-                    { y: 150, label: "SL", color: "#ff8080" },
-                ]}
-                points={[
-                    { x: 80, y: 95, label: "진입" },
-                    { x: 180, y: 130 },
-                    { x: 280, y: 100 },
-                    { x: 390, y: 70 },
-                    { x: 470, y: 45, label: "TP", color: "#00ffcc" },
-                ]}
-                note="TP/SL은 oldest 포지션 기준 손익률로 계산됩니다."
-            />
-
-            <MiniLogicChart
-                title="NORMAL / SCALE_OUT / NEAR_TOUCH 회복 청산"
-                lines={[
-                    { y: 45, label: "NORMAL", color: "#00ffcc" },
-                    { y: 75, label: "SCALE_OUT", color: "#7ee787", dash: "4 4" },
-                    { y: 105, label: "MA100", color: "#ffd166" },
-                    { y: 135, label: "NEAR_TOUCH", color: "#ffb86c", dash: "4 4" },
-                ]}
-                points={[
-                    { x: 70, y: 155, label: "진입" },
-                    { x: 160, y: 142, label: "30분 이내" },
-                    { x: 250, y: 135, label: "NEAR", color: "#ffb86c" },
-                    { x: 350, y: 75, label: "SCALE", color: "#7ee787" },
-                    { x: 470, y: 45, label: "NORMAL", color: "#00ffcc" },
-                ]}
-                note="NEAR_TOUCH는 진입 직후 빠른 회복 청산, SCALE_OUT은 여러 포지션 중 최신 포지션 일부 청산, NORMAL은 MA100 목표선 회복 시 전체 청산입니다."
-            />
-        </div>
-    );
-}
-
-function LogicRiskTab() {
-    return (
-        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>RISK CONTROL 청산</div>
-
-            <ul style={{ paddingLeft: 18 }}>
-                <li><b>조건</b>: 보유 포지션 5개 이상</li>
-                <li><b>수익 기준</b>: price ≥ 전체 평균가 × 1.003</li>
-                <li><b>청산 대상</b>: oldest부터 일부 청산</li>
-            </ul>
-
-            <div
-                style={{
-                    marginTop: 10,
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-                    gap: 8,
-                    fontSize: 12,
-                }}
-            >
-                {[
-                    ["5개", "1개 청산"],
-                    ["6개", "2개 청산"],
-                    ["7개", "3개 청산"],
-                    ["8개", "4개 청산"],
-                    ["9개", "4개 청산"],
-                    ["10개", "5개 청산"],
-                ].map(([n, txt]) => (
-                    <div
-                        key={n}
-                        style={{
-                            padding: 10,
-                            borderRadius: 12,
-                            background: "#101010",
-                            border: "1px solid #2a2a2a",
-                        }}
-                    >
-                        <div style={{ fontWeight: 900, color: "#00ffcc" }}>{n}</div>
-                        <div style={{ opacity: 0.8 }}>{txt}</div>
-                    </div>
-                ))}
-            </div>
-
-            <MiniLogicChart
-                title="RISK CONTROL 예시"
-                lines={[
-                    { y: 70, label: "+0.3%", color: "#00ffcc" },
-                    { y: 105, label: "평균가", color: "#ffd166" },
-                ]}
-                points={[
-                    { x: 70, y: 150, label: "1" },
-                    { x: 145, y: 135, label: "2" },
-                    { x: 220, y: 120, label: "3" },
-                    { x: 295, y: 110, label: "4" },
-                    { x: 370, y: 105, label: "평균" },
-                    { x: 465, y: 70, label: "청산", color: "#00ffcc" },
-                ]}
-                note="5개 이상 쌓인 상태에서 전체 평균가보다 0.3% 이상 유리해지면 oldest부터 일부 포지션을 줄입니다."
-            />
-        </div>
-    );
-}
-
-
-function LogicS1Tab() {
-    const conditionBox = {
-        marginTop: 8,
-        padding: 10,
-        borderRadius: 12,
-        background: "#101010",
-        border: "1px solid #2a2a2a",
-        fontSize: 12,
-        lineHeight: 1.7,
-    };
-
-    const andStyle = {
-        display: "inline-block",
-        margin: "4px 0",
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: "rgba(0,255,204,0.12)",
-        border: "1px solid rgba(0,255,204,0.35)",
-        color: "#00ffcc",
-        fontWeight: 900,
-        fontSize: 11,
-    };
-
-    return (
-        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>S1 · σ-복귀 역추세 (롱 온리)</div>
-
-            <div style={{ marginBottom: 8, fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
-                MA100 전략과 별개로 돌아가는 독립 전략입니다. 가격이 이동평균에서 표준편차(σ) 기준으로
-                지나치게 멀어졌을 때 평균 회귀를 노려 <b>롱만</b> 잡습니다. 진입 시 TP/SL 가격을 고정하고
-                그 가격에 닿으면 청산하는 단순·기계적 규칙입니다.
-            </div>
-
-            <div style={conditionBox}>
+            <div style={LBOX}>
                 <b>지표</b>
-                <div>MA = win분 종가 이동평균 (기본 win = 10080 = 1분봉 7일)</div>
-                <div>SD = 같은 창의 표준편차 (모집단)</div>
-                <div>z = (price − MA) / SD</div>
+                <div>1분봉 기준, win = 10080개(= 7일) 고정</div>
+                <div>MA = 최근 7일 종가 이동평균</div>
+                <div>σ = 같은 창의 표준편차</div>
+                <div><b>z = (현재가 − MA) / σ</b> — 평균에서 몇 σ 떨어졌는지</div>
             </div>
 
-            <div style={conditionBox}>
-                <b>진입 (INIT)</b>
-                <div>1. 포지션 없음 (flat)</div>
-                <div style={andStyle}>AND</div>
-                <div>2. 청산 후 쿨다운 경과 (기본 12시간)</div>
-                <div style={andStyle}>AND</div>
-                <div>3. z ≤ −K1 (기본 K1 = 2.5)</div>
+            <div style={LBOX}>
+                <b>진입 / 청산 레벨 (진입 시 고정)</b>
+                <div>진입: z가 임계 ±K1 도달 (전략·방향별)</div>
+                <div>TP/SL = 진입가 기준 ±pct <b>대칭</b>, 손절 우선</div>
+                <div>pct = (MA ± B·σ)와 진입가 사이의 거리(%)</div>
                 <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    즉 가격이 평균보다 2.5σ 이상 아래로 내려간 과매도 구간에서만 롱 진입합니다.
+                    B는 양수/음수 모두 가능(되돌림 목표를 평균 안쪽/바깥쪽으로 조정). 진입 즉시 TP·SL 가격을
+                    못박고, 가격이 그 선에 닿으면 청산하는 단순·기계적 규칙입니다.
                 </div>
             </div>
 
-            <div style={conditionBox}>
-                <b>청산 레벨 (진입 시 고정)</b>
-                <div>TP_price = MA − B × SD (기본 B = 2.0, 단 B &lt; K1)</div>
-                <div>pct = TP_price / entry − 1</div>
-                <div>SL_price = entry × (1 − pct) — TP와 대칭</div>
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    가드: TP_price ≤ entry이면 진입하지 않습니다(얕은 진입 방지, pct &gt; 0 보장).
-                    TP는 −2σ 수준으로의 복귀를, SL은 그만큼의 추가 하락을 의미합니다.
-                </div>
-            </div>
-
-            <div style={conditionBox}>
-                <b>청산 / 쿨다운</b>
-                <div>price ≥ TP_price → 익절(TP)</div>
-                <div>price ≤ SL_price → 손절(SL)</div>
-                <div>동시 충족 시 → 손절 우선</div>
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    청산 후 쿨다운(기본 12시간) 동안은 신규 진입을 막습니다.
-                </div>
+            <div style={LBOX}>
+                <b>운용 규칙</b>
+                <div>• 진입 쿨다운: 심볼별로 직전 진입 후 일정 시간 신규 진입 금지</div>
+                <div>• 동시보유 허용 + 최대 동시보유 캡(maxc): 캡 미만일 때만 추가로 쌓음</div>
+                <div>• 최대보유 14일: 초과 시 TP/SL 미도달이어도 시장가 강제청산</div>
+                <div>• 수수료 0.11% 왕복 가정(리포팅)</div>
             </div>
 
             <MiniLogicChart
-                title="S1 진입/청산 구조 (z 기준)"
+                title="z-score 진입 구조"
                 lines={[
-                    { y: 40, label: "+2σ", color: "#333" },
-                    { y: 75, label: "MA (z=0)", color: "#ffd166" },
-                    { y: 100, label: "TP −2σ", color: "#00ffcc", dash: "4 4" },
-                    { y: 150, label: "−2.5σ 진입", color: "#ff8080" },
+                    { y: 40, label: "+K1", color: "#ff8080" },
+                    { y: 75, label: "+B·σ", color: "#7ee787", dash: "4 4" },
+                    { y: 95, label: "MA (z=0)", color: "#ffd166" },
+                    { y: 115, label: "−B·σ", color: "#7ee787", dash: "4 4" },
+                    { y: 150, label: "−K1", color: "#ff8080" },
                 ]}
                 points={[
-                    { x: 70, y: 78 },
-                    { x: 150, y: 120 },
-                    { x: 240, y: 152, label: "INIT(z≤−2.5)", color: "#ff8080" },
+                    { x: 70, y: 95 },
+                    { x: 160, y: 60 },
+                    { x: 250, y: 42, label: "z=+K1", color: "#ff8080" },
                     { x: 360, y: 120 },
-                    { x: 470, y: 100, label: "TP(z=−2)", color: "#00ffcc" },
+                    { x: 460, y: 150, label: "z=−K1", color: "#ff8080" },
                 ]}
-                note="−2.5σ에서 진입해 −2σ 복귀(TP)를 노립니다. SL은 진입가 기준 TP와 대칭 거리(추가 하락)입니다. 파라미터: win=7일, K1=2.5, B=2.0, 쿨다운=12h (BTC 기준)."
+                note="±K1 도달이 진입 트리거. 같은 트리거를 추세는 '지속', 역추세는 '되돌림'으로 해석해 방향을 정합니다."
             />
+        </div>
+    );
+}
 
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7, lineHeight: 1.6 }}>
-                ※ 파라미터(win·K1·B·쿨다운)는 심볼별로 다를 수 있으며, reversion_research 백테스트와 동일한
-                규칙으로 라이브에서 동작합니다.
+function LogicS1TrendTab() {
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>S1 · 추세추종 (모멘텀 자산)</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
+                크게 움직인 방향으로 더 간다고 보고 추종합니다. 핵심 자산: <b>SOL·금(XAU)·은(XAG)·ETH·BTC</b>.
+            </div>
+
+            <div style={LBOX}>
+                <b>추세 롱</b> (z ≥ +K1, 과열에서 상승 지속)
+                <div>진입: z ≥ +K1 → 롱</div>
+                <div>pct = 1 − (MA + B·σ) / 진입가</div>
+                <div>TP = 진입가 × (1 + pct) [위] · SL = 진입가 × (1 − pct) [아래]</div>
+            </div>
+
+            <div style={LBOX}>
+                <b>추세 숏</b> (z ≤ −K1, 급락에서 하락 지속)
+                <div>진입: z ≤ −K1 → 숏</div>
+                <div>TP = 진입가 × (1 − pct) [아래] · SL = 진입가 × (1 + pct) [위]</div>
+            </div>
+
+            <div style={LWARN}>
+                ⚠ 최근 3년은 내내 강세장이라 <b>추세 롱이 주력</b>(예: SOLUSDT 기대 +7.09%, PF 3.22).
+                추세 숏은 약세장이 올 때를 대비한 <b>레짐 보완</b> 성격입니다.
+            </div>
+
+            <MiniLogicChart
+                title="추세 롱 구조 (z ≥ +K1)"
+                lines={[
+                    { y: 45, label: "TP (위)", color: "#00ffcc" },
+                    { y: 80, label: "진입 z≥+K1", color: "#ff8080" },
+                    { y: 115, label: "MA", color: "#ffd166" },
+                    { y: 150, label: "SL (아래)", color: "#ff8080", dash: "4 4" },
+                ]}
+                points={[
+                    { x: 70, y: 116 },
+                    { x: 170, y: 90 },
+                    { x: 250, y: 80, label: "진입", color: "#ff8080" },
+                    { x: 370, y: 60 },
+                    { x: 460, y: 45, label: "TP", color: "#00ffcc" },
+                ]}
+                note="과열(z≥+K1)에서 롱 진입 → 상승 지속 시 TP. 반대로 밀리면 대칭 거리의 SL에서 손절(손절 우선)."
+            />
+        </div>
+    );
+}
+
+function LogicS2ReversionTab() {
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>S2 · 역추세 (평균회귀 자산)</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
+                과하게 벌어지면 평균으로 되돌아온다고 보고 반대로 잡습니다.
+                핵심 자산: <b>지수(US100·GER40·JP225·UK100·HK50)·BTC·XRP·WTI</b>.
+            </div>
+
+            <div style={LBOX}>
+                <b>역추세 롱</b> (z ≤ −K1, 급락에서 되돌림 상승)
+                <div>진입: z ≤ −K1 → 롱</div>
+                <div>pct = (MA − B·σ) / 진입가 − 1</div>
+                <div>TP = 진입가 × (1 + pct) = MA − B·σ [위] · SL = 진입가 × (1 − pct) [아래]</div>
+                <div style={{ marginTop: 6, opacity: 0.75 }}>
+                    기존 라이브로 돌던 'σ-복귀 롱'과 같은 계열입니다.
+                </div>
+            </div>
+
+            <div style={LBOX}>
+                <b>역추세 숏</b> (z ≥ +K1, 과열에서 되돌림 하락)
+                <div>진입: z ≥ +K1 → 숏</div>
+                <div>TP = 진입가 × (1 − pct) = MA + B·σ [아래] · SL = 진입가 × (1 + pct) [위]</div>
+                <div style={{ marginTop: 6, opacity: 0.75 }}>
+                    역추세 숏은 K1을 3.0~5.0까지 높게 잡아야 유효합니다(고-K 구간). 예: XRPUSDT K1 5.0.
+                </div>
+            </div>
+
+            <div style={LWARN}>
+                ⚠ 역추세 롱·숏이 둘 다 강한 심볼(XRP·WTI·BTCUSDT·UK100)은 양방향 운용이 가능해
+                레짐 의존이 덜한 편입니다.
+            </div>
+
+            <MiniLogicChart
+                title="역추세 롱 구조 (z ≤ −K1)"
+                lines={[
+                    { y: 45, label: "MA", color: "#ffd166" },
+                    { y: 80, label: "TP = MA−B·σ", color: "#00ffcc", dash: "4 4" },
+                    { y: 115, label: "진입 z≤−K1", color: "#ff8080" },
+                    { y: 150, label: "SL (아래)", color: "#ff8080", dash: "4 4" },
+                ]}
+                points={[
+                    { x: 70, y: 70 },
+                    { x: 160, y: 100 },
+                    { x: 250, y: 116, label: "진입", color: "#ff8080" },
+                    { x: 370, y: 95 },
+                    { x: 460, y: 80, label: "TP", color: "#00ffcc" },
+                ]}
+                note="급락(z≤−K1)에서 롱 진입 → 평균쪽 −B·σ 복귀에서 TP. 더 빠지면 대칭 거리의 SL에서 손절."
+            />
+        </div>
+    );
+}
+
+function LogicLiveTab() {
+    const cell = { padding: "7px 9px", borderBottom: "1px solid #222", fontSize: 11.5, whiteSpace: "nowrap" };
+    const head = { ...cell, fontWeight: 900, color: "#00ffcc" };
+    const live = [
+        ["S2 역추세 롱", "XRPUSDT", "Bybit", "3.5 / −0.4 / 2.25h / 7"],
+        ["S2 역추세 롱", "BTCUSDT", "Bybit", "3.3 / −2.0 / 3h / 8"],
+        ["S2 역추세 롱", "WTI", "MT5", "2.9 / −2.0 / 3h / 8"],
+        ["S2 역추세 롱", "US100", "MT5", "3.25 / 0.4 / 1.5h / 9"],
+        ["S2 역추세 롱", "BTCUSD", "MT5", "3.5 / −2.0 / 2.25h / 9"],
+        ["S2 역추세 롱", "GER40", "MT5", "3.5 / −2.0 / 1.25h / 12"],
+        ["S2 역추세 롱", "JP225", "MT5", "2.7 / −2.0 / 3h / 12"],
+        ["S2 역추세 롱", "UK100", "MT5", "3.35 / −2.0 / 1.5h / 14"],
+        ["S1 추세 숏", "SOLUSDT", "Bybit", "3.4 / −2.0 / 1.5h / 14"],
+        ["S1 추세 숏", "ETHUSDT", "Bybit", "3.45 / −1.8 / 3h / 8"],
+        ["S1 추세 숏", "XAUTUSDT", "Bybit", "3.5 / 0.8 / 0.75h / 14"],
+        ["S1 추세 숏", "XAGUSD", "MT5", "2.65 / 1.2 / 2h / 11"],
+        ["S1 추세 숏", "ETHUSD", "MT5", "2.4 / −0.2 / 3h / 14"],
+        ["S1 추세 숏", "XAUUSD", "MT5", "3.2 / 0.2 / 1h / 13"],
+    ];
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 · 라이브 현황</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
+                4개 조합(추세 롱·숏 / 역추세 롱·숏) 중 현재 봇에 라이브로 연결된 2개 레그입니다.
+                값 = <b>K1 / B / 쿨다운 / 최대동시보유</b>.
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 440 }}>
+                    <thead>
+                        <tr>
+                            <th style={head}>전략·방향</th>
+                            <th style={head}>심볼</th>
+                            <th style={head}>거래소</th>
+                            <th style={head}>K1 / B / CD / maxc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {live.map((r, i) => (
+                            <tr key={i}>
+                                <td style={{ ...cell, color: r[0].startsWith("S1") ? "#ffb86c" : "#7ee787", fontWeight: 800 }}>{r[0]}</td>
+                                <td style={cell}>{r[1]}</td>
+                                <td style={{ ...cell, opacity: 0.7 }}>{r[2]}</td>
+                                <td style={cell}>{r[3]}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8, lineHeight: 1.7 }}>
+                <b>미가동 (백테스트 채택군만 존재)</b><br />
+                • S1 추세 롱 — 강세장 주력 후보지만 아직 라이브 미연결<br />
+                • S2 역추세 숏 — 고-K(3.0~5.0) 구간, XRP·WTI 등 일부만 유효
+            </div>
+
+            <div style={LWARN}>
+                ⚠ 파라미터는 3년 in-sample 백테스트 기준이며 OOS(약세구간)·포트폴리오 검증은 진행 중입니다.
+                동시보유로 계산된 누적 수익률은 과대평가될 수 있어 라이브 성과로 재검증이 필요합니다.
             </div>
         </div>
     );
