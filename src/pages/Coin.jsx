@@ -589,12 +589,12 @@ function TradingLogicTabs() {
                 <div>
                     <div style={{ fontSize: 17, fontWeight: 900 }}>트레이딩 로직 설명</div>
                     <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7, lineHeight: 1.5 }}>
-                        z-score(σ) 기반 2전략 × 2방향. S1=추세(모멘텀 자산), S2=역추세(평균회귀 자산).
+                        z-score(σ) 기반 2전략 × 2방향(롱+숏). S1=추세, S2=역추세(추매). 모두 라이브.
                     </div>
                 </div>
 
                 <div style={{ fontSize: 11, opacity: 0.6, alignSelf: "flex-end" }}>
-                    z-score · win 7일 · TP/SL 대칭 · 동시보유 · 14일 청산
+                    z-score · win 7일 · 양방향 · S2 추매(평단↓) · 포트폴리오 캡 · 14일 청산
                 </div>
             </div>
 
@@ -818,6 +818,15 @@ const LWARN = {
     opacity: 0.9,
     lineHeight: 1.6,
 };
+const LADD = {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 12,
+    background: "rgba(126,231,135,0.07)",
+    border: "1px solid rgba(126,231,135,0.4)",
+    fontSize: 12,
+    lineHeight: 1.7,
+};
 
 function LogicOverviewTab() {
     const cell = { padding: "8px 10px", borderBottom: "1px solid #222", fontSize: 12, verticalAlign: "top" };
@@ -827,11 +836,11 @@ function LogicOverviewTab() {
             <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — 2전략 × 2방향</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
                 가격이 7일 이동평균에서 표준편차(σ) 기준 얼마나 떨어졌는지(z-score)로 진입을 판단합니다.
-                자산 성격에 따라 <b>추세(S1)</b>와 <b>역추세(S2)</b>를 다른 심볼군에 적용합니다.
+                자산 성격에 따라 <b>추세(S1)</b>와 <b>역추세(S2)</b>를 적용하고, 채택된 심볼은 롱·숏 양방향으로 운용합니다.
             </div>
 
             <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 420 }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 440 }}>
                     <thead>
                         <tr>
                             <th style={head}></th>
@@ -852,8 +861,13 @@ function LogicOverviewTab() {
                         </tr>
                         <tr>
                             <td style={{ ...cell, fontWeight: 900 }}>대상</td>
-                            <td style={cell}>모멘텀 자산<br />SOL·금·은·ETH·BTC</td>
-                            <td style={cell}>평균회귀 자산<br />지수·BTC·XRP·WTI</td>
+                            <td style={cell}>모멘텀 자산<br />SOL·금·은·ETH·BTC·지수</td>
+                            <td style={cell}>평균회귀 자산<br />지수·BTC·XRP·WTI·금속</td>
+                        </tr>
+                        <tr>
+                            <td style={{ ...cell, fontWeight: 900 }}>포지션 운용</td>
+                            <td style={cell}>독립 다리 스택<br />(추매 없음)</td>
+                            <td style={{ ...cell, color: "#7ee787" }}><b>추매(평단↓)</b><br />최대 2다리·재앵커</td>
                         </tr>
                     </tbody>
                 </table>
@@ -862,13 +876,8 @@ function LogicOverviewTab() {
             <div style={{ marginTop: 12, fontSize: 12, opacity: 0.85, lineHeight: 1.7 }}>
                 <b>핵심 아이디어</b><br />
                 • 추세(S1): 이미 한쪽으로 크게 움직인(과열/급락) 자산은 그 방향으로 더 간다고 보고 따라붙음.<br />
-                • 역추세(S2): 과하게 벌어진 자산은 평균으로 되돌아온다고 보고 반대로 잡음.<br />
+                • 역추세(S2): 과하게 벌어진 자산은 평균으로 되돌아온다고 보고 반대로 잡되, 더 벌어지면 한 번 <b>추매</b>해 평단을 낮춤.<br />
                 • 같은 z 신호라도 자산군에 따라 추세가 맞는 자산, 역추세가 맞는 자산이 갈립니다.
-            </div>
-
-            <div style={LWARN}>
-                ⚠ 내부 시그널 로그(signals_s1/s2.jsonl)는 과거 명명 때문에 라벨이 반대로 기록됩니다
-                (코드 s1=역추세, s2=추세). 이 화면은 <b>연구 문서 기준(S1=추세, S2=역추세)</b>으로 설명합니다.
             </div>
         </div>
     );
@@ -893,15 +902,17 @@ function LogicModelTab() {
                 <div>TP/SL = 진입가 기준 ±pct <b>대칭</b>, 손절 우선</div>
                 <div>pct = (MA ± B·σ)와 진입가 사이의 거리(%)</div>
                 <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    B는 양수/음수 모두 가능(되돌림 목표를 평균 안쪽/바깥쪽으로 조정). 진입 즉시 TP·SL 가격을
+                    B는 양수/음수 모두 가능(목표 밴드를 평균 안쪽/바깥쪽으로 조정). 진입 즉시 TP·SL 가격을
                     못박고, 가격이 그 선에 닿으면 청산하는 단순·기계적 규칙입니다.
                 </div>
             </div>
 
             <div style={LBOX}>
-                <b>운용 규칙</b>
-                <div>• 진입 쿨다운: 심볼별로 직전 진입 후 일정 시간 신규 진입 금지</div>
-                <div>• 동시보유 허용 + 최대 동시보유 캡(maxc): 캡 미만일 때만 추가로 쌓음</div>
+                <b>포지션 운용 (전략별 상이)</b>
+                <div>• <b>추세(S1)</b>: 신호 재발생 시 독립 다리로 쌓음(스택), 각 다리가 자기 TP/SL로 따로 청산</div>
+                <div>• <b>역추세(S2)</b>: 신규 대신 기존 포지션에 1회 <b>추매</b>(최대 2다리, 평단↓·재앵커, 함께 청산)</div>
+                <div style={{ marginTop: 4 }}>• 진입 쿨다운: 심볼별로 직전 진입 후 일정 시간 신규/추매 금지</div>
+                <div>• 사이징: 진입당 자본 5%, 최대 유효레버리지 10x(≈200랏)까지 — 거래소 최소주문 미달 시 5→10→15→20% 자동 상향</div>
                 <div>• 최대보유 14일: 초과 시 TP/SL 미도달이어도 시장가 강제청산</div>
                 <div>• 수수료 0.11% 왕복 가정(리포팅)</div>
             </div>
@@ -933,7 +944,7 @@ function LogicS1TrendTab() {
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
             <div style={{ fontWeight: 900, marginBottom: 6 }}>S1 · 추세추종 (모멘텀 자산)</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
-                크게 움직인 방향으로 더 간다고 보고 추종합니다. 핵심 자산: <b>SOL·금(XAU)·은(XAG)·ETH·BTC</b>.
+                크게 움직인 방향으로 더 간다고 보고 추종합니다. 채택 심볼은 <b>롱·숏 양방향</b>으로 운용.
             </div>
 
             <div style={LBOX}>
@@ -947,6 +958,15 @@ function LogicS1TrendTab() {
                 <b>추세 숏</b> (z ≤ −K1, 급락에서 하락 지속)
                 <div>진입: z ≤ −K1 → 숏</div>
                 <div>TP = 진입가 × (1 − pct) [아래] · SL = 진입가 × (1 + pct) [위]</div>
+            </div>
+
+            <div style={LBOX}>
+                <b>포지션 운용 — 독립 스택 (추매 없음)</b>
+                <div>신호가 또 나오면 기존을 건드리지 않고 <b>새 다리</b>로 쌓습니다. 각 다리는 자기 TP/SL로 따로 청산.</div>
+                <div style={{ marginTop: 6, opacity: 0.75 }}>
+                    추세는 평단을 낮추면(추매) 오히려 손실을 키우는 경향이라 추매를 쓰지 않습니다. 전체 보유 수량은
+                    포트폴리오 캡(≈200랏)이 제한합니다.
+                </div>
             </div>
 
             <div style={LWARN}>
@@ -978,116 +998,132 @@ function LogicS1TrendTab() {
 function LogicS2ReversionTab() {
     return (
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>S2 · 역추세 (평균회귀 자산)</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>S2 · 역추세 + 추매 (평균회귀 자산)</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
-                과하게 벌어지면 평균으로 되돌아온다고 보고 반대로 잡습니다.
-                핵심 자산: <b>지수(US100·GER40·JP225·UK100·HK50)·BTC·XRP·WTI</b>.
+                과하게 벌어지면 평균으로 되돌아온다고 보고 반대로 잡습니다. 더 벌어지면 한 번 <b>추매(평단 낮추기)</b>.
+                채택 심볼은 롱·숏 양방향 운용.
             </div>
 
             <div style={LBOX}>
                 <b>역추세 롱</b> (z ≤ −K1, 급락에서 되돌림 상승)
-                <div>진입: z ≤ −K1 → 롱</div>
-                <div>pct = (MA − B·σ) / 진입가 − 1</div>
-                <div>TP = 진입가 × (1 + pct) = MA − B·σ [위] · SL = 진입가 × (1 − pct) [아래]</div>
-                <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    기존 라이브로 돌던 'σ-복귀 롱'과 같은 계열입니다.
-                </div>
+                <div>진입: z ≤ −K1 → 롱 · TP = MA − B·σ [위] · SL = 대칭 [아래]</div>
             </div>
 
             <div style={LBOX}>
                 <b>역추세 숏</b> (z ≥ +K1, 과열에서 되돌림 하락)
-                <div>진입: z ≥ +K1 → 숏</div>
-                <div>TP = 진입가 × (1 − pct) = MA + B·σ [아래] · SL = 진입가 × (1 + pct) [위]</div>
+                <div>진입: z ≥ +K1 → 숏 · TP = MA + B·σ [아래] · SL = 대칭 [위]</div>
                 <div style={{ marginTop: 6, opacity: 0.75 }}>
-                    역추세 숏은 K1을 3.0~5.0까지 높게 잡아야 유효합니다(고-K 구간). 예: XRPUSDT K1 5.0.
+                    역추세 숏은 K1을 높게(3.0~5.0) 잡아야 유효합니다. 예: XRPUSDT K1 5.0.
                 </div>
             </div>
 
-            <div style={LWARN}>
-                ⚠ 역추세 롱·숏이 둘 다 강한 심볼(XRP·WTI·BTCUSDT·UK100)은 양방향 운용이 가능해
-                레짐 의존이 덜한 편입니다.
+            <div style={LADD}>
+                <b style={{ color: "#7ee787" }}>★ 추매 (평단 낮추기) — S2 역추세 전용</b>
+                <div style={{ marginTop: 4 }}>1. leg1: z 신호로 첫 진입 (TP=밴드, SL=대칭)</div>
+                <div>2. 같은 방향 z 신호가 다시 나오면 → 신규 포지션 대신 <b>1회 추매(leg2)</b></div>
+                <div>3. 새 평단 = (1다리가 + 추매가) / 2 &nbsp;(1:1 단순평균)</div>
+                <div>4. 재앵커: TP = 추매 시점 밴드(롱 MA−B·σ / 숏 MA+B·σ), SL = 새 평단 기준 ±pct 대칭</div>
+                <div>5. 최대 <b>2다리</b>. 청산은 두 다리 함께. 14일 한도는 첫 다리 기준.</div>
+                <div style={{ marginTop: 6, opacity: 0.8 }}>
+                    평단을 낮추면 더 작은 반등에도 TP에 닿아 회복이 빨라집니다. 백테스트상 <b>역추세엔 도움</b>(12심볼 중 11개 개선)이지만
+                    추세엔 해로워, 추세(S1)는 추매를 쓰지 않습니다.
+                </div>
             </div>
 
             <MiniLogicChart
-                title="역추세 롱 구조 (z ≤ −K1)"
+                title="역추세 롱 + 추매 구조 (z ≤ −K1)"
                 lines={[
                     { y: 45, label: "MA", color: "#ffd166" },
-                    { y: 80, label: "TP = MA−B·σ", color: "#00ffcc", dash: "4 4" },
-                    { y: 115, label: "진입 z≤−K1", color: "#ff8080" },
-                    { y: 150, label: "SL (아래)", color: "#ff8080", dash: "4 4" },
+                    { y: 75, label: "TP = MA−B·σ", color: "#00ffcc", dash: "4 4" },
+                    { y: 105, label: "leg1 진입", color: "#ff8080" },
+                    { y: 130, label: "새 평단", color: "#7ee787", dash: "4 4" },
+                    { y: 150, label: "leg2 추매", color: "#ff8080" },
                 ]}
                 points={[
-                    { x: 70, y: 70 },
-                    { x: 160, y: 100 },
-                    { x: 250, y: 116, label: "진입", color: "#ff8080" },
-                    { x: 370, y: 95 },
-                    { x: 460, y: 80, label: "TP", color: "#00ffcc" },
+                    { x: 60, y: 80 },
+                    { x: 150, y: 106, label: "leg1", color: "#ff8080" },
+                    { x: 250, y: 150, label: "leg2(추매)", color: "#ff8080" },
+                    { x: 330, y: 130, label: "평단↓", color: "#7ee787" },
+                    { x: 460, y: 75, label: "TP(함께청산)", color: "#00ffcc" },
                 ]}
-                note="급락(z≤−K1)에서 롱 진입 → 평균쪽 −B·σ 복귀에서 TP. 더 빠지면 대칭 거리의 SL에서 손절."
+                note="더 빠질 때 1회 추매로 평단을 leg1·leg2 중간으로 낮춤 → 밴드 복귀 시 두 다리 함께 익절. 더 빠지면 새 평단 기준 대칭 SL."
             />
         </div>
     );
 }
 
 function LogicLiveTab() {
-    const cell = { padding: "7px 9px", borderBottom: "1px solid #222", fontSize: 11.5, whiteSpace: "nowrap" };
+    const cell = { padding: "6px 8px", borderBottom: "1px solid #222", fontSize: 11.5, whiteSpace: "nowrap" };
     const head = { ...cell, fontWeight: 900, color: "#00ffcc" };
-    const live = [
-        ["S2 역추세 롱", "XRPUSDT", "Bybit", "3.5 / −0.4 / 2.25h / 7"],
-        ["S2 역추세 롱", "BTCUSDT", "Bybit", "3.3 / −2.0 / 3h / 8"],
-        ["S2 역추세 롱", "WTI", "MT5", "2.9 / −2.0 / 3h / 8"],
-        ["S2 역추세 롱", "US100", "MT5", "3.25 / 0.4 / 1.5h / 9"],
-        ["S2 역추세 롱", "BTCUSD", "MT5", "3.5 / −2.0 / 2.25h / 9"],
-        ["S2 역추세 롱", "GER40", "MT5", "3.5 / −2.0 / 1.25h / 12"],
-        ["S2 역추세 롱", "JP225", "MT5", "2.7 / −2.0 / 3h / 12"],
-        ["S2 역추세 롱", "UK100", "MT5", "3.35 / −2.0 / 1.5h / 14"],
-        ["S1 추세 숏", "SOLUSDT", "Bybit", "3.4 / −2.0 / 1.5h / 14"],
-        ["S1 추세 숏", "ETHUSDT", "Bybit", "3.45 / −1.8 / 3h / 8"],
-        ["S1 추세 숏", "XAUTUSDT", "Bybit", "3.5 / 0.8 / 0.75h / 14"],
-        ["S1 추세 숏", "XAGUSD", "MT5", "2.65 / 1.2 / 2h / 11"],
-        ["S1 추세 숏", "ETHUSD", "MT5", "2.4 / −0.2 / 3h / 14"],
-        ["S1 추세 숏", "XAUUSD", "MT5", "3.2 / 0.2 / 1h / 13"],
+    const S1 = [
+        ["BTCUSDT", "Bybit", "3.2 / −2.0", "—"],
+        ["ETHUSDT", "Bybit", "2.35 / 1.2", "3.45 / −1.8"],
+        ["SOLUSDT", "Bybit", "3.4 / −2.0", "3.4 / −2.0"],
+        ["XRPUSDT", "Bybit", "2.55 / −0.4", "—"],
+        ["US100", "MT5", "2.8 / −1.8", "—"],
+        ["JP225", "MT5", "3.35 / −2.0", "3.25 / 0.8"],
+        ["HK50", "MT5", "2.05 / 0.6", "—"],
+        ["GER40", "MT5", "2.75 / −1.8", "—"],
+        ["UK100", "MT5", "3.25 / −1.2", "3.5 / 0.8"],
+        ["XAUUSD", "MT5", "3.45 / −1.8", "3.2 / 0.2"],
+        ["XAGUSD", "MT5", "2.75 / −1.2", "2.65 / 1.2"],
+        ["WTI", "MT5", "2.9 / −1.4", "3.2 / 1.8"],
     ];
-    return (
-        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 · 라이브 현황</div>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
-                4개 조합(추세 롱·숏 / 역추세 롱·숏) 중 현재 봇에 라이브로 연결된 2개 레그입니다.
-                값 = <b>K1 / B / 쿨다운 / 최대동시보유</b>.
-            </div>
-
+    const S2 = [
+        ["BTCUSDT", "Bybit", "3.3 / −2.0", "4.6 / −0.4"],
+        ["ETHUSDT", "Bybit", "3.15 / −1.2", "3.3 / −1.2"],
+        ["SOLUSDT", "Bybit", "3.3 / 1.8", "—"],
+        ["XRPUSDT", "Bybit", "3.5 / −0.4", "5.0 / −2.0"],
+        ["US100", "MT5", "3.25 / −0.8", "—"],
+        ["JP225", "MT5", "2.7 / −2.0", "3.8 / 1.0"],
+        ["HK50", "MT5", "2.6 / −2.0", "3.0 / 1.6"],
+        ["GER40", "MT5", "3.5 / −2.0", "—"],
+        ["UK100", "MT5", "3.35 / −2.0", "3.8 / 1.8"],
+        ["XAUUSD", "MT5", "2.35 / −1.8", "—"],
+        ["XAGUSD", "MT5", "2.85 / −1.8", "3.8 / −2.0"],
+        ["WTI", "MT5", "2.9 / −2.0", "3.4 / 0.6"],
+    ];
+    const Table = ({ title, rows, accent }) => (
+        <div style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 900, fontSize: 13, color: accent, marginBottom: 4 }}>{title}</div>
             <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 440 }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 360 }}>
                     <thead>
                         <tr>
-                            <th style={head}>전략·방향</th>
                             <th style={head}>심볼</th>
                             <th style={head}>거래소</th>
-                            <th style={head}>K1 / B / CD / maxc</th>
+                            <th style={head}>롱 (K1 / B)</th>
+                            <th style={head}>숏 (K1 / B)</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {live.map((r, i) => (
+                        {rows.map((r, i) => (
                             <tr key={i}>
-                                <td style={{ ...cell, color: r[0].startsWith("S1") ? "#ffb86c" : "#7ee787", fontWeight: 800 }}>{r[0]}</td>
-                                <td style={cell}>{r[1]}</td>
-                                <td style={{ ...cell, opacity: 0.7 }}>{r[2]}</td>
-                                <td style={cell}>{r[3]}</td>
+                                <td style={{ ...cell, fontWeight: 800 }}>{r[0]}</td>
+                                <td style={{ ...cell, opacity: 0.7 }}>{r[1]}</td>
+                                <td style={{ ...cell, color: r[2] === "—" ? "#555" : "#cfcfcf" }}>{r[2]}</td>
+                                <td style={{ ...cell, color: r[3] === "—" ? "#555" : "#cfcfcf" }}>{r[3]}</td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
-
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8, lineHeight: 1.7 }}>
-                <b>미가동 (백테스트 채택군만 존재)</b><br />
-                • S1 추세 롱 — 강세장 주력 후보지만 아직 라이브 미연결<br />
-                • S2 역추세 숏 — 고-K(3.0~5.0) 구간, XRP·WTI 등 일부만 유효
+        </div>
+    );
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 · 현재 구성</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
+                값 = <b>K1 / B</b>. "—"는 해당 방향 미채택. 쿨다운·B는 심볼·방향마다 다릅니다.
+                동시보유 캡은 200랏(비구속)으로 두고, 실제 한도는 <b>포트폴리오 캡(유효레버 10x ≈ 200랏)</b>이 잡습니다.
             </div>
 
+            <Table title="S1 · 추세 (독립 스택)" rows={S1} accent="#ffb86c" />
+            <Table title="S2 · 역추세 (추매 2다리)" rows={S2} accent="#7ee787" />
+
             <div style={LWARN}>
-                ⚠ 파라미터는 3년 in-sample 백테스트 기준이며 OOS(약세구간)·포트폴리오 검증은 진행 중입니다.
-                동시보유로 계산된 누적 수익률은 과대평가될 수 있어 라이브 성과로 재검증이 필요합니다.
+                ⚠ 파라미터는 3년 in-sample 백테스트(portfolio_sim picks) 기준이며 OOS(약세구간)·포트폴리오
+                자본설계 검증은 진행 중입니다. 동시보유 누적 수익률은 과대평가될 수 있어 소액 라이브로 재검증하는 단계입니다.
             </div>
         </div>
     );
