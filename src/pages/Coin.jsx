@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import AssetPanel from "../components/AssetPanel";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import ChartPanelCore from "../components/common/ChartPanelCore";
+import DailyChartPanel from "../components/common/DailyChartPanel";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec } from "../lib/tradeUtils";
@@ -1284,6 +1285,7 @@ export default function Coin() {
     }, [configState]);
 
     const [selectedSymbol, setSelectedSymbol] = useState(null);
+    const [timeframe, setTimeframe] = useState("1m"); // "1m" | "1D"
 
     const visibleSymbols = useMemo(() => {
         if (!selectedSymbol) return symbolsConfig;
@@ -1565,23 +1567,39 @@ export default function Coin() {
                                     <div style={{ fontSize: 12, opacity: 0.85 }}>{getDayLabel(anchorEndUtcSec, dayOffset)}</div>
                                 </div>
 
-                                {/* 1분봉 버튼 */}
+                                {/* 타임프레임 토글: 1분봉 / 일봉 */}
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                    <button
-                                        onClick={() => setDayOffset(0)}
-                                        style={{
-                                            padding: "8px 12px",
-                                            borderRadius: 10,
-                                            border: 0,
-                                            background: "#00ffcc",
-                                            color: "#000",
-                                            fontWeight: 700,
-                                        }}
-                                        title="오늘(0)로 이동"
-                                    >
-                                        1분봉
-                                    </button>
+                                    {[
+                                        { key: "1m", label: "1분봉" },
+                                        { key: "1D", label: "일봉" },
+                                    ].map((tf) => {
+                                        const on = timeframe === tf.key;
+                                        return (
+                                            <button
+                                                key={tf.key}
+                                                onClick={() => setTimeframe(tf.key)}
+                                                style={{
+                                                    padding: "8px 12px",
+                                                    borderRadius: 10,
+                                                    border: on ? 0 : "1px solid #2a2a2a",
+                                                    background: on ? "#00ffcc" : "#1a1a1a",
+                                                    color: on ? "#000" : "#ddd",
+                                                    fontWeight: 700,
+                                                    cursor: "pointer",
+                                                }}
+                                                title={tf.key === "1D" ? "일봉(가격 위주, 최근 365일)" : "1분봉(진입밴드 포함)"}
+                                            >
+                                                {tf.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+
+                                {timeframe === "1D" && (
+                                    <div style={{ marginTop: 6, fontSize: 11, opacity: 0.6, lineHeight: 1.5 }}>
+                                        일봉은 가격 흐름용입니다. z-score 진입밴드는 1분봉 전용(7일 σ 기반)이라 일봉엔 표시되지 않습니다.
+                                    </div>
+                                )}
 
                                 <div style={{ height: 10 }} />
 
@@ -1663,17 +1681,27 @@ export default function Coin() {
                     <div style={{ minWidth: 0, display: "grid", gap: 12 }}>
                         {visibleSymbols.map((s) => (
                             <div key={s.symbol} style={{ width: "100%", minWidth: 0 }}>
-                                <ChartPanelCore
-                                    source={bybitSource}
-                                    symbol={s.symbol}
-                                    dayOffset={dayOffset}
-                                    anchorEndUtcSec={anchorEndUtcSec}
-                                    onBounds={onBounds}
-                                    onStats={onStats}
-                                    k1set={K1_BYBIT[s.symbol]}
-                                    crossTimes={metaMap[s.symbol]?.cross_times}
-                                    bounds={{ min: -7, max: 0 }}
-                                />
+                                {timeframe === "1D" ? (
+                                    <DailyChartPanel
+                                        source={bybitSource}
+                                        symbol={s.symbol}
+                                        anchorEndUtcSec={anchorEndUtcSec}
+                                        dayOffset={dayOffset}
+                                        lookbackDays={365}
+                                    />
+                                ) : (
+                                    <ChartPanelCore
+                                        source={bybitSource}
+                                        symbol={s.symbol}
+                                        dayOffset={dayOffset}
+                                        anchorEndUtcSec={anchorEndUtcSec}
+                                        onBounds={onBounds}
+                                        onStats={onStats}
+                                        k1set={K1_BYBIT[s.symbol]}
+                                        crossTimes={metaMap[s.symbol]?.cross_times}
+                                        bounds={{ min: -7, max: 0 }}
+                                    />
+                                )}
                             </div>
                         ))}
                     </div>

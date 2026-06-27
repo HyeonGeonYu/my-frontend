@@ -324,6 +324,7 @@ export default function ChartView({
     priceScale = 2,
     priceFormatter,
     loading = false,
+    intervalSec = 60,
 }) {
     const wrapRef = useRef(null);
     const chartRef = useRef(null);
@@ -363,6 +364,11 @@ export default function ChartView({
         priceFormatterRef.current = priceFormatter;
     }, [priceFormatter]);
 
+    const intervalSecRef = useRef(intervalSec);
+    useEffect(() => {
+        intervalSecRef.current = Number.isFinite(Number(intervalSec)) && Number(intervalSec) > 0 ? Number(intervalSec) : 60;
+    }, [intervalSec]);
+
     const safeCandles = useMemo(() => (Array.isArray(displayCandles) ? displayCandles : []), [displayCandles]);
     const safeMA = useMemo(() => (Array.isArray(ma100) ? ma100 : []), [ma100]);
     const safeMaSd = useMemo(() => (Array.isArray(maSd) ? maSd : []), [maSd]);
@@ -384,16 +390,17 @@ export default function ChartView({
 
         chart.resize(w, h);
 
-        const bars = Math.max(1, Math.round((end - start) / 60)); // 1분봉 기준
+        const isec = intervalSecRef.current || 60;
+        const bars = Math.max(1, Math.round((end - start) / isec)); // 봉 간격(초) 기준
         const rawSpacing = (w - 40) / bars;
-        const spacing = clamp(rawSpacing, 0.1, 3.5);
+        const spacing = clamp(rawSpacing, 0.1, 8);
 
         chart.timeScale().applyOptions({
             rightOffset: 0, barSpacing: spacing, minBarSpacing: 0.1,
         });
 
         try {
-            chart.timeScale().setVisibleRange({ from: start, to: end - 60 });
+            chart.timeScale().setVisibleRange({ from: start, to: end - isec });
         } catch {
         }
     }, []);
