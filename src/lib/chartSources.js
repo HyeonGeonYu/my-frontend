@@ -48,6 +48,60 @@ const signalCache = new Map(); // signalKey -> { markers, notes }
 
 const BYBIT_API_BASE = "https://api.bybit.com";
 
+// ── Bybit 공개 API 레이트리밋(10006) 대응: 전역 동시성 제한 + 백오프 재시도 ──
+const BYBIT_MAX_CONCURRENT = 3;
+let _bybitActive = 0;
+const _bybitWaiters = [];
+function _bybitAcquire() {
+  if (_bybitActive < BYBIT_MAX_CONCURRENT) {
+    _bybitActive++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _bybitWaiters.push(resolve));
+}
+function _bybitRelease() {
+  _bybitActive = Math.max(0, _bybitActive - 1);
+  const next = _bybitWaiters.shift();
+  if (next) {
+    _bybitActive++;
+    next();
+  }
+}
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 동시성 슬롯 확보 후 fetch. 10006(rate limit)/10018/429는 지수 백오프로 재시도, 그 외 retCode≠0은 호출측에서 처리.
+async function bybitKlineFetch(url, signal) {
+  await _bybitAcquire();
+  try {
+    let lastErr = null;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      try {
+        const res = await fetch(url, { signal });
+        if (res.status === 429 || res.status === 403) {
+          lastErr = new Error(`HTTP ${res.status}`);
+        } else if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        } else {
+          const data = await res.json();
+          if (data?.retCode === 10006 || data?.retCode === 10018) {
+            lastErr = new Error(`API error (${data.retCode}): ${data?.retMsg}`);
+          } else {
+            return data;
+          }
+        }
+      } catch (e) {
+        if (e?.name === "AbortError") throw e;
+        lastErr = e;
+      }
+      await _sleep(Math.min(3000, 250 * Math.pow(2, attempt)) + Math.floor(Math.random() * 150));
+    }
+    throw lastErr || new Error("Bybit rate limited");
+  } finally {
+    _bybitRelease();
+  }
+}
+
 /**
  * Bybit v5 kline: 특정 window(start~end) + MA buffer까지 커버될 때까지 과거로 페이지네이션
  * - end(ms) 기준으로 과거로 내려가며 list 누적
@@ -66,10 +120,7 @@ async function fetchCandlesForWindowBybit(symUpper, interval, startSec, endSec, 
     url.searchParams.set("limit", String(PAGE_LIMIT));
     url.searchParams.set("end", String(endMs));
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
+    const data = await bybitKlineFetch(url, signal);
     if (data?.retCode !== 0) throw new Error(`API error (${data?.retCode}): ${data?.retMsg}`);
 
     const list = data?.result?.list || [];
