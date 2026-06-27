@@ -272,6 +272,26 @@ export default function useCoreCandles({
           allBarsRef.current = normalizeCachedToBars(cached);
           renderWindow(start, end, true);
 
+          // ✅ z-band 백필: 캐시(prefetch=99봉 버퍼)는 7일 σ를 못 그림.
+          //   start 이전 봉이 BAND_WIN 미만이면 BAND_BUF로 앞쪽 7일치 보충 후 재렌더(+캐시 갱신).
+          (async () => {
+            try {
+              const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
+              if (beforeCnt < BAND_WIN) {
+                const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
+                if (loadSeqRef.current !== mySeq) return;
+                let merged = allBarsRef.current || [];
+                for (const b of rowsToBars(histRows)) merged = mergeBars(merged, b);
+                if (merged.length > MAX_1M_BARS) merged = merged.slice(-MAX_1M_BARS);
+                allBarsRef.current = merged;
+                try { source.touchCandleCache?.(symUpper, dayKey, histRows); } catch {}
+                renderWindow(start, end, true);
+              }
+            } catch (e) {
+              if (e?.name !== "AbortError") console.warn("[ChartPanelCore band-backfill] failed:", symUpper, e);
+            }
+          })();
+
           // ✅ today(0) 캐시가 stale이면 tail catch-up
           if (dayOffset === 0) {
             const nowSec = Math.floor(Date.now() / 1000);
