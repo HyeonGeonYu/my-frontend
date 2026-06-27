@@ -280,8 +280,12 @@ export default function useCoreCandles({
               if (beforeCnt < BAND_WIN) {
                 const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
                 if (loadSeqRef.current !== mySeq) return;
-                let merged = allBarsRef.current || [];
-                for (const b of rowsToBars(histRows)) merged = mergeBars(merged, b);
+                // ⚠️ mergeBars는 '과거' 봉을 버림(append/update 전용) → time 기준 union으로 병합.
+                //   histRows가 [start-7d, end] 전체를 덮으므로 hist를 우선 적용, 기존(최신 라이브봉)은 보존.
+                const byTime = new Map();
+                for (const b of (allBarsRef.current || [])) byTime.set(b.time, b);
+                for (const b of rowsToBars(histRows)) byTime.set(b.time, b);
+                let merged = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
                 if (merged.length > MAX_1M_BARS) merged = merged.slice(-MAX_1M_BARS);
                 allBarsRef.current = merged;
                 try { source.touchCandleCache?.(symUpper, dayKey, histRows); } catch {}
