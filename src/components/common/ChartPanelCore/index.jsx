@@ -20,6 +20,7 @@ export default function ChartPanelCore({
   height = 320,
 
   thr,
+  k1set,
   crossTimes,
 
   // formatters
@@ -39,7 +40,7 @@ export default function ChartPanelCore({
     loading,
     notesView,
     displayCandles,
-    ma100,
+    maSd,
     markers,
     visibleRange,
     autoDigits,
@@ -129,8 +130,8 @@ export default function ChartPanelCore({
           height={height}
           tickFormatter={tickFormatter}
           displayCandles={displayCandles}
-          ma100={ma100}
-          thr={thr}
+          maSd={maSd}
+          k1set={k1set}
           markers={markers}
           priceScale={autoDigits}
           visibleRange={visibleRange}

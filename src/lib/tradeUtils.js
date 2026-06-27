@@ -155,6 +155,32 @@ export function calcSMA(bars, win = 100) {
     return out;
 }
 
+// 7일(win) 롤링 이동평균 + 모집단 표준편차. 봇 s1_indicators와 동일(var = E[x²] − E[x]²).
+// 반환: [{time, ma, sd}] — win개 이상 쌓인 지점부터.
+export function calcRollingMaSd(bars, win = 10080) {
+    const out = [];
+    let sum = 0, sumSq = 0;
+    const q = [];
+    for (const b of bars) {
+        const v = Number(b.close ?? b.c ?? b.value ?? 0);
+        if (!Number.isFinite(v)) continue;
+        q.push(v);
+        sum += v;
+        sumSq += v * v;
+        if (q.length > win) {
+            const old = q.shift();
+            sum -= old;
+            sumSq -= old * old;
+        }
+        if (q.length === win) {
+            const ma = sum / win;
+            const varr = Math.max(0, sumSq / win - ma * ma);
+            out.push({ time: b.time, ma, sd: Math.sqrt(varr) });
+        }
+    }
+    return out;
+}
+
 export function calcLatestMAValue(bars, win = 100) {
     if (!Array.isArray(bars) || bars.length < win) return null;
     let sum = 0;

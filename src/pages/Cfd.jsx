@@ -7,6 +7,31 @@ import {next0650EndBoundaryUtcSec} from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
 import StreamsCenter from "../components/common/StreamsCenter";
 
+// ✅ z-score 진입 밴드용 심볼별 K1 (trade_config TREND_MT5=S1추세 / REV_MT5=S2역추세)
+//   값 = MA ± K1·σ. 없는 방향은 미채택. HFM 심볼 별칭은 resolveK1Mt5에서 정규화.
+const K1_MT5 = {
+    US100: { s1Long: 2.8, s2Long: 3.25 },
+    JP225: { s1Long: 3.35, s1Short: 3.25, s2Long: 2.7, s2Short: 3.8 },
+    HK50:  { s1Long: 2.05, s2Long: 2.6, s2Short: 3.0 },
+    GER40: { s1Long: 2.75, s2Long: 3.5 },
+    UK100: { s1Long: 3.25, s1Short: 3.5, s2Long: 3.35, s2Short: 3.8 },
+    XAUUSD:{ s1Long: 3.45, s1Short: 3.2, s2Long: 2.35 },
+    XAGUSD:{ s1Long: 2.75, s1Short: 2.65, s2Long: 2.85, s2Short: 3.8 },
+    WTI:   { s1Long: 2.9, s1Short: 3.2, s2Long: 2.9, s2Short: 3.4 },
+};
+const MT5_ALIAS = {
+    USTEC: "US100", NAS100: "US100", US100CASH: "US100",
+    JPN225: "JP225", JP225CASH: "JP225",
+    DE40: "GER40", GER30: "GER40", DE30: "GER40",
+    FTSE100: "UK100", UK100CASH: "UK100",
+    HSI: "HK50", HK50CASH: "HK50",
+    USOIL: "WTI", XTIUSD: "WTI", CL: "WTI", WTIUSD: "WTI",
+};
+function resolveK1Mt5(sym) {
+    const u = String(sym || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return K1_MT5[u] || K1_MT5[MT5_ALIAS[u]] || undefined;
+}
+
 
 /* ------------------------- symbols 추출 유틸 ------------------------- */
 function extractSymbolsFromConfig(cfg) {
@@ -353,7 +378,7 @@ export default function Cfd() {
                                         symbol={s}
                                         dayOffset={dayOffset}
                                         anchorEndUtcSec={anchorEndUtcSec}
-                                        thr={metaMap[s]?.ma_threshold}
+                                        k1set={resolveK1Mt5(s)}
                                         crossTimes={metaMap[s]?.cross_times}
                                         onStats={onStats}
                                         bounds={{min: -7, max: 0}}

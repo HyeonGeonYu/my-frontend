@@ -3,6 +3,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
   sliceWithBuffer,
   calcSMA,
+  calcRollingMaSd,
   calcLatestMAValue,
   mergeBars,
   fmtComma,
@@ -10,6 +11,8 @@ import {
 
 import {
   MA_BUF,
+  BAND_WIN,
+  BAND_BUF,
   MAX_1M_BARS,
   digitsCache,
   clampDigits,
@@ -60,6 +63,7 @@ export default function useCoreCandles({
   const [notesView, setNotesView] = useState([]);
   const [displayCandles, setDisplayCandles] = useState([]);
   const [ma100, setMa100] = useState([]);
+  const [maSd, setMaSd] = useState([]); // ✅ z-score 밴드용 7일 롤링 {time, ma, sd}
   const [markers, setMarkers] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
 
@@ -139,6 +143,11 @@ export default function useCoreCandles({
       const forMa = sliceWithBuffer(arrAll, start, end, MA_BUF);
       const ma = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
       setMa100(ma);
+
+      // ✅ z-score 밴드용 7일 롤링 MA·σ (봇과 동일 win). prefetch로 7일치 쌓이면 최근 구간부터 채워짐.
+      const forBand = sliceWithBuffer(arrAll, start, end, BAND_BUF);
+      const ms = calcRollingMaSd(forBand, BAND_WIN).filter((p) => p.time >= start && p.time < end);
+      setMaSd(ms);
 
       // ✅ markers (signals hook 주입)
       try {
@@ -229,6 +238,7 @@ export default function useCoreCandles({
     setNotesView([]);
     setDisplayCandles([]);
     setMa100([]);
+    setMaSd([]);
     setMarkers([]);
 
     const cached = source.getCachedRows(symUpper, dayKey);
@@ -320,7 +330,8 @@ export default function useCoreCandles({
           return;
         }
 
-        const rows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, MA_BUF);
+        // ✅ z-band(7일 MA·σ)을 그리려면 보이는 창 앞쪽 7일치 히스토리가 필요 → BAND_BUF로 로드
+        const rows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
         if (loadSeqRef.current !== mySeq) return;
 
         // ✅ rows 기반 digits 확정
@@ -458,6 +469,7 @@ export default function useCoreCandles({
     notesView,
     displayCandles,
     ma100,
+    maSd,
     markers,
     visibleRange,
     autoDigits,

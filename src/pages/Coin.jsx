@@ -9,6 +9,15 @@ import { next0650EndBoundaryUtcSec } from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
 
+// ✅ z-score 진입 밴드용 심볼별 K1 (trade_config TREND_BYBIT=S1추세 / REV_BYBIT=S2역추세)
+//   값 = MA ± K1·σ 밴드. 없는 방향은 미채택(밴드 안 그림).
+const K1_BYBIT = {
+    BTCUSDT: { s1Long: 3.2, s2Long: 3.3, s2Short: 4.6 },
+    ETHUSDT: { s1Long: 2.35, s1Short: 3.45, s2Long: 3.15, s2Short: 3.3 },
+    SOLUSDT: { s1Long: 3.4, s1Short: 3.4, s2Long: 3.3 },
+    XRPUSDT: { s1Long: 2.55, s2Long: 3.5, s2Short: 5.0 },
+};
+
 /* ------------------------- 상단 배너 ------------------------- */
 function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qrSize = 92 }) {
     const fmt = (n, d = 2) => typeof n === "number" && Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: d }) : "—";
@@ -1661,7 +1670,7 @@ export default function Coin() {
                                     anchorEndUtcSec={anchorEndUtcSec}
                                     onBounds={onBounds}
                                     onStats={onStats}
-                                    thr={metaMap[s.symbol]?.ma_threshold}
+                                    k1set={K1_BYBIT[s.symbol]}
                                     crossTimes={metaMap[s.symbol]?.cross_times}
                                     bounds={{ min: -7, max: 0 }}
                                 />

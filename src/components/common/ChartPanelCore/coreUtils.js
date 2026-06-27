@@ -3,6 +3,9 @@
 export const ONE_DAY_SEC = 86400;
 export const MA_BUF = 99;
 export const MAX_1M_BARS = 43200;
+// ✅ z-score 밴드용: 봇과 동일한 7일(10080분) 창
+export const BAND_WIN = 10080;
+export const BAND_BUF = 10080;
 export const ROUND_TRIP_FEE_PCT = 0.11;
 
 export function toNumOrNull(v) {

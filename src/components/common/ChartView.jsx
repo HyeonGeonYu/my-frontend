@@ -316,6 +316,8 @@ export default function ChartView({
     displayCandles,
     ma100,
     thr,
+    maSd,
+    k1set,
     markers,
     visibleRange,
     onChartReady,
@@ -331,9 +333,15 @@ export default function ChartView({
     const applyLayoutRef = useRef(() => {
     });
     const candleRef = useRef(null);
-    const maRef = useRef(null);
-    const upperRef = useRef(null);
-    const lowerRef = useRef(null);
+    const maRef = useRef(null);       // 레거시 MA100 (Archive) — ma100 prop
+    const upperRef = useRef(null);    // 레거시 thr 밴드 상 (Archive)
+    const lowerRef = useRef(null);    // 레거시 thr 밴드 하 (Archive)
+    const maSdRef = useRef(null);     // ✅ 7일 MA 앵커 (z-band 모드)
+    // ✅ z-score 진입 밴드 4개: 색=방향(파랑 롱/주황 숏), 선=전략(실선 S1추세/점선 S2역추세)
+    const bS1LongRef = useRef(null);   // MA + k1·σ  (파랑 실선)
+    const bS2ShortRef = useRef(null);  // MA + k1·σ  (주황 점선)
+    const bS2LongRef = useRef(null);   // MA − k1·σ  (파랑 점선)
+    const bS1ShortRef = useRef(null);  // MA − k1·σ  (주황 실선)
 
     const tickFmtRef = useRef(tickFormatter);
     useEffect(() => {
@@ -357,6 +365,7 @@ export default function ChartView({
 
     const safeCandles = useMemo(() => (Array.isArray(displayCandles) ? displayCandles : []), [displayCandles]);
     const safeMA = useMemo(() => (Array.isArray(ma100) ? ma100 : []), [ma100]);
+    const safeMaSd = useMemo(() => (Array.isArray(maSd) ? maSd : []), [maSd]);
     const safeMarkers = useMemo(() => (Array.isArray(markers) ? markers : []), [markers]);
 
     const applyLayout = useCallback(() => {
@@ -651,6 +660,7 @@ export default function ChartView({
             priceFormat: { type: "price", precision: ps, minMove },
         });
 
+        // 레거시 MA100 라인 (Archive 등 ma100 prop 사용처). Coin/HFM은 ma100 미전달 → 빈 선.
         maRef.current = chart.addLineSeries({
             lineWidth: 2,
             priceLineVisible: false,
@@ -658,22 +668,35 @@ export default function ChartView({
             color: "#ffd166",
             priceFormat: { type: "price", precision: ps, minMove },
         });
-
         upperRef.current = chart.addLineSeries({
-            lineWidth: 1,
-            priceLineVisible: false,
-            lastValueVisible: false,
-            color: "#9ca3af",
-            priceFormat: { type: "price", precision: ps, minMove },
+            lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+            color: "#9ca3af", priceFormat: { type: "price", precision: ps, minMove },
+        });
+        lowerRef.current = chart.addLineSeries({
+            lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+            color: "#9ca3af", priceFormat: { type: "price", precision: ps, minMove },
         });
 
-        lowerRef.current = chart.addLineSeries({
-            lineWidth: 1,
+        // ✅ MA(7일) 앵커 — 얕은 회색 점선 (z-band 모드, maSd prop)
+        maSdRef.current = chart.addLineSeries({
+            lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
+            color: "#6b7280", priceFormat: { type: "price", precision: ps, minMove },
+        });
+
+        const BLUE = "#3a9bdc"; // 롱 진입
+        const AMBER = "#e8913a"; // 숏 진입
+        const mkBand = (color, dashed) => chart.addLineSeries({
+            lineWidth: 2,
+            lineStyle: dashed ? 2 : 0, // 2=Dashed, 0=Solid
             priceLineVisible: false,
-            lastValueVisible: false,
-            color: "#9ca3af",
+            lastValueVisible: true,
+            color,
             priceFormat: { type: "price", precision: ps, minMove },
         });
+        bS1LongRef.current = mkBand(BLUE, false);   // S1 추세 롱  (파랑 실선)
+        bS2ShortRef.current = mkBand(AMBER, true);  // S2 역추세 숏 (주황 점선)
+        bS2LongRef.current = mkBand(BLUE, true);    // S2 역추세 롱 (파랑 점선)
+        bS1ShortRef.current = mkBand(AMBER, false); // S1 추세 숏  (주황 실선)
 
         chartRef.current = chart;
         onChartReady?.(chart);
@@ -722,9 +745,11 @@ export default function ChartView({
         const chart = chartRef.current;
         const candleSeries = candleRef.current;
         const maSeries = maRef.current;
-        const upper = upperRef.current;
-        const lower = lowerRef.current;
-        if (!chart || !candleSeries || !maSeries || !upper || !lower) return;
+        const allLines = [
+            maRef.current, upperRef.current, lowerRef.current, maSdRef.current,
+            bS1LongRef.current, bS2ShortRef.current, bS2LongRef.current, bS1ShortRef.current,
+        ];
+        if (!chart || !candleSeries || !maSeries || allLines.some((b) => !b)) return;
 
         const ps = Number.isFinite(Number(priceScale)) ? Number(priceScale) : 2;
         const minMove = Math.pow(10, -ps);
@@ -743,17 +768,11 @@ export default function ChartView({
             candleSeries.applyOptions({ priceFormat: pf });
         } catch {
         }
-        try {
-            maSeries.applyOptions({ priceFormat: pf });
-        } catch {
-        }
-        try {
-            upper.applyOptions({ priceFormat: pf });
-        } catch {
-        }
-        try {
-            lower.applyOptions({ priceFormat: pf });
-        } catch {
+        for (const b of allLines) {
+            try {
+                b.applyOptions({ priceFormat: pf });
+            } catch {
+            }
         }
     }, [priceScale, fmtPrice]);
 
@@ -763,11 +782,18 @@ export default function ChartView({
         const maSeries = maRef.current;
         const upper = upperRef.current;
         const lower = lowerRef.current;
-        if (!candleSeries || !maSeries || !upper || !lower) return;
+        const maSdSeries = maSdRef.current;
+        const bS1Long = bS1LongRef.current;
+        const bS2Short = bS2ShortRef.current;
+        const bS2Long = bS2LongRef.current;
+        const bS1Short = bS1ShortRef.current;
+        if (!candleSeries || !maSeries || !upper || !lower || !maSdSeries ||
+            !bS1Long || !bS2Short || !bS2Long || !bS1Short) return;
 
         candleSeries.setData(safeCandles);
-        maSeries.setData(safeMA);
 
+        // 레거시 (Archive): MA100 + thr 밴드. Coin/HFM은 ma100 미전달 → 빈 선.
+        maSeries.setData(safeMA);
         if (typeof thr === "number" && isFinite(thr) && thr > 0 && safeMA.length) {
             upper.setData(safeMA.map((p) => ({ time: p.time, value: p.value * (1 + thr) })));
             lower.setData(safeMA.map((p) => ({ time: p.time, value: p.value * (1 - thr) })));
@@ -775,6 +801,18 @@ export default function ChartView({
             upper.setData([]);
             lower.setData([]);
         }
+
+        // ✅ z-band 모드 (Coin/HFM): 7일 MA 앵커 + 밴드 = MA ± K1·σ
+        maSdSeries.setData(safeMaSd.map((p) => ({ time: p.time, value: p.ma })));
+        const k = k1set || {};
+        const band = (k1, sign) =>
+            (Number.isFinite(Number(k1)) && safeMaSd.length)
+                ? safeMaSd.map((p) => ({ time: p.time, value: p.ma + sign * Number(k1) * p.sd }))
+                : [];
+        bS1Long.setData(band(k.s1Long, +1));   // 추세 롱: z≥+K1 → MA + K1σ
+        bS2Short.setData(band(k.s2Short, +1)); // 역추세 숏: z≥+K1 → MA + K1σ
+        bS2Long.setData(band(k.s2Long, -1));   // 역추세 롱: z≤−K1 → MA − K1σ
+        bS1Short.setData(band(k.s1Short, -1)); // 추세 숏: z≤−K1 → MA − K1σ
 
         const shapeOnlyMarkers = loading
             ? []
@@ -806,7 +844,7 @@ export default function ChartView({
                 rebuildOverlayLabels();
             });
         });
-    }, [safeCandles, safeMA, thr, safeMarkers, loading, applyLayout, rebuildOverlayLabels]);
+    }, [safeCandles, safeMA, thr, safeMaSd, k1set, safeMarkers, loading, applyLayout, rebuildOverlayLabels]);
 
     useEffect(() => {
         applyLayout();
