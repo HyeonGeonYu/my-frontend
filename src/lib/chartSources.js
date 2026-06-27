@@ -54,13 +54,11 @@ const BYBIT_API_BASE = "https://api.bybit.com";
  * - oldestSec <= wantStartSec 이면 stop
  */
 async function fetchCandlesForWindowBybit(symUpper, interval, startSec, endSec, signal, maBuf = MA_BUF_DEFAULT) {
-  const wantStartSec = startSec - maBuf * 60;
-
   let rows = [];
   let endMs = Math.floor(Number(endSec) * 1000);
   let prevEndMs = null;
 
-  for (let page = 0; page < 12; page++) {
+  for (let page = 0; page < 16; page++) {
     const url = new URL("/v5/market/kline", BYBIT_API_BASE);
     url.searchParams.set("category", "linear");
     url.searchParams.set("symbol", symUpper);
@@ -79,6 +77,14 @@ async function fetchCandlesForWindowBybit(symUpper, interval, startSec, endSec, 
 
     rows = rows.concat(list);
 
+    // ✅ start 이전 '실제 봉' 수가 maBuf 이상이면 충분(z-band 7일 σ 확보).
+    //   캘린더가 아닌 '봉 수' 기준이라 24/7(코인)·갭(CFD) 모두 동일하게 동작.
+    let preCnt = 0;
+    for (const r of rows) {
+      if (Number(r?.[0]) / 1000 < Number(startSec) && Number.isFinite(Number(r?.[4]))) preCnt++;
+    }
+    if (preCnt >= maBuf) break;
+
     // 이번 페이지에서 가장 오래된 ts 찾기
     let minMs = Infinity;
     for (const r of list) {
@@ -86,9 +92,6 @@ async function fetchCandlesForWindowBybit(symUpper, interval, startSec, endSec, 
       if (Number.isFinite(ms) && ms < minMs) minMs = ms;
     }
     if (!Number.isFinite(minMs)) break;
-
-    const oldestSec = Math.floor(minMs / 1000);
-    if (oldestSec <= wantStartSec) break;
 
     // 다음 페이지: 더 과거로
     prevEndMs = endMs;
@@ -120,12 +123,10 @@ function makeCfdUrl(path, params = {}) {
  * - nextCursor(end) 기반으로 내려감
  */
 async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, signal, maBuf = MA_BUF_DEFAULT) {
-  const wantStart = startSec - maBuf * 60;
-
   let rows = [];
   let nextCursor = null;
 
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 16; i++) {
     const url = makeCfdUrl("/v5/market/candles/with-gaps", {
       symbol: symUpper,
       interval: String(interval),
@@ -144,14 +145,12 @@ async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, si
 
     rows = rows.concat(list);
 
-    let minMs = Infinity;
-    for (const r of list) {
-      const ms = Number(r?.[0]);
-      if (Number.isFinite(ms) && ms < minMs) minMs = ms;
+    // ✅ start 이전 '실제 봉(유효 close)' 수가 maBuf 이상이면 충분. 갭 많은 CFD도 봉 수 기준이라 안전.
+    let preCnt = 0;
+    for (const r of rows) {
+      if (Number(r?.[0]) / 1000 < Number(startSec) && Number.isFinite(Number(r?.[4]))) preCnt++;
     }
-
-    const oldestSec = Number.isFinite(minMs) ? Math.floor(minMs / 1000) : Infinity;
-    if (oldestSec <= wantStart) break;
+    if (preCnt >= maBuf) break;
 
     nextCursor = data?.result?.nextCursor ?? null;
     if (!nextCursor) break;
