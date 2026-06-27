@@ -45,7 +45,10 @@ export default function DailyChartPanel({
         );
         if (ac.signal.aborted) return;
 
-        const all = rowsToBars(rows);
+        // CFD with-gaps 등에서 빈 OHLC(갭) 행이 올 수 있어 유효 봉만 사용(표시·MA 보호).
+        const all = rowsToBars(rows).filter(
+          (b) => Number.isFinite(b.close) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low)
+        );
         const maAll = calcSMA(all, maWin);
 
         setDigits(inferDigitsFromRows(rows, 2));

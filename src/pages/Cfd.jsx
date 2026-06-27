@@ -1,11 +1,11 @@
 // src/pages/Cfd.jsx
 import React, {useEffect, useState, useMemo, useCallback, useRef} from "react";
 import ChartPanelCore from "../components/common/ChartPanelCore";
+import DailyChartPanel from "../components/common/DailyChartPanel";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec} from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
-import StreamsCenter from "../components/common/StreamsCenter";
 
 // ✅ z-score 진입 밴드용 심볼별 K1 (trade_config TREND_MT5=S1추세 / REV_MT5=S2역추세)
 //   값 = MA ± K1·σ. 없는 방향은 미채택. HFM 심볼 별칭은 resolveK1Mt5에서 정규화.
@@ -77,6 +77,7 @@ export default function Cfd() {
     const symbolsReady = symbols.length > 0;
 
     const [selectedSymbol, setSelectedSymbol] = useState(null);
+    const [timeframe, setTimeframe] = useState("1m"); // "1m" | "1D"
 
     /* ------------------------- threshold meta ------------------------- */
     const [metaMap, setMetaMap] = useState({});
@@ -242,18 +243,6 @@ export default function Cfd() {
                         CFD 차트 <span style={{opacity: 0.6, fontWeight: 700}}>({symbols.join(" / ")})</span>
                     </div>
 
-                    {/* ✅ StreamsCenter도 main 최소폭 기준으로 */}
-                    <div style={{marginBottom: 14, minWidth: MIN_MAIN, marginLeft: "auto", marginRight: "auto"}}>
-                        <StreamsCenter
-                            source={cfdSource}
-                            anchorEndUtcSec={anchorEndUtcSec}
-                            dayOffset={dayOffset}
-                            onDayOffsetChange={setDayOffset}
-                            bounds={{min: -7, max: 0}}
-                            priceScale={2}
-                        />
-                    </div>
-
                     {/* ✅ Coin처럼 minmax 기반 2컬럼 */}
                     <div
                         style={{
@@ -296,6 +285,40 @@ export default function Cfd() {
                                             <span style={{opacity: 0.65}}> (dayOffset: {dayOffset})</span>
                                         </div>
                                     </div>
+
+                                    {/* 타임프레임 토글: 1분봉 / 일봉 */}
+                                    <div style={{display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10}}>
+                                        {[
+                                            {key: "1m", label: "1분봉"},
+                                            {key: "1D", label: "일봉"},
+                                        ].map((tf) => {
+                                            const on = timeframe === tf.key;
+                                            return (
+                                                <button
+                                                    key={tf.key}
+                                                    onClick={() => setTimeframe(tf.key)}
+                                                    style={{
+                                                        padding: "8px 12px",
+                                                        borderRadius: 10,
+                                                        border: on ? 0 : "1px solid #2a2a2a",
+                                                        background: on ? "#00ffcc" : "#1a1a1a",
+                                                        color: on ? "#000" : "#ddd",
+                                                        fontWeight: 700,
+                                                        cursor: "pointer",
+                                                    }}
+                                                    title={tf.key === "1D" ? "일봉(가격 위주, 최근 365일)" : "1분봉(진입밴드 포함)"}
+                                                >
+                                                    {tf.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {timeframe === "1D" && (
+                                        <div style={{marginBottom: 10, fontSize: 11, opacity: 0.6, lineHeight: 1.5}}>
+                                            일봉은 가격 흐름용입니다. z-score 진입밴드는 1분봉 전용(7일 σ 기반)이라 일봉엔 표시되지 않습니다.
+                                        </div>
+                                    )}
 
                                     <div style={{display: "flex", gap: 8}}>
                                         <button
@@ -373,18 +396,26 @@ export default function Cfd() {
                         <div style={{minWidth: 0, display: "grid", gap: 12}}>
                             {visibleSymbols.map((s) => (
                                 <div key={s} style={{width: "100%", minWidth: 0}}>
-                                    <ChartPanelCore
-                                        source={cfdSource}
-                                        symbol={s}
-                                        dayOffset={dayOffset}
-                                        anchorEndUtcSec={anchorEndUtcSec}
-                                        k1set={resolveK1Mt5(s)}
-                                        crossTimes={metaMap[s]?.cross_times}
-                                        onStats={onStats}
-                                        bounds={{min: -7, max: 0}}
-                                        // ✅ width props는 빼는게 Coin과 동일한 정책(부모 폭에 맞게 자연 확장)
-                                        // width={CHART_W}
-                                    />
+                                    {timeframe === "1D" ? (
+                                        <DailyChartPanel
+                                            source={cfdSource}
+                                            symbol={s}
+                                            anchorEndUtcSec={anchorEndUtcSec}
+                                            dayOffset={dayOffset}
+                                            lookbackDays={365}
+                                        />
+                                    ) : (
+                                        <ChartPanelCore
+                                            source={cfdSource}
+                                            symbol={s}
+                                            dayOffset={dayOffset}
+                                            anchorEndUtcSec={anchorEndUtcSec}
+                                            k1set={resolveK1Mt5(s)}
+                                            crossTimes={metaMap[s]?.cross_times}
+                                            onStats={onStats}
+                                            bounds={{min: -7, max: 0}}
+                                        />
+                                    )}
                                 </div>
                             ))}
                         </div>
