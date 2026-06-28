@@ -1564,7 +1564,9 @@ export default function Coin() {
                                     alignItems: "baseline"
                                 }}>
                                     <div style={{ fontWeight: 700, marginBottom: 10 }}>보기 설정</div>
-                                    <div style={{ fontSize: 12, opacity: 0.85 }}>{getDayLabel(anchorEndUtcSec, dayOffset)}</div>
+                                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                                        {timeframe === "1m" ? getDayLabel(anchorEndUtcSec, dayOffset) : "일봉 · 최근 365일"}
+                                    </div>
                                 </div>
 
                                 {/* 타임프레임 토글: 1분봉 / 일봉 */}
@@ -1601,43 +1603,46 @@ export default function Coin() {
                                     </div>
                                 )}
 
-                                <div style={{ height: 10 }} />
+                                {/* 날짜 이동은 1분봉에서만 (일봉은 최근 구간만 보면 됨) */}
+                                {timeframe === "1m" && (
+                                    <>
+                                        <div style={{ height: 10 }} />
+                                        <div style={{ display: "flex", gap: 8 }}>
+                                            <button
+                                                onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
+                                                disabled={!boundsReady || atMin}
+                                                style={disBtnStyle(!boundsReady || atMin)}
+                                                title="전날 보기"
+                                            >
+                                                ◀ 전날
+                                            </button>
 
-                                {/* 이전/오늘/다음 */}
-                                <div style={{ display: "flex", gap: 8 }}>
-                                    <button
-                                        onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
-                                        disabled={!boundsReady || atMin}
-                                        style={disBtnStyle(!boundsReady || atMin)}
-                                        title="전날 보기"
-                                    >
-                                        ◀ 전날
-                                    </button>
+                                            <button
+                                                onClick={() => setDayOffset(0)}
+                                                style={{
+                                                    padding: "8px 12px",
+                                                    borderRadius: 10,
+                                                    border: 0,
+                                                    background: "#00ffcc",
+                                                    color: "#000",
+                                                    fontWeight: 700,
+                                                }}
+                                                title="오늘 보기"
+                                            >
+                                                오늘
+                                            </button>
 
-                                    <button
-                                        onClick={() => setDayOffset(0)}
-                                        style={{
-                                            padding: "8px 12px",
-                                            borderRadius: 10,
-                                            border: 0,
-                                            background: "#00ffcc",
-                                            color: "#000",
-                                            fontWeight: 700,
-                                        }}
-                                        title="오늘 보기"
-                                    >
-                                        오늘
-                                    </button>
-
-                                    <button
-                                        onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
-                                        disabled={!boundsReady || atMax}
-                                        style={disBtnStyle(!boundsReady || atMax)}
-                                        title="다음날 보기"
-                                    >
-                                        다음날 ▶
-                                    </button>
-                                </div>
+                                            <button
+                                                onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
+                                                disabled={!boundsReady || atMax}
+                                                style={disBtnStyle(!boundsReady || atMax)}
+                                                title="다음날 보기"
+                                            >
+                                                다음날 ▶
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -1686,7 +1691,7 @@ export default function Coin() {
                                         source={bybitSource}
                                         symbol={s.symbol}
                                         anchorEndUtcSec={anchorEndUtcSec}
-                                        dayOffset={dayOffset}
+                                        dayOffset={0}
                                         lookbackDays={365}
                                     />
                                 ) : (

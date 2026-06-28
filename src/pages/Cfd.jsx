@@ -281,8 +281,12 @@ export default function Cfd() {
                                     }}>
                                         <div style={{fontWeight: 700, marginBottom: 10}}>보기 설정</div>
                                         <div style={{fontSize: 12, opacity: 0.85}}>
-                                            {getDayLabel(anchorEndUtcSec, dayOffset)}
-                                            <span style={{opacity: 0.65}}> (dayOffset: {dayOffset})</span>
+                                            {timeframe === "1m" ? (
+                                                <>
+                                                    {getDayLabel(anchorEndUtcSec, dayOffset)}
+                                                    <span style={{opacity: 0.65}}> (dayOffset: {dayOffset})</span>
+                                                </>
+                                            ) : "일봉 · 최근 365일"}
                                         </div>
                                     </div>
 
@@ -320,40 +324,43 @@ export default function Cfd() {
                                         </div>
                                     )}
 
-                                    <div style={{display: "flex", gap: 8}}>
-                                        <button
-                                            onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
-                                            disabled={atMin}
-                                            style={disBtnStyle(atMin)}
-                                            title="전날"
-                                        >
-                                            ◀ 전날
-                                        </button>
+                                    {/* 날짜 이동은 1분봉에서만 (일봉은 최근 구간만) */}
+                                    {timeframe === "1m" && (
+                                        <div style={{display: "flex", gap: 8}}>
+                                            <button
+                                                onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
+                                                disabled={atMin}
+                                                style={disBtnStyle(atMin)}
+                                                title="전날"
+                                            >
+                                                ◀ 전날
+                                            </button>
 
-                                        <button
-                                            onClick={() => setDayOffset(0)}
-                                            style={{
-                                                padding: "8px 12px",
-                                                borderRadius: 10,
-                                                border: 0,
-                                                background: "#00ffcc",
-                                                color: "#000",
-                                                fontWeight: 700,
-                                            }}
-                                            title="오늘"
-                                        >
-                                            오늘
-                                        </button>
+                                            <button
+                                                onClick={() => setDayOffset(0)}
+                                                style={{
+                                                    padding: "8px 12px",
+                                                    borderRadius: 10,
+                                                    border: 0,
+                                                    background: "#00ffcc",
+                                                    color: "#000",
+                                                    fontWeight: 700,
+                                                }}
+                                                title="오늘"
+                                            >
+                                                오늘
+                                            </button>
 
-                                        <button
-                                            onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
-                                            disabled={atMax}
-                                            style={disBtnStyle(atMax)}
-                                            title="다음날"
-                                        >
-                                            다음날 ▶
-                                        </button>
-                                    </div>
+                                            <button
+                                                onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
+                                                disabled={atMax}
+                                                style={disBtnStyle(atMax)}
+                                                title="다음날"
+                                            >
+                                                다음날 ▶
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -401,7 +408,7 @@ export default function Cfd() {
                                             source={cfdSource}
                                             symbol={s}
                                             anchorEndUtcSec={anchorEndUtcSec}
-                                            dayOffset={dayOffset}
+                                            dayOffset={0}
                                             lookbackDays={365}
                                         />
                                     ) : (
