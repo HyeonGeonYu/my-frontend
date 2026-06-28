@@ -160,6 +160,53 @@ async function fetchCandlesForWindowBybit(symUpper, interval, startSec, endSec, 
 
 const CFD_PROXY = "/api/cfd";
 
+// CFD(/api/cfd → 자체 MT5 백엔드) 보호: 동시성 제한 + HTTP 429/5xx/네트워크 백오프 재시도.
+// (지수 CFD는 장마감 갭 채움이라 7일 σ에 페이지가 많이 필요 → 폭주 방지 필수)
+const CFD_MAX_CONCURRENT = 2;
+let _cfdActive = 0;
+const _cfdWaiters = [];
+function _cfdAcquire() {
+  if (_cfdActive < CFD_MAX_CONCURRENT) {
+    _cfdActive++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _cfdWaiters.push(resolve));
+}
+function _cfdRelease() {
+  _cfdActive = Math.max(0, _cfdActive - 1);
+  const next = _cfdWaiters.shift();
+  if (next) {
+    _cfdActive++;
+    next();
+  }
+}
+async function cfdFetch(url, signal) {
+  await _cfdAcquire();
+  try {
+    let lastErr = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      try {
+        const res = await fetch(url, { signal });
+        if (res.status === 429 || res.status >= 500) {
+          lastErr = new Error(`HTTP ${res.status}`);
+        } else if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        } else {
+          return await res.json();
+        }
+      } catch (e) {
+        if (e?.name === "AbortError") throw e;
+        lastErr = e;
+      }
+      await _sleep(Math.min(2500, 250 * Math.pow(2, attempt)) + Math.floor(Math.random() * 120));
+    }
+    throw lastErr || new Error("CFD fetch failed");
+  } finally {
+    _cfdRelease();
+  }
+}
+
 function makeCfdUrl(path, params = {}) {
   const url = new URL(CFD_PROXY, window.location.origin);
   url.searchParams.set("_path", path);
@@ -177,7 +224,9 @@ async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, si
   let rows = [];
   let nextCursor = null;
 
-  for (let i = 0; i < 16; i++) {
+  // with-gaps는 장마감 구간을 null OHLC로 채워 반환 → 지수 CFD는 페이지당 실봉 비율이 낮음.
+  //   7일(10080 실봉) σ를 채우려면 페이지가 많이 필요(거래밀도 ~20%면 ~50p). preCnt 도달 시 조기 종료.
+  for (let i = 0; i < 70; i++) {
     const url = makeCfdUrl("/v5/market/candles/with-gaps", {
       symbol: symUpper,
       interval: String(interval),
@@ -185,10 +234,7 @@ async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, si
       ...(nextCursor != null ? { end: String(nextCursor) } : {}),
     });
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
+    const data = await cfdFetch(url, signal);
     if (data?.retCode !== 0) throw new Error(`API error (${data?.retCode}): ${data?.retMsg}`);
 
     const list = data?.result?.list || [];
