@@ -222,12 +222,12 @@ function makeCfdUrl(path, params = {}) {
  */
 async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, signal, maBuf = MA_BUF_DEFAULT) {
   let rows = [];
-  // ✅ 요청 끝(endSec)부터 역방향 페이지네이션. (과거일자도 그 지점부터 — endSec를 안 쓰면
-  //    항상 '지금'부터 긁어 과거 7일 히스토리를 못 채워 밴드가 안 그려짐)
-  let nextCursor = Number.isFinite(Number(endSec)) ? Math.floor(Number(endSec) * 1000) : null;
+  // ⚠️ 초기 end를 '미래/현재'(예: 오늘 06:50 경계, 주말)로 주면 백엔드가 휴장 구간을 null로
+  //    패딩하고 히스토리를 ~8일에서 잘라버림 → 실봉 부족. 그래서 초기 end 없이(최신 dense부터)
+  //    역방향 페이지네이션하고, 윈도우(start)는 preCnt로만 판단한다.
+  let nextCursor = null;
 
-  // with-gaps는 장마감 구간을 null OHLC로 채워 반환할 수 있음 → 봉 수(preCnt) 기준 종료라 안전.
-  //   7일(10080 실봉) σ를 채우려면 페이지가 더 필요할 수 있어 캡을 넉넉히. preCnt 도달 시 조기 종료.
+  // 봉 수(preCnt=start 이전 실봉) 기준 종료. 7일(10080 실봉) σ를 채우려면 페이지가 더 필요할 수 있어 캡 넉넉히.
   for (let i = 0; i < 70; i++) {
     const url = makeCfdUrl("/v5/market/candles/with-gaps", {
       symbol: symUpper,
