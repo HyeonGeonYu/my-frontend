@@ -162,7 +162,7 @@ const CFD_PROXY = "/api/cfd";
 
 // CFD(/api/cfd → 자체 MT5 백엔드) 보호: 동시성 제한 + HTTP 429/5xx/네트워크 백오프 재시도.
 // (지수 CFD는 장마감 갭 채움이라 7일 σ에 페이지가 많이 필요 → 폭주 방지 필수)
-const CFD_MAX_CONCURRENT = 2;
+const CFD_MAX_CONCURRENT = 4;
 let _cfdActive = 0;
 const _cfdWaiters = [];
 function _cfdAcquire() {
