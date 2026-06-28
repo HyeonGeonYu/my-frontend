@@ -102,6 +102,23 @@ export default function ChartPanelCore({
         <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.5 }}>
           (digits: {autoDigits})
         </span>
+        {(() => {
+          const hasK1 = k1set && Object.values(k1set).some((v) => Number.isFinite(Number(v)));
+          const noBand = hasK1 && !loading && Array.isArray(maSd) && maSd.length === 0;
+          if (!noBand) return null;
+          return (
+            <span
+              style={{
+                marginLeft: 10, fontSize: 11, fontWeight: 700,
+                color: "#ffb86c", background: "rgba(255,184,108,0.12)",
+                border: "1px solid rgba(255,184,108,0.35)", borderRadius: 8, padding: "2px 7px",
+              }}
+              title="7일 σ(10080봉) 계산에 필요한 1분봉이 부족합니다 — 휴장(주말/야간)이거나 데이터 히스토리가 짧을 때 발생."
+            >
+              밴드: 데이터 부족(휴장/히스토리)
+            </span>
+          );
+        })()}
       </div>
 
       {/* ✅ 여기 ref를 달아야 실제 폭 측정 가능 */}
