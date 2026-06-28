@@ -222,10 +222,12 @@ function makeCfdUrl(path, params = {}) {
  */
 async function fetchCandlesForWindowCfd(symUpper, interval, startSec, endSec, signal, maBuf = MA_BUF_DEFAULT) {
   let rows = [];
-  let nextCursor = null;
+  // ✅ 요청 끝(endSec)부터 역방향 페이지네이션. (과거일자도 그 지점부터 — endSec를 안 쓰면
+  //    항상 '지금'부터 긁어 과거 7일 히스토리를 못 채워 밴드가 안 그려짐)
+  let nextCursor = Number.isFinite(Number(endSec)) ? Math.floor(Number(endSec) * 1000) : null;
 
-  // with-gaps는 장마감 구간을 null OHLC로 채워 반환 → 지수 CFD는 페이지당 실봉 비율이 낮음.
-  //   7일(10080 실봉) σ를 채우려면 페이지가 많이 필요(거래밀도 ~20%면 ~50p). preCnt 도달 시 조기 종료.
+  // with-gaps는 장마감 구간을 null OHLC로 채워 반환할 수 있음 → 봉 수(preCnt) 기준 종료라 안전.
+  //   7일(10080 실봉) σ를 채우려면 페이지가 더 필요할 수 있어 캡을 넉넉히. preCnt 도달 시 조기 종료.
   for (let i = 0; i < 70; i++) {
     const url = makeCfdUrl("/v5/market/candles/with-gaps", {
       symbol: symUpper,
