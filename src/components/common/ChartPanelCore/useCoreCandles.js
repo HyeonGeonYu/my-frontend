@@ -427,6 +427,7 @@ export default function useCoreCandles({
     digitsKey,
     priceScale,
     onStats,
+    bandsEnabled,
   ]);
 
   // ✅ WS
