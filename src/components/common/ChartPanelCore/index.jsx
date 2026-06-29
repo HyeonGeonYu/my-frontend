@@ -21,6 +21,7 @@ export default function ChartPanelCore({
 
   thr,
   k1set,
+  bandsEnabled = true,
   crossTimes,
 
   // formatters
@@ -51,6 +52,7 @@ export default function ChartPanelCore({
     dayOffset,
     anchorEndUtcSec,
     bounds,
+    bandsEnabled,
     priceScale,
     ensureSignals,
     getMarkersForWindow,

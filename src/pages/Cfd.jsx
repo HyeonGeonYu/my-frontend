@@ -451,6 +451,7 @@ export default function Cfd() {
                                             dayOffset={dayOffset}
                                             anchorEndUtcSec={anchorEndUtcSec}
                                             k1set={resolveK1Mt5(s)}
+                                            bandsEnabled={false}
                                             crossTimes={metaMap[s]?.cross_times}
                                             onStats={onStats}
                                             bounds={{min: -7, max: 0}}

@@ -37,6 +37,7 @@ export default function useCoreCandles({
 
   // UI/Behavior
   bounds,
+  bandsEnabled = true, // ✅ false면 z-band 7일 히스토리 백필 안 함(캔들만 빠르게) — CFD 등 무거운 소스용
 
   // overrides
   priceScale,
@@ -273,8 +274,8 @@ export default function useCoreCandles({
           renderWindow(start, end, true);
 
           // ✅ z-band 백필: 캐시(prefetch=99봉 버퍼)는 7일 σ를 못 그림.
-          //   start 이전 봉이 BAND_WIN 미만이면 BAND_BUF로 앞쪽 7일치 보충 후 재렌더(+캐시 갱신).
-          (async () => {
+          //   start 이전 봉이 BAND_WIN 미만이면 BAND_BUF로 앞쪽 7일치 보충 후 재렌더(+캐시 갱신). (bandsEnabled일 때만)
+          if (bandsEnabled) (async () => {
             try {
               const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
               if (beforeCnt < BAND_WIN) {
@@ -380,8 +381,8 @@ export default function useCoreCandles({
 
         renderWindow(start, end, true);  // 캔들 즉시 표시 (밴드는 아래 백그라운드로)
 
-        // ✅ z-band 7일 히스토리는 백그라운드 백필 — 캔들 표시를 막지 않음.
-        (async () => {
+        // ✅ z-band 7일 히스토리는 백그라운드 백필 — 캔들 표시를 막지 않음. (bandsEnabled일 때만)
+        if (bandsEnabled) (async () => {
           try {
             const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
             if (beforeCnt < BAND_WIN) {
