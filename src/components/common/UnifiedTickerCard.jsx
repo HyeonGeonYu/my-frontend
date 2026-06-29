@@ -2,9 +2,8 @@ import React from "react";
 import {fmtComma} from "../../lib/tradeUtils";
 
 /**
- * closesUnit:
- *  - "minutes": closes_num을 분으로 보고 /1440 해서 "일"로 환산 표시
- *  - "days": closes_num을 그대로 "일"로 표시
+ * 심볼 티커 카드: 심볼 / 가격 / MA100 대비 / 3분 변화.
+ * (MA100 전략 은퇴 2026-06-29 — 임계·진입/청산밴드·목표크로스 표시 제거.)
  */
 export default function UnifiedTickerCard({
                                               symbol,
@@ -12,34 +11,10 @@ export default function UnifiedTickerCard({
                                               ma100,
                                               chg3mPct,
                                               ps = 2,
-                                              meta,
-                                              closesUnit = "minutes",
                                           }) {
     const has = typeof price === "number" && typeof ma100 === "number" && ma100 !== 0;
     const deltaPct = has ? price / ma100 - 1 : null;
     const up = deltaPct != null ? deltaPct >= 0 : null;
-
-    const thr = meta?.ma_threshold ?? null;
-    const momThr = meta?.momentum_threshold ?? null;
-    const exitThr = meta?.exit_threshold ?? null;
-    const tCross = meta?.target_cross ?? null;
-    const closesNum = meta?.closes_num ?? null;
-
-    const maLower = has && thr != null ? ma100 * (1 - thr) : null;
-    const maUpper = has && thr != null ? ma100 * (1 + thr) : null;
-
-    const exitLower = has && exitThr != null ? ma100 * (1 - exitThr) : null;
-    const exitUpper = has && exitThr != null ? ma100 * (1 + exitThr) : null;
-
-    const closesText = (() => {
-        if (typeof closesNum !== "number") return "—";
-        if (closesUnit === "days") return `${closesNum}일`;
-        // minutes
-        const days = Math.max(1, Math.round(closesNum / 1440));
-        return `${days}일`;
-    })();
-
-    const thrPct = thr != null ? (thr * 100).toFixed(2) : null;
 
     return (
         <div
@@ -52,12 +27,6 @@ export default function UnifiedTickerCard({
         >
             <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline"}}>
                 <div style={{fontSize: 14, opacity: 0.9}}>{symbol}</div>
-
-            </div>
-            <div style={{fontSize: 12, opacity: 0.85}}>
-                MA&nbsp;{thrPct != null ? `±${thrPct}%` : "—"}
-                <span style={{opacity: 0.6}}>&nbsp;·&nbsp;</span>
-                MMT&nbsp;{momThr != null ? (momThr * 100).toFixed(3) + "%" : "—"}
             </div>
             <div style={{fontSize: 28, fontWeight: 700, marginTop: 4}}>
                 {price != null ? fmtComma(price, ps) : "—"}
@@ -86,20 +55,6 @@ export default function UnifiedTickerCard({
           3M{" "}
                     {chg3mPct != null ? `${chg3mPct >= 0 ? "+" : ""}${chg3mPct.toFixed(3)}%` : "—"}
         </span>
-            </div>
-
-            <div style={{marginTop: 8, fontSize: 12, lineHeight: 1.6, opacity: 0.9}}>
-                <div>
-                    • 진입목표 : {maLower != null ? fmtComma(maLower, ps) : "—"} /{" "}
-                    {maUpper != null ? fmtComma(maUpper, ps) : "—"}
-                </div>
-                <div>
-                    • EXIT IN 30M : {exitUpper != null ? fmtComma(exitUpper, ps) : "—"} /{" "}
-                    {exitLower != null ? fmtComma(exitLower, ps) : "—"}
-                </div>
-                <div>
-                    • 목표 크로스: {tCross != null ? tCross : "—"}회 / {closesText}
-                </div>
             </div>
         </div>
     );

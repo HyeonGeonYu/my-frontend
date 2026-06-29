@@ -84,12 +84,6 @@ export default function AssetPanel({asset, statsBySymbol, config}) {
                             {pctStr((+(config?.entry_percent ?? 0)) * (+(config?.leverage ?? 1)), 0)}
                         </div>
                     </div>
-                    <div>
-                        <div style={{opacity: 0.8}}>기본청산(%)</div>
-                        <div style={{fontSize: 18, fontWeight: 800}}>
-                            {pctStr((+(config?.default_exit_ma_threshold ?? -0.0005)) * 100, 2)}
-                        </div>
-                    </div>
                 </div>
             </div>
 
