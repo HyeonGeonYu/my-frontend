@@ -354,8 +354,8 @@ export default function useCoreCandles({
           return;
         }
 
-        // ✅ z-band(7일 MA·σ)을 그리려면 보이는 창 앞쪽 7일치 히스토리가 필요 → BAND_BUF로 로드
-        const rows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
+        // ✅ 캔들은 작은 버퍼로 빨리 받아 즉시 표시(무거운 7일 fetch가 캔들을 막지 않게).
+        const rows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, MA_BUF);
         if (loadSeqRef.current !== mySeq) return;
 
         // ✅ rows 기반 digits 확정
@@ -378,7 +378,28 @@ export default function useCoreCandles({
         if (bars.length > MAX_1M_BARS) bars = bars.slice(-MAX_1M_BARS);
         allBarsRef.current = bars;
 
-        renderWindow(start, end, true);
+        renderWindow(start, end, true);  // 캔들 즉시 표시 (밴드는 아래 백그라운드로)
+
+        // ✅ z-band 7일 히스토리는 백그라운드 백필 — 캔들 표시를 막지 않음.
+        (async () => {
+          try {
+            const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
+            if (beforeCnt < BAND_WIN) {
+              const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
+              if (loadSeqRef.current !== mySeq) return;
+              const byTime = new Map();
+              for (const b of (allBarsRef.current || [])) byTime.set(b.time, b);
+              for (const b of rowsToBars(histRows)) byTime.set(b.time, b);
+              let merged = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+              if (merged.length > MAX_1M_BARS) merged = merged.slice(-MAX_1M_BARS);
+              allBarsRef.current = merged;
+              try { source.touchCandleCache?.(symUpper, dayKey, histRows); } catch {}
+              renderWindow(start, end, true);
+            }
+          } catch (e) {
+            if (e?.name !== "AbortError") console.warn("[ChartPanelCore band-backfill(main)] failed:", symUpper, e);
+          }
+        })();
 
         if (dayOffset === 0) prefetchPastDays(symUpper);
       } catch (e) {
