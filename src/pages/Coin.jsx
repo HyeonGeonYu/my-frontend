@@ -569,7 +569,7 @@ function TradingLogicTabs() {
         { key: "model", label: "공통 수식" },
         { key: "s1", label: "S1 추세" },
         { key: "s2", label: "S2 역추세" },
-        { key: "live", label: "심볼·라이브" },
+        { key: "live", label: "심볼별 S1~S4" },
     ];
 
     const wrapStyle = {
@@ -843,10 +843,11 @@ function LogicOverviewTab() {
     const head = { ...cell, fontWeight: 900, color: "#00ffcc", borderBottom: "1px solid #2a2a2a" };
     return (
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — 2전략 × 2방향</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — 2타임프레임 × 추세/역추세 (S1~S4)</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
-                가격이 7일 이동평균에서 표준편차(σ) 기준 얼마나 떨어졌는지(z-score)로 진입을 판단합니다.
-                자산 성격에 따라 <b>추세(S1)</b>와 <b>역추세(S2)</b>를 적용하고, 채택된 심볼은 롱·숏 양방향으로 운용합니다.
+                가격이 이동평균에서 표준편차(σ) 기준 얼마나 떨어졌는지(z-score)로 진입을 판단합니다.
+                같은 추세/역추세 체계를 <b>두 타임프레임</b>에 적용: <b>1분봉 = S1(추세)·S2(역추세)</b>, <b>일봉 = S3(추세)·S4(역추세)</b>.
+                아래 표는 1분봉(S1/S2) 기준이며, 방향 정의는 S3/S4도 동일합니다.
             </div>
 
             <div style={{ overflowX: "auto" }}>
@@ -888,6 +889,17 @@ function LogicOverviewTab() {
                 • 추세(S1): 이미 한쪽으로 크게 움직인(과열/급락) 자산은 그 방향으로 더 간다고 보고 따라붙음.<br />
                 • 역추세(S2): 과하게 벌어진 자산은 평균으로 되돌아온다고 보고 반대로 잡되, 더 벌어지면 한 번 <b>추매</b>해 평단을 낮춤.<br />
                 • 같은 z 신호라도 자산군에 따라 추세가 맞는 자산, 역추세가 맞는 자산이 갈립니다.
+            </div>
+
+            <div style={{
+                marginTop: 12, padding: 10, borderRadius: 12,
+                background: "rgba(93,202,165,0.07)", border: "1px solid rgba(93,202,165,0.35)",
+                fontSize: 12, lineHeight: 1.7,
+            }}>
+                <b style={{ color: "#5dcaa5" }}>S3 · S4 — 일봉(D1) 채널</b><br />
+                같은 추세/역추세를 <b>일봉</b>에 적용한 버전(MA·σ 창 = 90일). <b>FX 메이저 7종</b>(EUR·GBP·JPY·AUD·CAD·CHF·NZD)에만 적용하고,
+                1분봉(S1/S2)과는 <b>별개 신호채널·별개 포지션</b>입니다. 쿨다운은 일(日) 단위, 최대보유 30일, 추매는 쓰지 않습니다.
+                심볼별 K1/B는 <b>심볼별 S1~S4</b> 탭에서 한눈에 볼 수 있습니다.
             </div>
         </div>
     );
@@ -1087,78 +1099,100 @@ function LogicS2ReversionTab() {
     );
 }
 
+// 심볼별 S1~S4 파라미터(K1/B). 각 칸 = {L:"K1/B", S:"K1/B"} 또는 null(미적용). null=그 전략 자체 미참여.
+const STRAT_BY_SYMBOL = [
+    { group: "크립토 (1분봉)", rows: [
+        { sym: "BTCUSDT", s1: { L: "3.2/−2.0" }, s2: { L: "3.3/−2.0", S: "4.6/−0.4" } },
+        { sym: "ETHUSDT", s1: { L: "2.35/1.2", S: "3.45/−1.8" }, s2: { L: "3.15/−1.2", S: "3.3/−1.2" } },
+        { sym: "SOLUSDT", s1: { L: "3.4/−2.0", S: "3.4/−2.0" }, s2: { L: "3.3/1.8" } },
+        { sym: "XRPUSDT", s1: { L: "2.55/−0.4" }, s2: { L: "3.5/−0.4", S: "5.0/−2.0" } },
+    ]},
+    { group: "지수·금속·유가 (1분봉)", rows: [
+        { sym: "US100", s1: { L: "2.8/−1.8" }, s2: { L: "3.25/−0.8" } },
+        { sym: "JP225", s1: { L: "3.35/−2.0", S: "3.25/0.8" }, s2: { L: "2.7/−2.0", S: "3.8/1.0" } },
+        { sym: "HK50", s1: { L: "2.05/0.6" }, s2: { L: "2.6/−2.0", S: "3.0/1.6" } },
+        { sym: "GER40", s1: { L: "2.75/−1.8" }, s2: { L: "3.5/−2.0" } },
+        { sym: "UK100", s1: { L: "3.25/−1.2", S: "3.5/0.8" }, s2: { L: "3.35/−2.0", S: "3.8/1.8" } },
+        { sym: "XAUUSD", s1: { L: "3.45/−1.8", S: "3.2/0.2" }, s2: { L: "2.35/−1.8" } },
+        { sym: "XAGUSD", s1: { L: "2.75/−1.2", S: "2.65/1.2" }, s2: { L: "2.85/−1.8", S: "3.8/−2.0" } },
+        { sym: "WTI", s1: { L: "2.9/−1.4", S: "3.2/1.8" }, s2: { L: "2.9/−2.0", S: "3.4/0.6" } },
+    ]},
+    { group: "FX 메이저 (일봉 · win 90일)", rows: [
+        { sym: "EURUSD", s3: { L: "2.1/−1.4" }, s4: { L: "2.0/−1.2" } },
+        { sym: "GBPUSD", s4: { L: "2.8/1.4", S: "2.0/−1.8" } },
+        { sym: "USDJPY", s3: { L: "2.5/−2.0" }, s4: { L: "2.3/−0.2" } },
+        { sym: "AUDUSD", s4: { L: "2.6/−0.2", S: "1.9/−1.6" } },
+        { sym: "USDCAD", s3: { L: "2.7/0.2" }, s4: { L: "1.8/−1.6" } },
+        { sym: "USDCHF", s4: { L: "2.8/−1.2", S: "2.2/0.0" } },
+        { sym: "NZDUSD", s3: { L: "2.5/0.8" }, s4: { L: "2.3/1.4", S: "1.0/−2.0" } },
+    ]},
+];
+
 function LogicLiveTab() {
-    const cell = { padding: "6px 8px", borderBottom: "1px solid #222", fontSize: 11.5, whiteSpace: "nowrap" };
-    const head = { ...cell, fontWeight: 900, color: "#00ffcc" };
-    const S1 = [
-        ["BTCUSDT", "Bybit", "3.2 / −2.0", "—"],
-        ["ETHUSDT", "Bybit", "2.35 / 1.2", "3.45 / −1.8"],
-        ["SOLUSDT", "Bybit", "3.4 / −2.0", "3.4 / −2.0"],
-        ["XRPUSDT", "Bybit", "2.55 / −0.4", "—"],
-        ["US100", "MT5", "2.8 / −1.8", "—"],
-        ["JP225", "MT5", "3.35 / −2.0", "3.25 / 0.8"],
-        ["HK50", "MT5", "2.05 / 0.6", "—"],
-        ["GER40", "MT5", "2.75 / −1.8", "—"],
-        ["UK100", "MT5", "3.25 / −1.2", "3.5 / 0.8"],
-        ["XAUUSD", "MT5", "3.45 / −1.8", "3.2 / 0.2"],
-        ["XAGUSD", "MT5", "2.75 / −1.2", "2.65 / 1.2"],
-        ["WTI", "MT5", "2.9 / −1.4", "3.2 / 1.8"],
-    ];
-    const S2 = [
-        ["BTCUSDT", "Bybit", "3.3 / −2.0", "4.6 / −0.4"],
-        ["ETHUSDT", "Bybit", "3.15 / −1.2", "3.3 / −1.2"],
-        ["SOLUSDT", "Bybit", "3.3 / 1.8", "—"],
-        ["XRPUSDT", "Bybit", "3.5 / −0.4", "5.0 / −2.0"],
-        ["US100", "MT5", "3.25 / −0.8", "—"],
-        ["JP225", "MT5", "2.7 / −2.0", "3.8 / 1.0"],
-        ["HK50", "MT5", "2.6 / −2.0", "3.0 / 1.6"],
-        ["GER40", "MT5", "3.5 / −2.0", "—"],
-        ["UK100", "MT5", "3.35 / −2.0", "3.8 / 1.8"],
-        ["XAUUSD", "MT5", "2.35 / −1.8", "—"],
-        ["XAGUSD", "MT5", "2.85 / −1.8", "3.8 / −2.0"],
-        ["WTI", "MT5", "2.9 / −2.0", "3.4 / 0.6"],
-    ];
-    const Table = ({ title, rows, accent }) => (
-        <div style={{ marginTop: 10 }}>
-            <div style={{ fontWeight: 900, fontSize: 13, color: accent, marginBottom: 4 }}>{title}</div>
+    const cell = { padding: "5px 7px", borderBottom: "1px solid #222", fontSize: 11, verticalAlign: "top" };
+    const head = { ...cell, fontWeight: 900, color: "#00ffcc", whiteSpace: "nowrap" };
+
+    // 전략 칸: null이면 "—"(미참여). 있으면 롱/숏 두 줄.
+    const StratCell = (s) => {
+        if (!s) return <td style={{ ...cell, color: "#444", textAlign: "center" }}>—</td>;
+        return (
+            <td style={cell}>
+                <div style={{ color: s.L ? "#cfcfcf" : "#555" }}>L {s.L || "—"}</div>
+                <div style={{ color: s.S ? "#cfcfcf" : "#555", opacity: 0.9 }}>S {s.S || "—"}</div>
+            </td>
+        );
+    };
+
+    return (
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 — S1·S2·S3·S4 한눈에</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
+                칸 값 = <b>K1 / B</b> (롱 L / 숏 S, "—"=미채택). <b>S1·S2 = 1분봉</b>(추세/역추세), <b>S3·S4 = 일봉</b>(추세/역추세, win 90일, FX 메이저 전용).
+                각 심볼은 자기 자산군의 전략에만 참여 — 빈 전략은 "—".
+            </div>
+
             <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 360 }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 520 }}>
                     <thead>
                         <tr>
                             <th style={head}>심볼</th>
-                            <th style={head}>거래소</th>
-                            <th style={head}>롱 (K1 / B)</th>
-                            <th style={head}>숏 (K1 / B)</th>
+                            <th style={{ ...head, color: "#ffb86c" }}>S1 추세·1m</th>
+                            <th style={{ ...head, color: "#7ee787" }}>S2 역추세·1m</th>
+                            <th style={{ ...head, color: "#ffd166" }}>S3 추세·일</th>
+                            <th style={{ ...head, color: "#5dcaa5" }}>S4 역추세·일</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {rows.map((r, i) => (
-                            <tr key={i}>
-                                <td style={{ ...cell, fontWeight: 800 }}>{r[0]}</td>
-                                <td style={{ ...cell, opacity: 0.7 }}>{r[1]}</td>
-                                <td style={{ ...cell, color: r[2] === "—" ? "#555" : "#cfcfcf" }}>{r[2]}</td>
-                                <td style={{ ...cell, color: r[3] === "—" ? "#555" : "#cfcfcf" }}>{r[3]}</td>
-                            </tr>
+                        {STRAT_BY_SYMBOL.map((g) => (
+                            <React.Fragment key={g.group}>
+                                <tr>
+                                    <td colSpan={5} style={{ ...cell, fontWeight: 900, color: "#00ffcc", background: "#0f0f0f", fontSize: 11.5 }}>
+                                        {g.group}
+                                    </td>
+                                </tr>
+                                {g.rows.map((r) => (
+                                    <tr key={r.sym}>
+                                        <td style={{ ...cell, fontWeight: 800, whiteSpace: "nowrap" }}>{r.sym}</td>
+                                        {StratCell(r.s1)}
+                                        {StratCell(r.s2)}
+                                        {StratCell(r.s3)}
+                                        {StratCell(r.s4)}
+                                    </tr>
+                                ))}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
             </div>
-        </div>
-    );
-    return (
-        <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 · 현재 구성</div>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
-                값 = <b>K1 / B</b>. "—"는 해당 방향 미채택. 쿨다운·B는 심볼·방향마다 다릅니다.
-                동시보유 캡은 200랏(비구속)으로 두고, 실제 한도는 <b>포트폴리오 캡(유효레버 10x ≈ 200랏)</b>이 잡습니다.
+
+            <div style={{ marginTop: 8, fontSize: 11.5, opacity: 0.75, lineHeight: 1.6 }}>
+                • 1분봉(S1/S2): 추매·동시보유, 쿨다운 시간 단위, 최대보유 14일, 포트폴리오 캡(≈200랏).<br />
+                • 일봉(S3/S4): win 90일, 쿨다운 일(日) 단위, 최대보유 30일, FX 메이저 7종(추매 미사용).
             </div>
 
-            <Table title="S1 · 추세 (독립 스택)" rows={S1} accent="#ffb86c" />
-            <Table title="S2 · 역추세 (추매 2다리)" rows={S2} accent="#7ee787" />
-
             <div style={LWARN}>
-                ⚠ 파라미터는 3년 in-sample 백테스트(portfolio_sim picks) 기준이며 OOS(약세구간)·포트폴리오
-                자본설계 검증은 진행 중입니다. 동시보유 누적 수익률은 과대평가될 수 있어 소액 라이브로 재검증하는 단계입니다.
+                ⚠ 파라미터는 백테스트(1분봉 3년 / 일봉 10년) in-sample 기준이며 OOS·포트폴리오 자본설계 검증은 진행 중입니다.
+                동시보유 누적 수익률은 과대평가될 수 있어 소액/페이퍼로 재검증하는 단계입니다.
             </div>
         </div>
     );
