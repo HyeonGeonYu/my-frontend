@@ -2,10 +2,14 @@
 import React, {useEffect, useState, useMemo, useCallback, useRef} from "react";
 import ChartPanelCore from "../components/common/ChartPanelCore";
 import DailyChartPanel from "../components/common/DailyChartPanel";
+import AssetPanel from "../components/AssetPanel";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec} from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
+
+// MT5(CFD·FX) 계정 — 데모/모의계좌. 자산은 USD 표시. (Bybit은 agent:CopyZannavi:...:BYBIT)
+const MT5_ASSET_NS = "agent:CopyZannaviMT5:u8f3a9c1e7b:MT5";
 
 // ✅ z-score 진입 밴드용 심볼별 K1 (trade_config TREND_MT5=S1추세 / REV_MT5=S2역추세)
 //   값 = MA ± K1·σ. 없는 방향은 미채택. HFM 심볼 별칭은 resolveK1Mt5에서 정규화.
@@ -167,6 +171,24 @@ export default function Cfd() {
         setSymbolStatsMap((prev) => ({...prev, [symbol]: {...prev[symbol], ...stats}}));
     }, []);
 
+    /* ------------------------- MT5 자산 (데모/USD) ------------------------- */
+    const [asset, setAsset] = useState({wallet: {USD: 0}, positions: {}});
+    useEffect(() => {
+        let alive = true;
+        const load = async () => {
+            try {
+                const res = await fetch(`/api/asset?ns=${encodeURIComponent(MT5_ASSET_NS)}&wallet=USD`, {cache: "no-store"});
+                const j = await res.json();
+                if (alive && j?.asset) setAsset(j.asset);
+            } catch (e) {
+                // 무시 (다음 주기에 재시도)
+            }
+        };
+        load();
+        const t = setInterval(load, 15000);
+        return () => { alive = false; clearInterval(t); };
+    }, []);
+
     /* ------------------------- dayOffset + anchorEnd ------------------------- */
     // ✅ anchorEndUtcSec는 "이 페이지를 보는 시점" 기준으로 고정
     const [anchorEndUtcSec] = useState(() => next0650EndBoundaryUtcSec());
@@ -265,6 +287,17 @@ export default function Cfd() {
                                     gap: 1,
                                 }}
                             >
+                                {/* 데모/모의계좌 라벨 + 자산 패널 (MT5, USD) */}
+                                <div style={{
+                                    display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
+                                    marginBottom: 8, padding: "3px 9px", borderRadius: 999,
+                                    background: "rgba(255,184,108,0.14)", border: "1px solid rgba(255,184,108,0.4)",
+                                    color: "#ffb86c", fontWeight: 800, fontSize: 11,
+                                }}>
+                                    ⚠ 데모(모의) 계좌 · MT5
+                                </div>
+                                <AssetPanel asset={asset} statsBySymbol={symbolStatsMap} config={configState} walletCcy="USD" />
+
                                 <div
                                     style={{
                                         padding: "14px 16px",

@@ -620,8 +620,8 @@ export function buildPositionRows(asset, statsBySymbol = {}) {
   return { rows };
 }
 
-export function calcEquityUSDT(asset, statsBySymbol = {}) {
-  const wallet = Number(asset?.wallet?.USDT ?? 0);
+export function calcEquityUSDT(asset, statsBySymbol = {}, walletCcy = "USDT") {
+  const wallet = Number(asset?.wallet?.[walletCcy] ?? 0);
   const positions = asset?.positions || {};
 
   const calcFromEntries = (entries) => {

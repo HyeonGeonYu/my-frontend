@@ -6,10 +6,10 @@ import {fmtComma, buildPositionRows, calcEquityUSDT} from "../lib/tradeUtils";
 const pctStr = (v, digits = 2) =>
     v == null || Number.isNaN(+v) ? "—" : `${(+v).toFixed(digits)}%`;
 
-export default function AssetPanel({asset, statsBySymbol, config}) {
-    const wallet = +(asset?.wallet?.USDT ?? 0);
+export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "USDT"}) {
+    const wallet = +(asset?.wallet?.[walletCcy] ?? 0);
     const {rows} = buildPositionRows(asset, statsBySymbol);
-    const equity = calcEquityUSDT(asset, statsBySymbol);
+    const equity = calcEquityUSDT(asset, statsBySymbol, walletCcy);
 
     // ✅ 진입 표시 모드 토글: "usdt" | "qty"
     const [entryMode, setEntryMode] = useState("usdt");
@@ -52,7 +52,7 @@ export default function AssetPanel({asset, statsBySymbol, config}) {
             {/* 상단: 지갑/평가액 */}
             <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10}}>
                 <div>
-                    <div style={{fontSize: 12, opacity: 0.8}}>지갑(USDT)</div>
+                    <div style={{fontSize: 12, opacity: 0.8}}>지갑({walletCcy})</div>
                     <div style={{fontSize: 22, fontWeight: 800}}>{fmtComma(wallet, 1)}</div>
                 </div>
                 <div>
@@ -94,7 +94,7 @@ export default function AssetPanel({asset, statsBySymbol, config}) {
                 </div>
 
                 <div style={{opacity: 0.8, fontSize: 13}}>
-                    총진입 : {fmtComma(totals.entryUSDT, 1)} USDT
+                    총진입 : {fmtComma(totals.entryUSDT, 1)} {walletCcy}
                     {" "}
                     ({totals.entryPct.toFixed(1)}%)
                 </div>
@@ -141,7 +141,7 @@ export default function AssetPanel({asset, statsBySymbol, config}) {
                              title="클릭하면 진입 표시가 USDT ↔ 수량으로 바뀝니다."
                              onClick={() => setEntryMode((m) => (m === "usdt" ? "qty" : "usdt"))}
                         >
-                            진입 {entryMode === "usdt" ? "USDT(%)" : "수량(%)"}
+                            진입 {entryMode === "usdt" ? `${walletCcy}(%)` : "수량(%)"}
                         </div>
 
                         {/* 데이터 */}
