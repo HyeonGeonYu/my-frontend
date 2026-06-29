@@ -287,7 +287,9 @@ export default function Cfd() {
                                     gap: 1,
                                 }}
                             >
-                                {/* 데모/모의계좌 라벨 + 자산 패널 (MT5, USD) */}
+                                {/* 데모/모의계좌 라벨 + 자산 패널 (MT5, USD) — 크래시 격리 위해 임시 비활성 */}
+                                {false && (
+                                <>
                                 <div style={{
                                     display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
                                     marginBottom: 8, padding: "3px 9px", borderRadius: 999,
@@ -297,6 +299,8 @@ export default function Cfd() {
                                     ⚠ 데모(모의) 계좌 · MT5
                                 </div>
                                 <AssetPanel asset={asset} statsBySymbol={symbolStatsMap} config={configState} walletCcy="USD" />
+                                </>
+                                )}
 
                                 <div
                                     style={{
