@@ -139,10 +139,18 @@ export default function Cfd() {
 
         for (const s of symbolsSortedByMa) {
             const tRaw = metaMap[s]?.ma_threshold;
+
+            // ✅ sigma(S1/S2) 전환 후 mt5는 basic ma_threshold가 없음(null) → 숨기지 말고 표시.
+            //   (옛 basic 전략 때만 쓰던 min 게이트. ma_threshold가 실제 양수일 때만 적용)
+            if (tRaw == null) {
+                visible.push(s);
+                continue;
+            }
+
             const t = Number(tRaw);
 
             if (!Number.isFinite(t)) {
-                hidden.push({symbol: s, reason: "확인중"});
+                visible.push(s);
                 continue;
             }
 
@@ -287,9 +295,7 @@ export default function Cfd() {
                                     gap: 1,
                                 }}
                             >
-                                {/* 데모/모의계좌 라벨 + 자산 패널 (MT5, USD) — 크래시 격리 위해 임시 비활성 */}
-                                {false && (
-                                <>
+                                {/* 데모/모의계좌 라벨 + 자산 패널 (MT5, USD) */}
                                 <div style={{
                                     display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
                                     marginBottom: 8, padding: "3px 9px", borderRadius: 999,
@@ -299,8 +305,6 @@ export default function Cfd() {
                                     ⚠ 데모(모의) 계좌 · MT5
                                 </div>
                                 <AssetPanel asset={asset} statsBySymbol={symbolStatsMap} config={configState} walletCcy="USD" />
-                                </>
-                                )}
 
                                 <div
                                     style={{
