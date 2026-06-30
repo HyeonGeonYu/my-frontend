@@ -5,6 +5,7 @@ import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import ChartPanelCore from "../components/common/ChartPanelCore";
 import DailyChartPanel from "../components/common/DailyChartPanel";
 import BandLegend from "../components/common/BandLegend";
+import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
@@ -1754,6 +1755,7 @@ export default function Coin() {
                                         ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 1)}`).join(" · ")}
                                     </div>
                                 )}
+                                <SymbolStrategyTag symbol={s.symbol} />
                                 {timeframe === "1D" ? (
                                     <DailyChartPanel
                                         source={bybitSource}

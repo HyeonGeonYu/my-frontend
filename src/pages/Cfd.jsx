@@ -4,6 +4,7 @@ import ChartPanelCore from "../components/common/ChartPanelCore";
 import DailyChartPanel from "../components/common/DailyChartPanel";
 import AssetPanel from "../components/AssetPanel";
 import BandLegend from "../components/common/BandLegend";
+import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol} from "../lib/tradeUtils";
@@ -494,6 +495,7 @@ export default function Cfd() {
                                             ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 2)}`).join(" · ")}
                                         </div>
                                     )}
+                                    <SymbolStrategyTag symbol={s} />
                                     {timeframe === "1D" ? (
                                         <DailyChartPanel
                                             source={cfdSource}
