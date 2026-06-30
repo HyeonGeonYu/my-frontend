@@ -6,7 +6,7 @@ import AssetPanel from "../components/AssetPanel";
 import BandLegend from "../components/common/BandLegend";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
-import {next0650EndBoundaryUtcSec, sortSymbolsByPosition} from "../lib/tradeUtils";
+import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol} from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
 
 // MT5(CFD·FX) 계정 — 데모/모의계좌. 자산은 USD 표시. (Bybit은 agent:CopyZannavi:...:BYBIT)
@@ -225,6 +225,9 @@ export default function Cfd() {
 
     // 자산 패널용 통합 stats: 차트에서 온 가격 + FX 직접 받은 가격
     const assetStats = useMemo(() => ({...fxPriceMap, ...symbolStatsMap}), [fxPriceMap, symbolStatsMap]);
+
+    // 심볼별 보유 포지션 진입가 (차트 진입가 선 + 테두리용)
+    const entriesBySymbol = useMemo(() => positionEntriesBySymbol(asset), [asset]);
 
     /* ------------------------- dayOffset + anchorEnd ------------------------- */
     // ✅ anchorEndUtcSec는 "이 페이지를 보는 시점" 기준으로 고정
@@ -475,8 +478,22 @@ export default function Cfd() {
 
                         {/* 오른쪽 */}
                         <div style={{minWidth: 0, display: "grid", gap: 12}}>
-                            {visibleSymbols.map((s) => (
-                                <div key={s} style={{width: "100%", minWidth: 0}}>
+                            {visibleSymbols.map((s) => {
+                                const ent = entriesBySymbol[String(s).toUpperCase()];
+                                const hasPos = Array.isArray(ent) && ent.length > 0;
+                                return (
+                                <div key={s} style={{
+                                    width: "100%", minWidth: 0,
+                                    // ✅ 진입중(보유 포지션) 표시 테두리
+                                    border: hasPos ? "2px solid #2fe08d" : "2px solid transparent",
+                                    borderRadius: 12, padding: hasPos ? 4 : 0,
+                                    boxShadow: hasPos ? "0 0 0 1px rgba(47,224,141,0.25)" : "none",
+                                }}>
+                                    {hasPos && (
+                                        <div style={{fontSize: 11, fontWeight: 800, color: "#2fe08d", marginBottom: 2}}>
+                                            ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 2)}`).join(" · ")}
+                                        </div>
+                                    )}
                                     {timeframe === "1D" ? (
                                         <DailyChartPanel
                                             source={cfdSource}
@@ -493,13 +510,15 @@ export default function Cfd() {
                                             anchorEndUtcSec={anchorEndUtcSec}
                                             k1set={resolveK1Mt5(s)}
                                             bandsEnabled={!!resolveK1Mt5(s)}
+                                            entryLines={ent}
                                             crossTimes={metaMap[s]?.cross_times}
                                             onStats={onStats}
                                             bounds={{min: -7, max: 0}}
                                         />
                                     )}
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

@@ -65,6 +65,7 @@ export default function useCoreCandles({
   const [displayCandles, setDisplayCandles] = useState([]);
   const [ma100, setMa100] = useState([]);
   const [maSd, setMaSd] = useState([]); // ✅ z-score 밴드용 7일 롤링 {time, ma, sd}
+  const [bandLoading, setBandLoading] = useState(false); // ✅ 밴드 7일 히스토리 백필 진행중
   const [markers, setMarkers] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
 
@@ -240,6 +241,7 @@ export default function useCoreCandles({
     setDisplayCandles([]);
     setMa100([]);
     setMaSd([]);
+    setBandLoading(!!bandsEnabled); // 밴드 켜진 심볼이면 일단 '로딩중'으로 시작(아래 백필 끝나면 false)
     setMarkers([]);
 
     const cached = source.getCachedRows(symUpper, dayKey);
@@ -294,6 +296,8 @@ export default function useCoreCandles({
               }
             } catch (e) {
               if (e?.name !== "AbortError") console.warn("[ChartPanelCore band-backfill] failed:", symUpper, e);
+            } finally {
+              if (loadSeqRef.current === mySeq) setBandLoading(false);
             }
           })();
 
@@ -399,6 +403,8 @@ export default function useCoreCandles({
             }
           } catch (e) {
             if (e?.name !== "AbortError") console.warn("[ChartPanelCore band-backfill(main)] failed:", symUpper, e);
+          } finally {
+            if (loadSeqRef.current === mySeq) setBandLoading(false);
           }
         })();
 
@@ -517,6 +523,7 @@ export default function useCoreCandles({
     displayCandles,
     ma100,
     maSd,
+    bandLoading,
     markers,
     visibleRange,
     autoDigits,

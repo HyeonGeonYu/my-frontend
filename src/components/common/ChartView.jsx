@@ -325,6 +325,7 @@ export default function ChartView({
     priceFormatter,
     loading = false,
     intervalSec = 60,
+    entryLines, // [{side:"LONG"|"SHORT", avg:number}] — 보유 포지션 평균 진입가 선
 }) {
     const wrapRef = useRef(null);
     const chartRef = useRef(null);
@@ -343,6 +344,7 @@ export default function ChartView({
     const bS2ShortRef = useRef(null);  // MA + k1·σ  (주황 점선)
     const bS2LongRef = useRef(null);   // MA − k1·σ  (파랑 점선)
     const bS1ShortRef = useRef(null);  // MA − k1·σ  (주황 실선)
+    const entryLineRefs = useRef([]);  // 보유 포지션 평균 진입가 priceLine 들
 
     const tickFmtRef = useRef(tickFormatter);
     useEffect(() => {
@@ -852,6 +854,36 @@ export default function ChartView({
             });
         });
     }, [safeCandles, safeMA, thr, safeMaSd, k1set, safeMarkers, loading, applyLayout, rebuildOverlayLabels]);
+
+    // ✅ 보유 포지션 평균 진입가 선 (priceLine). entryLines 바뀔 때 갱신.
+    const entryLinesKey = useMemo(
+        () => (Array.isArray(entryLines) ? entryLines : [])
+            .map((e) => `${e?.side}:${Number(e?.avg)}`).join("|"),
+        [entryLines]
+    );
+    useEffect(() => {
+        const series = candleRef.current;
+        if (!series) return;
+        for (const l of entryLineRefs.current) { try { series.removePriceLine(l); } catch {} }
+        entryLineRefs.current = [];
+        const lines = Array.isArray(entryLines) ? entryLines : [];
+        for (const e of lines) {
+            const px = Number(e?.avg);
+            if (!Number.isFinite(px) || px <= 0) continue;
+            try {
+                const pl = series.createPriceLine({
+                    price: px,
+                    color: e?.side === "SHORT" ? "#ff6b6b" : "#2fe08d",
+                    lineWidth: 1,
+                    lineStyle: 2, // dashed
+                    axisLabelVisible: true,
+                    title: `진입 ${e?.side === "SHORT" ? "S" : "L"}`,
+                });
+                entryLineRefs.current.push(pl);
+            } catch {}
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [entryLinesKey, safeCandles.length]);
 
     useEffect(() => {
         applyLayout();

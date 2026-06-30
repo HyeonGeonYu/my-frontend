@@ -22,6 +22,7 @@ export default function ChartPanelCore({
   thr,
   k1set,
   bandsEnabled = true,
+  entryLines,
   crossTimes,
 
   // formatters
@@ -42,6 +43,7 @@ export default function ChartPanelCore({
     notesView,
     displayCandles,
     maSd,
+    bandLoading,
     markers,
     visibleRange,
     autoDigits,
@@ -106,18 +108,23 @@ export default function ChartPanelCore({
         </span>
         {(() => {
           const hasK1 = k1set && Object.values(k1set).some((v) => Number.isFinite(Number(v)));
-          const noBand = hasK1 && !loading && Array.isArray(maSd) && maSd.length === 0;
-          if (!noBand) return null;
+          if (!hasK1 || loading || (Array.isArray(maSd) && maSd.length > 0)) return null;
+          // maSd 비어있음: 백필 진행중이면 '로딩중', 끝났는데도 없으면 '데이터 부족'
+          const isLoading = !!bandLoading;
           return (
             <span
               style={{
                 marginLeft: 10, fontSize: 11, fontWeight: 700,
-                color: "#ffb86c", background: "rgba(255,184,108,0.12)",
-                border: "1px solid rgba(255,184,108,0.35)", borderRadius: 8, padding: "2px 7px",
+                color: isLoading ? "#9ca3af" : "#ffb86c",
+                background: isLoading ? "rgba(156,163,175,0.12)" : "rgba(255,184,108,0.12)",
+                border: `1px solid ${isLoading ? "rgba(156,163,175,0.35)" : "rgba(255,184,108,0.35)"}`,
+                borderRadius: 8, padding: "2px 7px",
               }}
-              title="7일 σ(10080봉) 계산에 필요한 1분봉이 부족합니다 — 휴장(주말/야간)이거나 데이터 히스토리가 짧을 때 발생."
+              title={isLoading
+                ? "밴드용 7일(10080봉) 히스토리를 받는 중입니다."
+                : "7일 σ(10080봉) 계산에 필요한 1분봉이 부족합니다 — 휴장이거나 데이터 히스토리가 짧을 때."}
             >
-              밴드: 데이터 부족(휴장/히스토리)
+              {isLoading ? "밴드 로딩중…" : "밴드: 데이터 부족"}
             </span>
           );
         })()}
@@ -151,6 +158,7 @@ export default function ChartPanelCore({
           displayCandles={displayCandles}
           maSd={maSd}
           k1set={k1set}
+          entryLines={entryLines}
           markers={markers}
           priceScale={autoDigits}
           visibleRange={visibleRange}

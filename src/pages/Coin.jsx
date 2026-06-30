@@ -7,7 +7,7 @@ import DailyChartPanel from "../components/common/DailyChartPanel";
 import BandLegend from "../components/common/BandLegend";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
-import { next0650EndBoundaryUtcSec, positionSizeBySymbol } from "../lib/tradeUtils";
+import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
 
@@ -1334,6 +1334,9 @@ export default function Coin() {
     /* ------------------------- asset ------------------------- */
     const [asset, setAsset] = useState({ wallet: { USDT: 0 }, positions: {} });
 
+    // 심볼별 보유 포지션 진입가 (차트 진입가 선 + 테두리용)
+    const entriesBySymbol = useMemo(() => positionEntriesBySymbol(asset), [asset]);
+
     // ✅ 차트 순서 = 포지션 크기(진입금액) 큰 순
     const sortedVisibleSymbols = useMemo(() => {
         const size = positionSizeBySymbol(asset);
@@ -1736,8 +1739,21 @@ export default function Coin() {
 
                     {/* 오른쪽 */}
                     <div style={{ minWidth: 0, display: "grid", gap: 12 }}>
-                        {sortedVisibleSymbols.map((s) => (
-                            <div key={s.symbol} style={{ width: "100%", minWidth: 0 }}>
+                        {sortedVisibleSymbols.map((s) => {
+                            const ent = entriesBySymbol[String(s.symbol).toUpperCase()];
+                            const hasPos = Array.isArray(ent) && ent.length > 0;
+                            return (
+                            <div key={s.symbol} style={{
+                                width: "100%", minWidth: 0,
+                                border: hasPos ? "2px solid #2fe08d" : "2px solid transparent",
+                                borderRadius: 12, padding: hasPos ? 4 : 0,
+                                boxShadow: hasPos ? "0 0 0 1px rgba(47,224,141,0.25)" : "none",
+                            }}>
+                                {hasPos && (
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: "#2fe08d", marginBottom: 2 }}>
+                                        ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 1)}`).join(" · ")}
+                                    </div>
+                                )}
                                 {timeframe === "1D" ? (
                                     <DailyChartPanel
                                         source={bybitSource}
@@ -1755,12 +1771,14 @@ export default function Coin() {
                                         onBounds={onBounds}
                                         onStats={onStats}
                                         k1set={K1_BYBIT[s.symbol]}
+                                        entryLines={ent}
                                         crossTimes={metaMap[s.symbol]?.cross_times}
                                         bounds={{ min: -7, max: 0 }}
                                     />
                                 )}
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </div>

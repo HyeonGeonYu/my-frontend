@@ -649,6 +649,35 @@ export function positionSizeBySymbol(asset) {
   return out;
 }
 
+// 심볼별 보유 포지션의 평균 진입가 [{side, avg, qty}]. 차트 진입가 선/테두리용.
+export function positionEntriesBySymbol(asset) {
+  const positions = asset?.positions || {};
+  const num = (v) => (v == null ? 0 : Number(v));
+  const out = {};
+  for (const symRaw of Object.keys(positions)) {
+    const sym = String(symRaw).toUpperCase();
+    const pos = positions[symRaw];
+    if (!pos || typeof pos !== "object") continue;
+    const arr = [];
+    for (const side of ["LONG", "SHORT"]) {
+      const p = pos[side];
+      if (!p || typeof p !== "object") continue;
+      const entries = Array.isArray(p.entries) ? p.entries : [];
+      let q = 0, pxq = 0;
+      for (const e of entries) {
+        const qq = Math.abs(num(e?.qty));
+        const px = num(e?.price);
+        if (qq > 0 && isFinite(px)) { q += qq; pxq += qq * px; }
+      }
+      const qty = q > 0 ? q : Math.abs(num(p.qty));
+      const avg = q > 0 ? pxq / q : num(p.avg ?? p.avg_price ?? p.entry_price ?? p.price);
+      if (qty > 0 && isFinite(avg) && avg > 0) arr.push({ side, avg, qty });
+    }
+    if (arr.length) out[sym] = arr;
+  }
+  return out;
+}
+
 // 심볼 배열을 포지션 크기 큰 순으로 정렬(포지션 있는 것 먼저, 그다음 기존/알파벳).
 export function sortSymbolsByPosition(symbols, asset) {
   const size = positionSizeBySymbol(asset);
