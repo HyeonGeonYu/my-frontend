@@ -197,6 +197,39 @@ export default function Cfd() {
         return () => { alive = false; clearInterval(t); };
     }, []);
 
+    // ✅ 자산 포지션 심볼(FX 등)의 현재가 — CFD 차트(지수/금속)엔 없으니 직접 받아와 미실현 PnL 채움.
+    const posKey = useMemo(
+        () => Object.keys(asset?.positions || {}).map((s) => String(s).toUpperCase()).sort().join(","),
+        [asset]
+    );
+    const [fxPriceMap, setFxPriceMap] = useState({});
+    useEffect(() => {
+        const syms = posKey ? posKey.split(",") : [];
+        if (!syms.length) return;
+        let alive = true;
+        const load = async () => {
+            const out = {};
+            await Promise.all(syms.map(async (s) => {
+                try {
+                    const path = encodeURIComponent("/v5/market/candles/with-gaps");
+                    const r = await fetch(`/api/cfd?_path=${path}&symbol=${encodeURIComponent(s)}&interval=1&limit=30`, {cache: "no-store"});
+                    const j = await r.json();
+                    const list = j?.result?.list || [];
+                    let px = null;
+                    for (const row of list) { const c = Number(row?.[4]); if (Number.isFinite(c)) { px = c; break; } }
+                    if (px != null) out[s] = {price: px};
+                } catch {}
+            }));
+            if (alive && Object.keys(out).length) setFxPriceMap((prev) => ({...prev, ...out}));
+        };
+        load();
+        const t = setInterval(load, 15000);
+        return () => { alive = false; clearInterval(t); };
+    }, [posKey]);
+
+    // 자산 패널용 통합 stats: 차트에서 온 가격 + FX 직접 받은 가격
+    const assetStats = useMemo(() => ({...fxPriceMap, ...symbolStatsMap}), [fxPriceMap, symbolStatsMap]);
+
     /* ------------------------- dayOffset + anchorEnd ------------------------- */
     // ✅ anchorEndUtcSec는 "이 페이지를 보는 시점" 기준으로 고정
     const [anchorEndUtcSec] = useState(() => next0650EndBoundaryUtcSec());
@@ -273,6 +306,19 @@ export default function Cfd() {
                         CFD 차트 <span style={{opacity: 0.6, fontWeight: 700}}>({symbols.join(" / ")})</span>
                     </div>
 
+                    {/* ✅ 상단: 데모 라벨 + 자산/포지션 카드 (코인처럼 상단 배치) */}
+                    <div style={{marginBottom: 18, maxWidth: 560}}>
+                        <div style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            marginBottom: 8, padding: "3px 9px", borderRadius: 999,
+                            background: "rgba(255,184,108,0.14)", border: "1px solid rgba(255,184,108,0.4)",
+                            color: "#ffb86c", fontWeight: 800, fontSize: 11,
+                        }}>
+                            ⚠ 데모(모의) 계좌 · MT5
+                        </div>
+                        <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" />
+                    </div>
+
                     {/* ✅ Coin처럼 minmax 기반 2컬럼 */}
                     <div
                         style={{
@@ -295,17 +341,6 @@ export default function Cfd() {
                                     gap: 1,
                                 }}
                             >
-                                {/* 데모/모의계좌 라벨 + 자산 패널 (MT5, USD) */}
-                                <div style={{
-                                    display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
-                                    marginBottom: 8, padding: "3px 9px", borderRadius: 999,
-                                    background: "rgba(255,184,108,0.14)", border: "1px solid rgba(255,184,108,0.4)",
-                                    color: "#ffb86c", fontWeight: 800, fontSize: 11,
-                                }}>
-                                    ⚠ 데모(모의) 계좌 · MT5
-                                </div>
-                                <AssetPanel asset={asset} statsBySymbol={symbolStatsMap} config={configState} walletCcy="USD" />
-
                                 <div
                                     style={{
                                         padding: "14px 16px",

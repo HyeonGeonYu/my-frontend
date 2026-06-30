@@ -173,7 +173,7 @@ export default function useCoreCandles({
       const prev3 = real.length >= 3 ? real[real.length - 3].close : null;
       const chg3mPct = prev3 && lastClose != null ? ((lastClose - prev3) / prev3) * 100 : null;
 
-      onStats?.(symbol, {ma100: ma100Latest, chg3mPct, priceScale: autoDigits});
+      onStats?.(symbol, {price: lastClose, ma100: ma100Latest, chg3mPct, priceScale: autoDigits});
     },
     [getMarkersForWindow, getNotesForWindow, onStats, symbol, autoDigits]
   );
