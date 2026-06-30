@@ -8,7 +8,11 @@ const pctStr = (v, digits = 2) =>
 
 export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "USDT"}) {
     const wallet = +(asset?.wallet?.[walletCcy] ?? 0);
-    const {rows} = buildPositionRows(asset, statsBySymbol);
+    const {rows: rawRows} = buildPositionRows(asset, statsBySymbol);
+    // ✅ 포지션 크기(진입금액) 큰 순으로 정렬
+    const rows = [...rawRows].sort(
+        (a, b) => (Math.abs(+b.qty || 0) * (+b.avg || 0)) - (Math.abs(+a.qty || 0) * (+a.avg || 0))
+    );
     const equity = calcEquityUSDT(asset, statsBySymbol, walletCcy);
 
     // ✅ 진입 표시 모드 토글: "usdt" | "qty"

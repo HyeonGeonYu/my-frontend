@@ -5,7 +5,7 @@ import DailyChartPanel from "../components/common/DailyChartPanel";
 import AssetPanel from "../components/AssetPanel";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
-import {next0650EndBoundaryUtcSec} from "../lib/tradeUtils";
+import {next0650EndBoundaryUtcSec, sortSymbolsByPosition} from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
 
 // MT5(CFD·FX) 계정 — 데모/모의계좌. 자산은 USD 표시. (Bybit은 agent:CopyZannavi:...:BYBIT)
@@ -59,6 +59,8 @@ export default function Cfd() {
     /* ------------------------- config ------------------------- */
     const [configState, setConfigState] = useState(null);
     const [configLoaded, setConfigLoaded] = useState(false);
+    // MT5 자산 (데모/USD) — symbols보다 먼저 선언(차트 목록·정렬에서 참조)
+    const [asset, setAsset] = useState({wallet: {USD: 0}, positions: {}});
 
     useEffect(() => {
         let alive = true;
@@ -77,7 +79,12 @@ export default function Cfd() {
         };
     }, []);
 
-    const symbols = useMemo(() => extractSymbolsFromConfig(configState), [configState]);
+    // ✅ 차트 심볼 = mt5 config(지수/금속) ∪ 자산 포지션 심볼(FX 등) — FX 포지션도 차트·현재가 받게
+    const symbols = useMemo(() => {
+        const cfg = extractSymbolsFromConfig(configState);
+        const pos = Object.keys(asset?.positions || {}).map((s) => String(s).toUpperCase());
+        return [...new Set([...cfg, ...pos])];
+    }, [configState, asset]);
     const symbolsReady = symbols.length > 0;
 
     const [selectedSymbol, setSelectedSymbol] = useState(null);
@@ -116,22 +123,11 @@ export default function Cfd() {
         return Number.isFinite(n) ? n : null;
     }, [configState]);
 
-    const symbolsSortedByMa = useMemo(() => {
-        const arr = [...symbols];
-        arr.sort((a, b) => {
-            const ta = Number(metaMap[a]?.ma_threshold);
-            const tb = Number(metaMap[b]?.ma_threshold);
-
-            const aOk = Number.isFinite(ta);
-            const bOk = Number.isFinite(tb);
-            if (!aOk && !bOk) return a.localeCompare(b);
-            if (!aOk) return 1;
-            if (!bOk) return -1;
-
-            return tb - ta;
-        });
-        return arr;
-    }, [symbols, metaMap]);
+    // ✅ 차트/티커 순서 = 포지션 크기(진입금액) 큰 순 (포지션 없으면 뒤로, 알파벳)
+    const symbolsSortedByMa = useMemo(
+        () => sortSymbolsByPosition(symbols, asset),
+        [symbols, asset]
+    );
 
    const {filteredSymbols} = useMemo(() => {
         const visible = [];
@@ -179,8 +175,7 @@ export default function Cfd() {
         setSymbolStatsMap((prev) => ({...prev, [symbol]: {...prev[symbol], ...stats}}));
     }, []);
 
-    /* ------------------------- MT5 자산 (데모/USD) ------------------------- */
-    const [asset, setAsset] = useState({wallet: {USD: 0}, positions: {}});
+    /* ------------------------- MT5 자산 (데모/USD) — fetch ------------------------- */
     useEffect(() => {
         let alive = true;
         const load = async () => {

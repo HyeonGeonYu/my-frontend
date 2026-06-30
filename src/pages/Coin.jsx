@@ -6,7 +6,7 @@ import ChartPanelCore from "../components/common/ChartPanelCore";
 import DailyChartPanel from "../components/common/DailyChartPanel";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
-import { next0650EndBoundaryUtcSec } from "../lib/tradeUtils";
+import { next0650EndBoundaryUtcSec, positionSizeBySymbol } from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
 
@@ -1333,6 +1333,16 @@ export default function Coin() {
     /* ------------------------- asset ------------------------- */
     const [asset, setAsset] = useState({ wallet: { USDT: 0 }, positions: {} });
 
+    // ✅ 차트 순서 = 포지션 크기(진입금액) 큰 순
+    const sortedVisibleSymbols = useMemo(() => {
+        const size = positionSizeBySymbol(asset);
+        return [...visibleSymbols].sort((a, b) => {
+            const sa = size[String(a.symbol).toUpperCase()] || 0;
+            const sb = size[String(b.symbol).toUpperCase()] || 0;
+            return sb - sa || String(a.symbol).localeCompare(String(b.symbol));
+        });
+    }, [visibleSymbols, asset]);
+
     useEffect(() => {
         let alive = true;
         if (!symbolsReady) return;
@@ -1718,7 +1728,7 @@ export default function Coin() {
 
                     {/* 오른쪽 */}
                     <div style={{ minWidth: 0, display: "grid", gap: 12 }}>
-                        {visibleSymbols.map((s) => (
+                        {sortedVisibleSymbols.map((s) => (
                             <div key={s.symbol} style={{ width: "100%", minWidth: 0 }}>
                                 {timeframe === "1D" ? (
                                     <DailyChartPanel

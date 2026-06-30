@@ -620,6 +620,46 @@ export function buildPositionRows(asset, statsBySymbol = {}) {
   return { rows };
 }
 
+// 심볼별 포지션 크기(진입금액 = Σ|qty|×평균가). 정렬용. 포지션 없으면 키 없음.
+export function positionSizeBySymbol(asset) {
+  const positions = asset?.positions || {};
+  const num = (v) => (v == null ? 0 : Number(v));
+  const out = {};
+  for (const symRaw of Object.keys(positions)) {
+    const sym = String(symRaw).toUpperCase();
+    const pos = positions[symRaw];
+    if (!pos || typeof pos !== "object") continue;
+    let val = 0;
+    for (const side of ["LONG", "SHORT"]) {
+      const p = pos[side];
+      if (!p || typeof p !== "object") continue;
+      const entries = Array.isArray(p.entries) ? p.entries : [];
+      let q = 0, pxq = 0;
+      for (const e of entries) {
+        const qq = Math.abs(num(e?.qty));
+        const px = num(e?.price);
+        if (qq > 0 && isFinite(px)) { q += qq; pxq += qq * px; }
+      }
+      const qty = q > 0 ? q : Math.abs(num(p.qty));
+      const avg = q > 0 ? pxq / q : num(p.avg ?? p.avg_price ?? p.entry_price ?? p.price);
+      if (qty > 0 && isFinite(avg) && avg > 0) val += qty * avg;
+    }
+    if (val > 0) out[sym] = val;
+  }
+  return out;
+}
+
+// 심볼 배열을 포지션 크기 큰 순으로 정렬(포지션 있는 것 먼저, 그다음 기존/알파벳).
+export function sortSymbolsByPosition(symbols, asset) {
+  const size = positionSizeBySymbol(asset);
+  return [...(symbols || [])].sort((a, b) => {
+    const sa = size[String(a).toUpperCase()] || 0;
+    const sb = size[String(b).toUpperCase()] || 0;
+    if (sb !== sa) return sb - sa;
+    return String(a).localeCompare(String(b));
+  });
+}
+
 export function calcEquityUSDT(asset, statsBySymbol = {}, walletCcy = "USDT") {
   const wallet = Number(asset?.wallet?.[walletCcy] ?? 0);
   const positions = asset?.positions || {};
