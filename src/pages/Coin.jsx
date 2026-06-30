@@ -1576,12 +1576,10 @@ export default function Coin() {
                         <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState} />
                     </div>
                 </div>
-                {/* ✅ 밴드 범례 (1분봉일 때만) */}
-                {timeframe === "1m" && (
-                    <div style={{ maxWidth: PAGE_MAX_W, margin: "0 auto 4px", minWidth: 0 }}>
-                        <BandLegend />
-                    </div>
-                )}
+                {/* ✅ 밴드 범례 (1분봉=S1/S2, 일봉=S3/S4) */}
+                <div style={{ maxWidth: PAGE_MAX_W, margin: "0 auto 4px", minWidth: 0 }}>
+                    <BandLegend mode={timeframe} />
+                </div>
 
                 {/* ✅ 하단: 보기설정/티커(기존 폭 유지) + 차트(그대로) */}
                 <div style={{
@@ -1763,6 +1761,7 @@ export default function Coin() {
                                         anchorEndUtcSec={anchorEndUtcSec}
                                         dayOffset={0}
                                         lookbackDays={365}
+                                        entryLines={ent}
                                     />
                                 ) : (
                                     <ChartPanelCore

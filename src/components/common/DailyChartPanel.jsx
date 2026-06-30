@@ -1,13 +1,15 @@
 // src/components/common/DailyChartPanel.jsx
-// 일봉(1D) 차트 패널 — 가격 위주(캔들 + 일봉 MA). z-score 진입밴드는 1분봉 전용이라 여기엔 없음.
+// 일봉(1D) 차트 패널 — 캔들 + 90일 MA·σ 기반 S3/S4 진입밴드(MA±K1·σ).
 // 복잡한 useCoreCandles(1분봉 전용)를 건드리지 않고 ChartView를 재사용한다.
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import ChartView from "./ChartView";
-import { calcSMA } from "../../lib/tradeUtils";
+import { calcRollingMaSd } from "../../lib/tradeUtils";
+import { STRAT_PARAMS } from "../../lib/strategyParams";
 import { rowsToBars, inferDigitsFromRows } from "./ChartPanelCore/coreUtils";
 
 const DAY_SEC = 86400;
+const BAND_WIN = 90; // 일봉 MA·σ 창 = 90일 (봇 S3/S4와 동일)
 
 export default function DailyChartPanel({
   source,
@@ -15,15 +17,24 @@ export default function DailyChartPanel({
   anchorEndUtcSec,
   dayOffset = 0,
   lookbackDays = 365,
-  maWin = 60,
+  entryLines,
   width,
   height = 320,
 }) {
   const [bars, setBars] = useState([]);
-  const [ma, setMa] = useState([]);
+  const [maSd, setMaSd] = useState([]); // 90일 롤링 {time, ma, sd}
   const [range, setRange] = useState(null);
   const [digits, setDigits] = useState(2);
   const [loading, setLoading] = useState(false);
+
+  // S3(추세)=s1슬롯 / S4(역추세)=s2슬롯 으로 매핑(밴드 기하 동일). 없으면 빈 밴드.
+  const k1set = useMemo(() => {
+    const p = STRAT_PARAMS[String(symbol || "").toUpperCase()] || {};
+    return {
+      s1Long: p.s3?.L?.k, s1Short: p.s3?.S?.k,
+      s2Long: p.s4?.L?.k, s2Short: p.s4?.S?.k,
+    };
+  }, [symbol]);
 
   const wrapRef = useRef(null);
   const [measuredWidth, setMeasuredWidth] = useState(null);
@@ -33,27 +44,27 @@ export default function DailyChartPanel({
     const ac = new AbortController();
     setLoading(true);
     setBars([]);
-    setMa([]);
+    setMaSd([]);
 
     (async () => {
       try {
         const end = Number(anchorEndUtcSec) + Number(dayOffset) * DAY_SEC;
         const start = end - lookbackDays * DAY_SEC;
-        // maBuf = MA 창만큼 더(일봉 단위). interval "D".
+        // 90일 σ에 창 앞쪽 90봉 필요 → maBuf 넉넉히(일봉 단위). interval "D".
         const rows = await source.fetchWindow(
-          String(symbol || "").toUpperCase(), "D", start, end, ac.signal, maWin + 5
+          String(symbol || "").toUpperCase(), "D", start, end, ac.signal, BAND_WIN + 10
         );
         if (ac.signal.aborted) return;
 
-        // CFD with-gaps 등에서 빈 OHLC(갭) 행이 올 수 있어 유효 봉만 사용(표시·MA 보호).
+        // CFD with-gaps 등에서 빈 OHLC(갭) 행이 올 수 있어 유효 봉만 사용.
         const all = rowsToBars(rows).filter(
           (b) => Number.isFinite(b.close) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low)
         );
-        const maAll = calcSMA(all, maWin);
+        const ms = calcRollingMaSd(all, BAND_WIN);
 
         setDigits(inferDigitsFromRows(rows, 2));
         setBars(all.filter((b) => b.time >= start && b.time < end));
-        setMa(maAll.filter((p) => p.time >= start && p.time < end));
+        setMaSd(ms.filter((p) => p.time >= start && p.time < end));
         setRange({ start, end });
       } catch (e) {
         if (e?.name !== "AbortError") console.warn("[DailyChartPanel] load failed:", symbol, e);
@@ -63,7 +74,7 @@ export default function DailyChartPanel({
     })();
 
     return () => ac.abort();
-  }, [source, symbol, anchorEndUtcSec, dayOffset, lookbackDays, maWin]);
+  }, [source, symbol, anchorEndUtcSec, dayOffset, lookbackDays]);
 
   // 컨테이너 폭 추적 (ChartPanelCore와 동일 정책)
   const fixedWidth = typeof width === "number" ? width : null;
@@ -91,7 +102,7 @@ export default function DailyChartPanel({
       <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>
         {symbol}
         <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.6 }}>
-          (일봉 · MA{maWin} · 최근 {lookbackDays}일)
+          (일봉 · MA90·σ90 · S3/S4 밴드 · 최근 {lookbackDays}일)
         </span>
       </div>
 
@@ -112,7 +123,9 @@ export default function DailyChartPanel({
           width={chartWidth}
           height={height}
           displayCandles={bars}
-          ma100={ma}
+          maSd={maSd}
+          k1set={k1set}
+          entryLines={entryLines}
           visibleRange={range}
           intervalSec={DAY_SEC}
           priceScale={digits}

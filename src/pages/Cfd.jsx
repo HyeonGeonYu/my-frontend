@@ -319,7 +319,7 @@ export default function Cfd() {
                         <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" />
                     </div>
 
-                    {timeframe === "1m" && <BandLegend />}
+                    <BandLegend mode={timeframe} />
 
                     {/* ✅ Coin처럼 minmax 기반 2컬럼 */}
                     <div
@@ -503,6 +503,7 @@ export default function Cfd() {
                                             anchorEndUtcSec={anchorEndUtcSec}
                                             dayOffset={0}
                                             lookbackDays={365}
+                                            entryLines={ent}
                                         />
                                     ) : (
                                         <ChartPanelCore
