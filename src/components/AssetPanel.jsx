@@ -9,10 +9,11 @@ const pctStr = (v, digits = 2) =>
 export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "USDT"}) {
     const wallet = +(asset?.wallet?.[walletCcy] ?? 0);
     const {rows: rawRows} = buildPositionRows(asset, statsBySymbol);
+    // 행의 명목가치(USD): 발행 value 우선, 없으면 수량×평균가 근사
+    const rowValue = (r) =>
+        (r.value != null && +r.value > 0) ? +r.value : (Math.abs(+r.qty || 0) * (+r.avg || 0));
     // ✅ 포지션 크기(진입금액) 큰 순으로 정렬
-    const rows = [...rawRows].sort(
-        (a, b) => (Math.abs(+b.qty || 0) * (+b.avg || 0)) - (Math.abs(+a.qty || 0) * (+a.avg || 0))
-    );
+    const rows = [...rawRows].sort((a, b) => rowValue(b) - rowValue(a));
     const equity = calcEquityUSDT(asset, statsBySymbol, walletCcy);
 
     // ✅ 진입 표시 모드 토글: "usdt" | "qty"
@@ -24,9 +25,7 @@ export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "U
         let pnl = 0;
 
         for (const r of rows) {
-            const qty = Math.abs(+r.qty || 0);
-            const avg = +r.avg || 0;
-            entryUSDT += qty * avg;
+            entryUSDT += rowValue(r);
 
             const rpnl = +r.pnl || 0;
             pnl += rpnl;
@@ -151,9 +150,8 @@ export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "U
                         {/* 데이터 */}
                         {rows.map((r, i) => {
                             const qtyAbs = Math.abs(+r.qty || 0);
-                            const avg = +r.avg || 0;
 
-                            const rowEntryUSDT = qtyAbs * avg;
+                            const rowEntryUSDT = rowValue(r);
                             const rowEntryPct = wallet > 0 ? (rowEntryUSDT / wallet) * 100 : 0;
 
                             const pnl = +r.pnl || 0;

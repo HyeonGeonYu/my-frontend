@@ -599,11 +599,20 @@ export function buildPositionRows(asset, statsBySymbol = {}) {
       const st = statsBySymbol?.[sym] || {};
       const px = st?.price != null ? Number(st.price) : null;
 
-      // PnL
-      const pnl = px != null && avg != null ? (side === "LONG" ? (px - avg) : (avg - px)) * qty : 0;
-      const pnlPct = px != null && avg != null && avg !== 0
+      // PnL (근사: (현재가−평균가)×수량 — MT5 계약크기 미반영이라 FX는 부정확)
+      const approxPnl = px != null && avg != null ? (side === "LONG" ? (px - avg) : (avg - px)) * qty : 0;
+      const approxPnlPct = px != null && avg != null && avg !== 0
         ? ((side === "LONG" ? (px - avg) : (avg - px)) / avg) * 100
         : null;
+
+      // ✅ 봇이 발행한 정확 값(MT5 profit/명목가치) 우선, 없으면 근사 폴백
+      const hasPubPnl = p?.pnl != null && isFinite(Number(p.pnl));
+      const hasPubVal = p?.value != null && isFinite(Number(p.value)) && Number(p.value) > 0;
+      const pnl = hasPubPnl ? Number(p.pnl) : approxPnl;
+      const value = hasPubVal ? Number(p.value) : (avg != null ? qty * avg : 0);
+      const pnlPct = (hasPubPnl && hasPubVal)
+        ? (value > 0 ? (pnl / value) * 100 : approxPnlPct)
+        : approxPnlPct;
 
       rows.push({
         sym,
@@ -613,6 +622,7 @@ export function buildPositionRows(asset, statsBySymbol = {}) {
         px,
         pnl,
         pnlPct,
+        value, // 명목가치(USD) — 발행값 우선
       });
     }
   }
@@ -633,6 +643,8 @@ export function positionSizeBySymbol(asset) {
     for (const side of ["LONG", "SHORT"]) {
       const p = pos[side];
       if (!p || typeof p !== "object") continue;
+      // ✅ 발행 명목가치(USD) 우선 — 계약크기 반영(특히 FX)
+      if (p.value != null && isFinite(num(p.value)) && num(p.value) > 0) { val += num(p.value); continue; }
       const entries = Array.isArray(p.entries) ? p.entries : [];
       let q = 0, pxq = 0;
       for (const e of entries) {
@@ -716,11 +728,16 @@ export function calcEquityUSDT(asset, statsBySymbol = {}, walletCcy = "USDT") {
 
     const st = statsBySymbol?.[sym] || {};
     const px = st?.price != null ? Number(st.price) : NaN;
-    if (!isFinite(px)) continue; // 현재가 없으면 평가 불가 → 일단 스킵
 
     for (const side of ["LONG", "SHORT"]) {
       const p = pos?.[side];
       if (!p || typeof p !== "object") continue;
+
+      // ✅ 봇이 발행한 정확 pnl(MT5 profit) 우선 — 현재가 없어도 평가 가능
+      const pub = p?.pnl;
+      if (pub != null && isFinite(Number(pub))) { unreal += Number(pub); continue; }
+
+      if (!isFinite(px)) continue; // 현재가 없으면 근사 평가 불가 → 스킵
 
       const qDirect = Math.abs(Number(p?.qty ?? 0));
       const { sumQty, avg: avgFromEntries } = calcFromEntries(p?.entries);
