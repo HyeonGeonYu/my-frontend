@@ -3,6 +3,7 @@ import React, {useEffect, useState, useMemo, useCallback, useRef} from "react";
 import ChartPanelCore from "../components/common/ChartPanelCore";
 import DailyChartPanel from "../components/common/DailyChartPanel";
 import AssetPanel from "../components/AssetPanel";
+import BandLegend from "../components/common/BandLegend";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec, sortSymbolsByPosition} from "../lib/tradeUtils";
@@ -314,6 +315,8 @@ export default function Cfd() {
                         <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" />
                     </div>
 
+                    {timeframe === "1m" && <BandLegend />}
+
                     {/* ✅ Coin처럼 minmax 기반 2컬럼 */}
                     <div
                         style={{
@@ -489,7 +492,7 @@ export default function Cfd() {
                                             dayOffset={dayOffset}
                                             anchorEndUtcSec={anchorEndUtcSec}
                                             k1set={resolveK1Mt5(s)}
-                                            bandsEnabled={false}
+                                            bandsEnabled={!!resolveK1Mt5(s)}
                                             crossTimes={metaMap[s]?.cross_times}
                                             onStats={onStats}
                                             bounds={{min: -7, max: 0}}
