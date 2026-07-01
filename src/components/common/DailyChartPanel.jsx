@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import ChartView from "./ChartView";
-import { calcRollingMaSd } from "../../lib/tradeUtils";
+import { calcRollingMaSd, fetchSignals, isDailySignal, buildSignalAnnotations } from "../../lib/tradeUtils";
 import { k1setFor } from "../../lib/strategyParams";
 import { rowsToBars, inferDigitsFromRows } from "./ChartPanelCore/coreUtils";
 
@@ -18,11 +18,13 @@ export default function DailyChartPanel({
   dayOffset = 0,
   lookbackDays = 365,
   entryLines,
+  signalNames,
   width,
   height = 320,
 }) {
   const [bars, setBars] = useState([]);
   const [maSd, setMaSd] = useState([]); // 90일 롤링 {time, ma, sd}
+  const [markers, setMarkers] = useState([]); // 일봉(S3/S4) 신호 마커
   const [range, setRange] = useState(null);
   const [digits, setDigits] = useState(2);
   const [loading, setLoading] = useState(false);
@@ -39,14 +41,16 @@ export default function DailyChartPanel({
     setLoading(true);
     setBars([]);
     setMaSd([]);
+    setMarkers([]);
 
     (async () => {
       try {
+        const sym = String(symbol || "").toUpperCase();
         const end = Number(anchorEndUtcSec) + Number(dayOffset) * DAY_SEC;
         const start = end - lookbackDays * DAY_SEC;
         // 90일 σ에 창 앞쪽 90봉 필요 → maBuf 넉넉히(일봉 단위). interval "D".
         const rows = await source.fetchWindow(
-          String(symbol || "").toUpperCase(), "D", start, end, ac.signal, BAND_WIN + 10
+          sym, "D", start, end, ac.signal, BAND_WIN + 10
         );
         if (ac.signal.aborted) return;
 
@@ -55,11 +59,28 @@ export default function DailyChartPanel({
           (b) => Number.isFinite(b.close) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low)
         );
         const ms = calcRollingMaSd(all, BAND_WIN);
+        const barsVisible = all.filter((b) => b.time >= start && b.time < end);
 
         setDigits(inferDigitsFromRows(rows, 2));
-        setBars(all.filter((b) => b.time >= start && b.time < end));
+        setBars(barsVisible);
         setMaSd(ms.filter((p) => p.time >= start && p.time < end));
         setRange({ start, end });
+
+        // 일봉 신호(S3/S4) 마커 — 지정 네임스페이스 스트림에서 읽어 일봉봉에 스냅.
+        const names = Array.isArray(signalNames) ? signalNames : (signalNames ? [signalNames] : []);
+        if (names.length && barsVisible.length) {
+          const lists = await Promise.all(
+            names.map((nm) => fetchSignals(sym, nm, Math.min(lookbackDays, 250)).catch(() => []))
+          );
+          if (ac.signal.aborted) return;
+          const daily = lists.flat().filter(isDailySignal);
+          const built = buildSignalAnnotations(daily).markers || [];
+          const barTimes = barsVisible.map((b) => b.time).sort((a, b) => a - b);
+          const snap = (t) => { let c = null; for (const bt of barTimes) { if (bt <= t) c = bt; else break; } return c; };
+          setMarkers(
+            built.map((m) => ({ ...m, time: snap(m.time) })).filter((m) => m.time != null)
+          );
+        }
       } catch (e) {
         if (e?.name !== "AbortError") console.warn("[DailyChartPanel] load failed:", symbol, e);
       } finally {
@@ -68,7 +89,7 @@ export default function DailyChartPanel({
     })();
 
     return () => ac.abort();
-  }, [source, symbol, anchorEndUtcSec, dayOffset, lookbackDays]);
+  }, [source, symbol, anchorEndUtcSec, dayOffset, lookbackDays, signalNames]);
 
   // 컨테이너 폭 추적 (ChartPanelCore와 동일 정책)
   const fixedWidth = typeof width === "number" ? width : null;
@@ -123,7 +144,7 @@ export default function DailyChartPanel({
           visibleRange={range}
           intervalSec={DAY_SEC}
           priceScale={digits}
-          markers={[]}
+          markers={markers}
           loading={loading}
           tickFormatter={(tsSec) => {
             const d = new Date(Number(tsSec) * 1000);

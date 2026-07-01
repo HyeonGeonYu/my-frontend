@@ -1,6 +1,6 @@
 // src/lib/chartSources.js
 import { getWsHub, buildSignalAnnotations } from "./tradeUtils";
-import { fetchSignals } from "./tradeUtils";
+import { fetchSignals, isDailySignal } from "./tradeUtils";
 
 const PAGE_LIMIT = 1000;
 const ONE_DAY_SEC = 86400;
@@ -397,7 +397,9 @@ async function ensureSignalsNamespaced({ sourceId, symUpper, signalName }) {
     // fetchSignals는 네 프로젝트 유틸을 그대로 사용
     // - coin: signalName="bybit" 같은 식
     // - cfd : signalName="mt5"
-    const sigs = await fetchSignals(symUpper, sigName).catch(() => []);
+    const sigsRaw = await fetchSignals(symUpper, sigName).catch(() => []);
+    // 1분 차트: 일봉(S3/S4) 신호 제외(현재는 스트림 분리라 no-op, 통합 시 방어).
+    const sigs = sigsRaw.filter((s) => !isDailySignal(s));
     const { markers, notes } = buildSignalAnnotations(sigs);
 
     const enriched = enrichAnnotationsWithSignals(

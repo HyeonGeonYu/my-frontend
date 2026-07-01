@@ -231,6 +231,14 @@ export async function fetchSignals(symbol, name = "bybit", days = 7) {
 }
 
 
+// 신호가 일봉(S3/S4) 채널인지 판별 — reasons_json에 "S3"/"S4" 토큰 포함.
+//   봇이 공유 네임스페이스 분리를 reasons 태그로 하므로(trade_bot 227/264행) 동일 규칙 사용.
+//   1분 차트=이 값 false만, 일봉 차트=true만 표시하는 데 씀.
+export function isDailySignal(sig) {
+    const r = String(sig?.reasons_json ?? sig?.reasons ?? "");
+    return /S[34]\b/.test(r) || /S[34]_/.test(r);
+}
+
 export function buildSignalAnnotations(sigs) {
     const items = (Array.isArray(sigs) ? sigs : [])
         .map((s) => {

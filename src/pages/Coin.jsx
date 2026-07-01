@@ -13,8 +13,9 @@ import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbo
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
 
-// ✅ z-score 진입 밴드용 심볼별 K1 (trade_config TREND_BYBIT=S1추세 / REV_BYBIT=S2역추세)
-//   값 = MA ± K1·σ 밴드. 없는 방향은 미채택(밴드 안 그림).
+// 일봉(S3/S4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조, 재fetch 방지). 크립토 일봉=cryptod.
+const COIN_DAILY_SIGNALS = ["cryptod"];
+
 /* ------------------------- 상단 배너 ------------------------- */
 function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qrSize = 92 }) {
     const fmt = (n, d = 2) => typeof n === "number" && Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: d }) : "—";
@@ -1756,6 +1757,7 @@ export default function Coin() {
                                         dayOffset={0}
                                         lookbackDays={365}
                                         entryLines={ent}
+                                        signalNames={COIN_DAILY_SIGNALS}
                                     />
                                 ) : (
                                     <ChartPanelCore
