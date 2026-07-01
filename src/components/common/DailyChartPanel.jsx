@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import ChartView from "./ChartView";
 import { calcRollingMaSd } from "../../lib/tradeUtils";
-import { STRAT_PARAMS } from "../../lib/strategyParams";
+import { k1setFor } from "../../lib/strategyParams";
 import { rowsToBars, inferDigitsFromRows } from "./ChartPanelCore/coreUtils";
 
 const DAY_SEC = 86400;
@@ -27,14 +27,8 @@ export default function DailyChartPanel({
   const [digits, setDigits] = useState(2);
   const [loading, setLoading] = useState(false);
 
-  // S3(추세)=s1슬롯 / S4(역추세)=s2슬롯 으로 매핑(밴드 기하 동일). 없으면 빈 밴드.
-  const k1set = useMemo(() => {
-    const p = STRAT_PARAMS[String(symbol || "").toUpperCase()] || {};
-    return {
-      s1Long: p.s3?.L?.k, s1Short: p.s3?.S?.k,
-      s2Long: p.s4?.L?.k, s2Short: p.s4?.S?.k,
-    };
-  }, [symbol]);
+  // S3(추세)/S4(역추세) 일봉 밴드 K1 — STRAT_PARAMS 단일 소스에서 파생.
+  const k1set = useMemo(() => k1setFor(symbol, "1D"), [symbol]);
 
   const wrapRef = useRef(null);
   const [measuredWidth, setMeasuredWidth] = useState(null);

@@ -140,6 +140,23 @@ export const STRAT_META = {
   s4: { label: "S4 역추세·일", color: "#5dcaa5" },
 };
 
+// 차트 진입밴드용 K1 세트 — STRAT_PARAMS 단일 소스에서 파생(별도 하드코딩 맵 금지).
+//   ChartView k1set 형식 {s1Long,s1Short,s2Long,s2Short}: 색=방향(롱/숏), 선=전략(실선/점선).
+//   timeframe "1m" → s1(추세)/s2(역추세) 슬롯, "1D" → s3/s4를 s1/s2 슬롯에 매핑(밴드 기하 동일).
+//   해당 전략/방향이 없으면 키를 넣지 않음. 아무 밴드도 없으면 undefined(밴드 비활성).
+export function k1setFor(symbol, timeframe = "1m") {
+  const p = STRAT_PARAMS[String(symbol || "").toUpperCase()];
+  if (!p) return undefined;
+  const trend = timeframe === "1D" ? p.s3 : p.s1;
+  const rev = timeframe === "1D" ? p.s4 : p.s2;
+  const set = {};
+  if (trend?.L) set.s1Long = trend.L.k;
+  if (trend?.S) set.s1Short = trend.S.k;
+  if (rev?.L) set.s2Long = rev.L.k;
+  if (rev?.S) set.s2Short = rev.S.k;
+  return Object.keys(set).length ? set : undefined;
+}
+
 // 부호 표시(− 사용) + 칸 텍스트
 export function fmtParam(d) {
   const b = Number(d.b);
