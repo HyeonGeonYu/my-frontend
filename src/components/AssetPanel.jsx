@@ -118,8 +118,8 @@ export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "U
                 </div>
             </div>
 
-            {/* 포지션 테이블 */}
-            <div>
+            {/* 포지션 테이블 (모바일: 가로 스크롤) */}
+            <div style={{overflowX: "auto", WebkitOverflowScrolling: "touch"}}>
                 {rows.length === 0 ? (
                     <div style={{fontSize: 12, opacity: 0.7}}>보유 포지션 없음</div>
                 ) : (
@@ -132,6 +132,7 @@ export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "U
                             rowGap: 6,
                             fontSize: 12,
                             alignItems: "center",
+                            minWidth: "max-content",
                         }}
                     >
                         {/* 헤더 */}

@@ -6,6 +6,7 @@ import AssetPanel from "../components/AssetPanel";
 import BandLegend from "../components/common/BandLegend";
 import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
 import { k1setFor } from "../lib/strategyParams";
+import useIsMobile from "../hooks/useIsMobile";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol} from "../lib/tradeUtils";
@@ -55,6 +56,7 @@ async function fetchThresholdMeta(symbol, name) {
 }
 
 export default function Cfd() {
+    const isMobile = useIsMobile();
     /* ------------------------- config ------------------------- */
     const [configState, setConfigState] = useState(null);
     const [configLoaded, setConfigLoaded] = useState(false);
@@ -288,17 +290,17 @@ export default function Cfd() {
     const GAP = 24;
     const MIN_MAIN = MIN_LEFT + MIN_RIGHT + GAP; // ✅ main 최소폭
     return (
-        <div style={{padding: 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
+        <div style={{padding: isMobile ? 8 : 24, color: "#fff", background: "#111", minHeight: "100vh"}}>
             {/* ✅ Coin처럼: maxWidth + overflowX + 내부 minWidth */}
             <div
                 style={{
                     maxWidth: PAGE_MAX_W,
                     margin: "0 auto",
-                    overflowX: "auto",
+                    overflowX: isMobile ? "visible" : "auto",
                     background: "#111",
                 }}
             >
-                <div style={{minWidth: MIN_MAIN}}>
+                <div style={{minWidth: isMobile ? 0 : MIN_MAIN}}>
                     <div style={{fontWeight: 800, fontSize: 18, marginBottom: 10, opacity: 0.95}}>
                         CFD 차트 <span style={{opacity: 0.6, fontWeight: 700}}>({symbols.join(" / ")})</span>
                     </div>
@@ -322,8 +324,8 @@ export default function Cfd() {
                     <div
                         style={{
                             display: "grid",
-                            gridTemplateColumns: `minmax(${MIN_LEFT}px, 1fr) minmax(${MIN_RIGHT}px, 4fr)`,
-                            gap: GAP,
+                            gridTemplateColumns: isMobile ? "1fr" : `minmax(${MIN_LEFT}px, 1fr) minmax(${MIN_RIGHT}px, 4fr)`,
+                            gap: isMobile ? 12 : GAP,
                             alignItems: "start",
                             minWidth: 0,
                         }}
@@ -332,7 +334,7 @@ export default function Cfd() {
                         <div style={{minWidth: 0}}>
                             <div
                                 style={{
-                                    position: "sticky",
+                                    position: isMobile ? "static" : "sticky",
                                     top: 12,
                                     zIndex: 5,
                                     display: "flex",

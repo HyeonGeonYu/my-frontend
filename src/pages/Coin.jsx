@@ -7,6 +7,7 @@ import DailyChartPanel from "../components/common/DailyChartPanel";
 import BandLegend from "../components/common/BandLegend";
 import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
 import { k1setFor } from "../lib/strategyParams";
+import useIsMobile from "../hooks/useIsMobile";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
@@ -1275,6 +1276,7 @@ function extractSymbolsFromConfig(cfgRaw) {
 }
 
 export default function Coin() {
+    const isMobile = useIsMobile();
     const [dayOffset, setDayOffset] = useState(0);
 
     /* ------------------------- config ------------------------- */
@@ -1524,16 +1526,16 @@ export default function Coin() {
     const inviteUrl = "https://i.bybit.com/1ulbabnd?action=inviteToCopy";
     const startDate = "2026-02-01";
 
-    return (<div style={{ padding: 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
+    return (<div style={{ padding: isMobile ? 8 : 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
         <div
             style={{
                 maxWidth: PAGE_MAX_W,
                 margin: "0 auto",
-                overflowX: "auto",
+                overflowX: isMobile ? "visible" : "auto",
                 background: "#111",
             }}
         >
-            <div style={{ minWidth: MIN_MAIN }}>
+            <div style={{ minWidth: isMobile ? 0 : MIN_MAIN }}>
 
                 {/* ✅ 상단 1줄: 평가 USDT 그래프 전체폭 */}
                 <div
@@ -1550,8 +1552,8 @@ export default function Coin() {
                 <div
                     style={{
                         display: "grid",
-                        gridTemplateColumns: "minmax(360px, 0.85fr) minmax(520px, 1.15fr)",
-                        gap: 24,
+                        gridTemplateColumns: isMobile ? "1fr" : "minmax(360px, 0.85fr) minmax(520px, 1.15fr)",
+                        gap: isMobile ? 12 : 24,
                         alignItems: "start",
                         justifyContent: "center",
                         maxWidth: PAGE_MAX_W,
@@ -1579,8 +1581,8 @@ export default function Coin() {
                 {/* ✅ 하단: 보기설정/티커(기존 폭 유지) + 차트(그대로) */}
                 <div style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(260px, 1fr) minmax(260px, 4fr)",
-                    gap: 24,
+                    gridTemplateColumns: isMobile ? "1fr" : "minmax(260px, 1fr) minmax(260px, 4fr)",
+                    gap: isMobile ? 12 : 24,
                     alignItems: "start",
                     minWidth: 0, // ✅ 이거 추가
 
@@ -1589,7 +1591,7 @@ export default function Coin() {
                     <div style={{ minWidth: 0 }}>
                         <div
                             style={{
-                                position: "sticky",
+                                position: isMobile ? "static" : "sticky",
                                 top: 12,
                                 zIndex: 5,
                                 display: "flex",
