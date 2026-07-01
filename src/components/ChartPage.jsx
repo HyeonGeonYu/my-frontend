@@ -4,8 +4,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import IndexChart from "../components/indexChart";
 import { useAllChartData } from "../hooks/useAllChartData";
 import { chartParams } from "../constants/chartMeta"; // chartMeta.js에서 import
+import useIsMobile from "../hooks/useIsMobile";
 
 const ChartPage = ({ chartType, title, envelop }) => {
+  const isMobile = useIsMobile();
 
   const { processedData, loading, error } = useAllChartData(chartType);
 
@@ -41,15 +43,15 @@ const ChartPage = ({ chartType, title, envelop }) => {
 
   return (
 
-    <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
-      <h1 style={{ color: "#00ffcc" }}>{title}</h1>
+    <div style={{ padding: isMobile ? "12px 8px" : "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
+      <h1 style={{ color: "#00ffcc", fontSize: isMobile ? 22 : undefined }}>{title}</h1>
 
       <div
         style={{
           display: "grid",
           gridTemplateColumns: gridColumns, // 동적으로 설정된 gridTemplateColumns
-          gap: "40px",
-          marginTop: "40px",
+          gap: isMobile ? "16px" : "40px",
+          marginTop: isMobile ? "14px" : "40px",
         }}
       >
         {selectedList.map((index) => {
@@ -62,11 +64,12 @@ const ChartPage = ({ chartType, title, envelop }) => {
       key={index.label}
       style={{
         backgroundColor: "transparent",
-        padding: "20px",
+        padding: isMobile ? "4px 0" : "20px",
         borderRadius: "12px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        minWidth: 0,
       }}
     >
       <IndexChart

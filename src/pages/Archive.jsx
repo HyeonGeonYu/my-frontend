@@ -5,6 +5,7 @@ import { newsParams } from "../constants/newsMeta";
 import { ClipboardCopy, Check } from "lucide-react";
 import ArchiveChartView from "../components/archive/ArchiveChartView";
 import NewsSummary from "../components/common/NewsSummary";
+import useIsMobile from "../hooks/useIsMobile";
 
 /* -------------------------------------------------------------------------- */
 /* Trading Archive Panel                                                       */
@@ -679,6 +680,7 @@ const formatDateWithDay = (dateStr) => {
 /* -------------------------------------------------------------------------- */
 
 function Archive() {
+    const isMobile = useIsMobile();
     const [page, setPage] = useState(1);
     const [expandedDate, setExpandedDate] = useState(null);
     const [expandedSummary, setExpandedSummary] = useState({});
@@ -800,8 +802,8 @@ function Archive() {
     };
 
     return (
-        <div style={{ padding: "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
-            <h1 style={{ color: "#00ffcc" }}>📅 아카이브</h1>
+        <div style={{ padding: isMobile ? "12px 8px" : "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
+            <h1 style={{ color: "#00ffcc", fontSize: isMobile ? 22 : undefined }}>📅 아카이브</h1>
 
             {error && <p style={{ color: "red" }}>❌ 오류 발생: {error.message}</p>}
 

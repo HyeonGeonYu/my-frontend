@@ -9,27 +9,42 @@ import Cfd from "../pages/Cfd";
 import Archive from "../pages/Archive";
 import Others from "../pages/Others";
 import Layout from "../components/Layout";
+import useIsMobile from "../hooks/useIsMobile";
+
+function TopNav() {
+  const isMobile = useIsMobile();
+  // 모바일: 한 줄 가로 스크롤(8개 탭이 3줄 차지하던 것 절약), 데스크톱: 기존 래핑 중앙정렬
+  const nav = isMobile
+    ? { ...navStyle, flexWrap: "nowrap", justifyContent: "flex-start", overflowX: "auto", WebkitOverflowScrolling: "touch", padding: "10px 8px", gap: "6px" }
+    : navStyle;
+  const link = isMobile
+    ? { ...linkStyle, padding: "7px 10px", fontSize: "13px", whiteSpace: "nowrap", flex: "0 0 auto" }
+    : linkStyle;
+  return (
+    <nav style={nav}>
+      {navItems.map(({ path, label, emoji }) => (
+        <NavLink
+          key={path}
+          to={path}
+          style={({ isActive }) => ({
+            ...link,
+            backgroundColor: isActive ? "#00ffcc33" : "transparent",
+            borderColor: isActive ? "#00ffcc" : "#444",
+          })}
+        >
+          <span style={{ marginRight: "6px" }}>{label}</span>
+          {emoji}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
 
 function AppRouter() {
   return (
     <Router>
       {/* 공통 네비게이션 */}
-      <nav style={navStyle}>
-        {navItems.map(({ path, label, emoji }) => (
-  <NavLink
-    key={path}
-    to={path}
-    style={({ isActive }) => ({
-      ...linkStyle,
-      backgroundColor: isActive ? "#00ffcc33" : "transparent",
-      borderColor: isActive ? "#00ffcc" : "#444"
-    })}
-  >
-    <span style={{ marginRight: "6px" }}>{label}</span>
-    {emoji}
-  </NavLink>
-))}
-      </nav>
+      <TopNav />
 
       {/* 페이지 내용은 공통 레이아웃 안에서 렌더링 */}
       <Routes>
