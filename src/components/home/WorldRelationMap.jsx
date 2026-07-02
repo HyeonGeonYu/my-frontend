@@ -9,9 +9,9 @@ import { useWorldStateData } from "../../hooks/useWorldStateData";
 const VW = 900, VH = 490, R = 36;
 
 // ── 나라 메타 ──────────────────────────────────────────────────────
-const FLAGS    = { USA:"🇺🇸", UK:"🇬🇧", Germany:"🇩🇪", China:"🇨🇳", Japan:"🇯🇵", India:"🇮🇳", Korea:"🇰🇷" };
-const NAMES_KR = { USA:"미국",  UK:"영국", Germany:"독일", China:"중국", Japan:"일본", India:"인도", Korea:"한국" };
-const H_CODE   = { USA:"US",   UK:"GB",  Germany:"DE",   China:"CN",  Japan:"JP",  India:"IN",  Korea:"KR" };
+const FLAGS    = { USA:"🇺🇸", UK:"🇬🇧", Germany:"🇩🇪", China:"🇨🇳", Japan:"🇯🇵", India:"🇮🇳", Korea:"🇰🇷", HongKong:"🇭🇰" };
+const NAMES_KR = { USA:"미국",  UK:"영국", Germany:"독일", China:"중국", Japan:"일본", India:"인도", Korea:"한국", HongKong:"홍콩" };
+const H_CODE   = { USA:"US",   UK:"GB",  Germany:"DE",   China:"CN",  Japan:"JP",  India:"IN",  Korea:"KR", HongKong:"HK" };
 
 // SVG viewBox 상의 노드 중심 좌표
 const NODES = {
@@ -22,6 +22,7 @@ const NODES = {
   Japan:   { cx: 750, cy: 142 },
   India:   { cx: 598, cy: 352 },
   Korea:   { cx: 745, cy: 285 },
+  HongKong:{ cx: 660, cy: 300 },
 };
 
 // ── 목업 데이터 (실데이터 없을 때 폴백) ────────────────────────────
@@ -49,6 +50,9 @@ const MOCK_STATES = {
   Korea:   { mood:"긴장된", score:3, icon:"⚔️", eco:6, pol:3, dip:5,
              issues:["북핵 위협 수위 최고조", "미·중 사이 외교 딜레마", "반도체 수출 규제 직격타"],
              worry:"북핵·수출규제 동시 압박", hope:"반도체 업황 회복 기대", score_basis:"", special_note:"" },
+  HongKong:{ mood:"관망중", score:5, icon:"🌉", eco:5, pol:4, dip:5,
+             issues:["금융 허브 지위 유지 경쟁", "본토 경제 연동 심화", "관광·소비 회복 흐름"],
+             worry:"본토 경기 둔화 전이", hope:"금융·관광 허브 회복", score_basis:"", special_note:"" },
 };
 
 const MOCK_RELS = [
@@ -65,6 +69,7 @@ const MOCK_RELS = [
   { a:"Japan",   b:"Korea",   s: 2 },
   { a:"India",   b:"Korea",   s: 2 },
   { a:"Germany", b:"India",   s: 2 },
+  { a:"China",   b:"HongKong", s: 3 },
 ];
 
 // 백엔드 응답(countries/relations) → 컴포넌트 내부 형태로 정규화
