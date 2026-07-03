@@ -1750,7 +1750,7 @@ export default function Coin() {
                                         ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 1)}`).join(" · ")}
                                     </div>
                                 )}
-                                <SymbolStrategyTag symbol={s.symbol} />
+                                <SymbolStrategyTag symbol={s.symbol} timeframe={timeframe} />
                                 {timeframe === "1D" ? (
                                     <DailyChartPanel
                                         source={bybitSource}

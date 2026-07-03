@@ -494,7 +494,7 @@ export default function Cfd() {
                                             ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 2)}`).join(" · ")}
                                         </div>
                                     )}
-                                    <SymbolStrategyTag symbol={s} />
+                                    <SymbolStrategyTag symbol={s} timeframe={timeframe} />
                                     {timeframe === "1D" ? (
                                         <DailyChartPanel
                                             source={cfdSource}
