@@ -140,6 +140,16 @@ export const STRAT_META = {
   s4: { label: "S4 역추세·일", color: "#5dcaa5" },
 };
 
+// 최대보유기간 (s1_max_hold_sec) — 채널별 고정값. 출처: trade_config.py
+//   1분(S1/S2)=14일 · FX 일봉(fxd S3/S4)=30일 · 크립토/MT5비환율 일봉(cryptod/mt5d S3/S4)=15일
+const FX_MAJORS = new Set(["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD"]);
+export function maxHoldFor(symbol, stratKey) {
+  if (stratKey === "s1" || stratKey === "s2") return "14d";
+  if (stratKey === "s3" || stratKey === "s4")
+    return FX_MAJORS.has(String(symbol || "").toUpperCase()) ? "30d" : "15d";
+  return null;
+}
+
 // 차트 진입밴드용 K1 세트 — STRAT_PARAMS 단일 소스에서 파생(별도 하드코딩 맵 금지).
 //   ChartView k1set 형식 {s1Long,s1Short,s2Long,s2Short}: 색=방향(롱/숏), 선=전략(실선/점선).
 //   timeframe "1m" → s1(추세)/s2(역추세) 슬롯, "1D" → s3/s4를 s1/s2 슬롯에 매핑(밴드 기하 동일).

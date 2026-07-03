@@ -3,7 +3,7 @@
 // ✅ 차트 밴드와 동일한 시각 언어: 색=방향(파랑 롱/주황 숏), 선=전략(실선 추세/점선 역추세).
 //    현재 타임프레임에 없는 전략(1m이면 S3/S4, 일봉이면 S1/S2)은 흐리게.
 import React from "react";
-import { STRAT_PARAMS, STRAT_META, fmtParam } from "../../lib/strategyParams";
+import { STRAT_PARAMS, STRAT_META, fmtParam, maxHoldFor } from "../../lib/strategyParams";
 
 const BLUE = "#3a9bdc";   // 롱 진입 (BandLegend·ChartView 밴드와 동일)
 const AMBER = "#e8913a";  // 숏 진입
@@ -62,10 +62,11 @@ export default function SymbolStrategyTag({ symbol, timeframe }) {
                 <Swatch color={AMBER} dashed={dashed} />숏 {fmtParam(s.S)}
               </span>
             )}
+            <span style={{ color: "#8a8a8a" }}> 보유≤{maxHoldFor(symbol, key)}</span>
           </span>
         );
       })}
-      <span style={{ color: "#666", fontSize: 9.5 }}>· K1/B/쿨다운 · 색=방향(파랑 롱/주황 숏) · 실선=추세/점선=역추세</span>
+      <span style={{ color: "#666", fontSize: 9.5 }}>· K1/B/쿨다운·최대보유 · 색=방향(파랑 롱/주황 숏) · 실선=추세/점선=역추세</span>
     </div>
   );
 }
