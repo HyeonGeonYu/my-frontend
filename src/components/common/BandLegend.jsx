@@ -33,6 +33,9 @@ export default function BandLegend({ mode = "1m" }) {
             <Item color={AMBER} dashed={false} label="주황 = 숏 진입" />
             <Item color={GRAY} dashed={false} label={daily ? "실선 = S3 추세" : "실선 = S1 추세"} />
             <Item color={GRAY} dashed={true} label={daily ? "점선 = S4 역추세" : "점선 = S2 역추세"} />
+            <span style={{ fontSize: 11.5, color: "#cfcfcf", whiteSpace: "nowrap" }}>
+                신호: <span style={{ color: BLUE }}>▲</span>/<span style={{ color: AMBER }}>▼</span> 진입(채움) · 테두리만 = 청산 · 탭하면 상세
+            </span>
             <span style={{ fontSize: 11, color: "#666", whiteSpace: "nowrap" }}>
                 {daily
                     ? "· 회색 점선 = MA(90일) · 일봉 FX 채널(S3/S4)"

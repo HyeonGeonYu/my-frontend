@@ -11,24 +11,27 @@ function OverlayLabel({ label: l }) {
 
     if (l.layer === "signal") {
         const up = !!l.up;
+        const isExit = !!l.isExit;
 
-        // 작게 조정
-        const w = 14;
-        const h = 12;
+        // ✅ 크게 + 진입/청산 구분: 진입=채운 삼각형, 청산=테두리만(속 어두움)
+        const w = 17;
+        const h = 14;
 
         const points = up
-            ? `${w / 2},1 ${w - 1},${h - 1} 1,${h - 1}`
-            : `1,1 ${w - 1},1 ${w / 2},${h - 1}`;
+            ? `${w / 2},1.5 ${w - 1.5},${h - 1.5} 1.5,${h - 1.5}`
+            : `1.5,1.5 ${w - 1.5},1.5 ${w / 2},${h - 1.5}`;
 
-        const fill = l.fillColor || l.color || "#aaa";
-        const stroke = l.borderColor && l.borderColor !== "none"
-            ? l.borderColor
-            : "none";
+        const sideColor = l.fillColor || l.color || "#aaa";
+        const boost = l.borderColor && l.borderColor !== "none" ? l.borderColor : null;
+        const fill = isExit ? "rgba(17,17,17,0.92)" : sideColor;
+        const stroke = boost || (isExit ? sideColor : "rgba(0,0,0,0.6)");
+        const strokeW = isExit ? 2 : 1;
 
         return (
             <div
                 onMouseEnter={() => setHover(true)}
                 onMouseLeave={() => setHover(false)}
+                onClick={() => setHover((v) => !v)} // ✅ 모바일: 탭으로 툴팁 토글
                 style={{
                     position: "absolute",
                     left: l.x,
@@ -46,14 +49,14 @@ function OverlayLabel({ label: l }) {
                     style={{
                         display: "block",
                         overflow: "visible",
-                        filter: "drop-shadow(0 0 3px rgba(0,0,0,0.9))",
+                        filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.95))",
                     }}
                 >
                     <polygon
                         points={points}
                         fill={fill}
                         stroke={stroke}
-                        strokeWidth={l.isExit ? 0 : 1.1}
+                        strokeWidth={strokeW}
                         strokeLinejoin="round"
                     />
                 </svg>
@@ -186,8 +189,9 @@ function getFirstReason(m) {
 function getSignalFillColor(m) {
     const side = String(m?.side || "").toUpperCase();
 
-    if (side === "LONG") return "#22c55e";   // 선명한 초록
-    if (side === "SHORT") return "#ef4444";  // 선명한 빨강
+    // ✅ 밴드/태그와 동일한 시각 언어: 파랑=롱, 주황=숏 (캔들 초록/빨강과 겹치지 않아 잘 보임)
+    if (side === "LONG") return "#3a9bdc";
+    if (side === "SHORT") return "#e8913a";
 
     return "#e5e7eb";
 }
@@ -584,10 +588,11 @@ export default function ChartView({
 
             labelY = Math.max(20, Math.min(heightNow - 20, labelY));
 
-            // 신호 삼각형(isSignal)은 같은 캔들에 여러 개 겹칠 때 14px씩 오프셋
-            const signalY = stackIndex > 0
-                ? Math.max(10, Math.min(heightNow - 10, y + direction * stackIndex * 14))
-                : y;
+            // 신호 삼각형(isSignal): 봉 꼬리와 안 겹치게 8px 띄우고, 같은 캔들 중첩 시 16px씩 스택
+            const signalY = Math.max(
+                10,
+                Math.min(heightNow - 10, y + direction * (8 + stackIndex * 16))
+            );
 
             labels.push({
                 key: `${m.time}_${m.text || m.displayNo || m.signalNo || m.seq || ""}_${stackIndex}`,
