@@ -4,6 +4,7 @@ import { useYoutubeData } from "../hooks/useYoutubeData";
 import VideoCard from "../components/VideoCard";
 import CalendarComponent from "../components/CalendarComponent"; // 경로에 맞게 수정
 import WorldRelationMap from "../components/home/WorldRelationMap";
+import GlobalBriefingCard from "../components/home/GlobalBriefingCard";
 import { newsParams } from "../constants/newsMeta";
 function Home() {
   const youtubeData = useYoutubeData();
@@ -11,6 +12,9 @@ function Home() {
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif", backgroundColor: "#1a1a1a", color: "#fff", minHeight: "100vh" }}>
+
+      {/* 전일 글로벌 브리핑 — 각국 보도 종합 핵심 5선 */}
+      <GlobalBriefingCard briefing={youtubeData?.global_briefing} />
 
       {/* 세계 정세 현황판 */}
       <WorldRelationMap />
