@@ -22,6 +22,7 @@ import {
   rowsToBars,
   normalizeCachedToBars,
 } from "./coreUtils";
+import { bandHistGet, bandHistSet } from "../../../lib/bandHistCache";
 
 // ✅ catch-up (stale cache tail backfill)
 const CATCHUP_LOOKBACK_SEC = 2 * 3600; // 최근 2시간만 재조회해서 꼬리(backfill) 채움
@@ -247,6 +248,44 @@ export default function useCoreCandles({
     const cached = source.getCachedRows(symUpper, dayKey);
     const ac = new AbortController();
 
+    // ✅ z-band 7일 히스토리 백필 (공용) — 닫힌 과거봉은 IndexedDB 캐시(TTL 8일)에서 먼저 시도,
+    //   미스일 때만 무거운 BAND_BUF REST fetch. 재방문/새로고침 시 밴드가 즉시 뜸.
+    const backfillBands = async () => {
+      try {
+        const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
+        if (beforeCnt >= BAND_WIN) return;
+
+        const cacheKey = `${sourceKey}:${symUpper}:hist:${start}`;
+        const histStart = start - BAND_BUF * 60;
+
+        let histBars = await bandHistGet(cacheKey);
+        if (loadSeqRef.current !== mySeq) return;
+
+        if (!histBars || histBars.length < BAND_WIN) {
+          const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
+          if (loadSeqRef.current !== mySeq) return;
+          histBars = rowsToBars(histRows);
+          // 닫힌 과거봉([start-7d, start))만 캐시 — 불변이라 TTL 만료 전까지 재사용 안전
+          const closed = histBars.filter((b) => b.time >= histStart && b.time < start);
+          if (closed.length >= BAND_WIN) bandHistSet(cacheKey, closed);
+          try { source.touchCandleCache?.(symUpper, dayKey, histRows); } catch {}
+        }
+
+        // ⚠️ mergeBars는 '과거' 봉을 버림(append/update 전용) → time 기준 union으로 병합.
+        const byTime = new Map();
+        for (const b of (allBarsRef.current || [])) byTime.set(b.time, b);
+        for (const b of histBars) byTime.set(b.time, b);
+        let merged = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+        if (merged.length > MAX_1M_BARS) merged = merged.slice(-MAX_1M_BARS);
+        allBarsRef.current = merged;
+        renderWindow(start, end, true);
+      } catch (e) {
+        if (e?.name !== "AbortError") console.warn("[ChartPanelCore band-backfill] failed:", symUpper, e);
+      } finally {
+        if (loadSeqRef.current === mySeq) setBandLoading(false);
+      }
+    };
+
     (async () => {
       try {
         // ✅ signals 먼저
@@ -275,31 +314,8 @@ export default function useCoreCandles({
           allBarsRef.current = normalizeCachedToBars(cached);
           renderWindow(start, end, true);
 
-          // ✅ z-band 백필: 캐시(prefetch=99봉 버퍼)는 7일 σ를 못 그림.
-          //   start 이전 봉이 BAND_WIN 미만이면 BAND_BUF로 앞쪽 7일치 보충 후 재렌더(+캐시 갱신). (bandsEnabled일 때만)
-          if (bandsEnabled) (async () => {
-            try {
-              const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
-              if (beforeCnt < BAND_WIN) {
-                const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
-                if (loadSeqRef.current !== mySeq) return;
-                // ⚠️ mergeBars는 '과거' 봉을 버림(append/update 전용) → time 기준 union으로 병합.
-                //   histRows가 [start-7d, end] 전체를 덮으므로 hist를 우선 적용, 기존(최신 라이브봉)은 보존.
-                const byTime = new Map();
-                for (const b of (allBarsRef.current || [])) byTime.set(b.time, b);
-                for (const b of rowsToBars(histRows)) byTime.set(b.time, b);
-                let merged = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
-                if (merged.length > MAX_1M_BARS) merged = merged.slice(-MAX_1M_BARS);
-                allBarsRef.current = merged;
-                try { source.touchCandleCache?.(symUpper, dayKey, histRows); } catch {}
-                renderWindow(start, end, true);
-              }
-            } catch (e) {
-              if (e?.name !== "AbortError") console.warn("[ChartPanelCore band-backfill] failed:", symUpper, e);
-            } finally {
-              if (loadSeqRef.current === mySeq) setBandLoading(false);
-            }
-          })();
+          // ✅ z-band 백필: 캐시(prefetch=99봉 버퍼)는 7일 σ를 못 그림 → 공용 backfillBands(IndexedDB 캐시 우선).
+          if (bandsEnabled) backfillBands();
 
           // ✅ today(0) 캐시가 stale이면 tail catch-up
           if (dayOffset === 0) {
@@ -385,28 +401,8 @@ export default function useCoreCandles({
 
         renderWindow(start, end, true);  // 캔들 즉시 표시 (밴드는 아래 백그라운드로)
 
-        // ✅ z-band 7일 히스토리는 백그라운드 백필 — 캔들 표시를 막지 않음. (bandsEnabled일 때만)
-        if (bandsEnabled) (async () => {
-          try {
-            const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
-            if (beforeCnt < BAND_WIN) {
-              const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
-              if (loadSeqRef.current !== mySeq) return;
-              const byTime = new Map();
-              for (const b of (allBarsRef.current || [])) byTime.set(b.time, b);
-              for (const b of rowsToBars(histRows)) byTime.set(b.time, b);
-              let merged = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
-              if (merged.length > MAX_1M_BARS) merged = merged.slice(-MAX_1M_BARS);
-              allBarsRef.current = merged;
-              try { source.touchCandleCache?.(symUpper, dayKey, histRows); } catch {}
-              renderWindow(start, end, true);
-            }
-          } catch (e) {
-            if (e?.name !== "AbortError") console.warn("[ChartPanelCore band-backfill(main)] failed:", symUpper, e);
-          } finally {
-            if (loadSeqRef.current === mySeq) setBandLoading(false);
-          }
-        })();
+        // ✅ z-band 7일 히스토리는 백그라운드 백필 — 캔들 표시를 막지 않음(IndexedDB 캐시 우선).
+        if (bandsEnabled) backfillBands();
 
         if (dayOffset === 0) prefetchPastDays(symUpper);
       } catch (e) {
@@ -434,6 +430,7 @@ export default function useCoreCandles({
     priceScale,
     onStats,
     bandsEnabled,
+    sourceKey,
   ]);
 
   // ✅ WS

@@ -9,7 +9,8 @@ import { k1setFor } from "../lib/strategyParams";
 import useIsMobile from "../hooks/useIsMobile";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
-import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol} from "../lib/tradeUtils";
+import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol, calcEquityUSDT} from "../lib/tradeUtils";
+import Mt5EquityHistoryCard from "../components/common/Mt5EquityHistoryCard";
 import { getDayLabel } from "../utils/date";
 
 // MT5(CFD·FX) 계정 — 데모/모의계좌. 자산은 USD 표시. (Bybit은 agent:CopyZannavi:...:BYBIT)
@@ -315,6 +316,7 @@ export default function Cfd() {
                         }}>
                             ⚠ 데모(모의) 계좌 · MT5
                         </div>
+                        <Mt5EquityHistoryCard currentEquity={calcEquityUSDT(asset, assetStats, "USD")} />
                         <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" />
                     </div>
 
