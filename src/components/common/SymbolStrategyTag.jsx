@@ -48,9 +48,11 @@ export default function SymbolStrategyTag({ symbol, timeframe }) {
       {rows.map(({ key, s }) => {
         const dashed = dashedOf(key);
         const active = activeOn(key);
+        // 1분(s1/s2)은 MA창 공통 7일(10080봉) — 라벨에 병기. 일봉(s3/s4)은 방향별 ·MA{w}가 파라미터에 붙음.
+        const winLabel = (key === "s1" || key === "s2") ? "·MA7일" : "";
         return (
           <span key={key} style={{ whiteSpace: "nowrap", opacity: active ? 1 : 0.38 }}>
-            <b style={{ color: "#cfcfcf" }}>{STRAT_META[key].label}</b>{" "}
+            <b style={{ color: "#cfcfcf" }}>{STRAT_META[key].label}{winLabel}</b>{" "}
             {s.L && (
               <span style={{ color: BLUE }}>
                 <Swatch color={BLUE} dashed={dashed} />롱 {fmtParam(s.L)}

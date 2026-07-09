@@ -100,11 +100,11 @@ export default function ChartPanelCore({
     <div style={{ marginBottom: 28, minWidth: 0 }}>
       <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>
         {symbol}
-        <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.65 }}>
-          (dayOffset: {dayOffset})
+        <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.6 }}>
+          (1분봉 · 밴드 MA·σ 7일=10080봉)
         </span>
-        <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.5 }}>
-          (digits: {autoDigits})
+        <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.45 }}>
+          (dayOffset: {dayOffset} · digits: {autoDigits})
         </span>
         {(() => {
           const hasK1 = k1set && Object.values(k1set).some((v) => Number.isFinite(Number(v)));
