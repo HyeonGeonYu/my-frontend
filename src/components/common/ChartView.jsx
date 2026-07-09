@@ -322,6 +322,8 @@ export default function ChartView({
     thr,
     maSd,
     k1set,
+    bandData, // ✅ 사전계산 밴드 {ma?, s1Long?, s1Short?, s2Long?, s2Short?: [{time,value}]}
+              //   — 방향별 MA창(win)이 다른 일봉(S3/S4)용. 있으면 maSd×k1set 대신 그대로 사용.
     markers,
     visibleRange,
     onChartReady,
@@ -816,17 +818,26 @@ export default function ChartView({
             lower.setData([]);
         }
 
-        // ✅ z-band 모드 (Coin/HFM): 7일 MA 앵커 + 밴드 = MA ± K1·σ
-        maSdSeries.setData(safeMaSd.map((p) => ({ time: p.time, value: p.ma })));
-        const k = k1set || {};
-        const band = (k1, sign) =>
-            (Number.isFinite(Number(k1)) && safeMaSd.length)
-                ? safeMaSd.map((p) => ({ time: p.time, value: p.ma + sign * Number(k1) * p.sd }))
-                : [];
-        bS1Long.setData(band(k.s1Long, +1));   // 추세 롱: z≥+K1 → MA + K1σ
-        bS2Short.setData(band(k.s2Short, +1)); // 역추세 숏: z≥+K1 → MA + K1σ
-        bS2Long.setData(band(k.s2Long, -1));   // 역추세 롱: z≤−K1 → MA − K1σ
-        bS1Short.setData(band(k.s1Short, -1)); // 추세 숏: z≤−K1 → MA − K1σ
+        if (bandData && typeof bandData === "object") {
+            // ✅ 사전계산 밴드 모드 (일봉 S3/S4): 방향별 MA창이 달라 호출측에서 win별로 계산해 주입.
+            maSdSeries.setData(Array.isArray(bandData.ma) ? bandData.ma : []);
+            bS1Long.setData(Array.isArray(bandData.s1Long) ? bandData.s1Long : []);
+            bS2Short.setData(Array.isArray(bandData.s2Short) ? bandData.s2Short : []);
+            bS2Long.setData(Array.isArray(bandData.s2Long) ? bandData.s2Long : []);
+            bS1Short.setData(Array.isArray(bandData.s1Short) ? bandData.s1Short : []);
+        } else {
+            // ✅ z-band 모드 (Coin/HFM 1분봉): 7일 MA 앵커 + 밴드 = MA ± K1·σ (공통 win)
+            maSdSeries.setData(safeMaSd.map((p) => ({ time: p.time, value: p.ma })));
+            const k = k1set || {};
+            const band = (k1, sign) =>
+                (Number.isFinite(Number(k1)) && safeMaSd.length)
+                    ? safeMaSd.map((p) => ({ time: p.time, value: p.ma + sign * Number(k1) * p.sd }))
+                    : [];
+            bS1Long.setData(band(k.s1Long, +1));   // 추세 롱: z≥+K1 → MA + K1σ
+            bS2Short.setData(band(k.s2Short, +1)); // 역추세 숏: z≥+K1 → MA + K1σ
+            bS2Long.setData(band(k.s2Long, -1));   // 역추세 롱: z≤−K1 → MA − K1σ
+            bS1Short.setData(band(k.s1Short, -1)); // 추세 숏: z≤−K1 → MA − K1σ
+        }
 
         const shapeOnlyMarkers = loading
             ? []
@@ -858,7 +869,7 @@ export default function ChartView({
                 rebuildOverlayLabels();
             });
         });
-    }, [safeCandles, safeMA, thr, safeMaSd, k1set, safeMarkers, loading, applyLayout, rebuildOverlayLabels]);
+    }, [safeCandles, safeMA, thr, safeMaSd, k1set, bandData, safeMarkers, loading, applyLayout, rebuildOverlayLabels]);
 
     // ✅ 보유 포지션 평균 진입가 선 (priceLine). entryLines 바뀔 때 갱신.
     const entryLinesKey = useMemo(

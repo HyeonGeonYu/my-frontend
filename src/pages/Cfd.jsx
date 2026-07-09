@@ -16,8 +16,9 @@ import { getDayLabel } from "../utils/date";
 // MT5(CFD·FX) 계정 — 데모/모의계좌. 자산은 USD 표시. (Bybit은 agent:CopyZannavi:...:BYBIT)
 const MT5_ASSET_NS = "agent:CopyZannaviMT5:u8f3a9c1e7b:MT5";
 
-// 일봉(S3/S4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조). FX 일봉=fxd, MT5 비환율 일봉=mt5d.
-const CFD_DAILY_SIGNALS = ["fxd", "mt5d"];
+// 일봉(S3/S4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조).
+// v2(bb1525a)에서 MT5 비환율 일봉이 mt5 스트림으로 통합(태그 S3/S4로 구분). FX 일봉=fxd 유지, mt5d는 히스토리용.
+const CFD_DAILY_SIGNALS = ["fxd", "mt5", "mt5d"];
 
 // ✅ z-score 진입 밴드용 K1 — STRAT_PARAMS 단일 소스에서 파생(k1setFor). 별도 하드코딩 맵 금지.
 //   HFM 브로커 심볼 별칭은 canonical(US100 등)로 정규화 후 조회.

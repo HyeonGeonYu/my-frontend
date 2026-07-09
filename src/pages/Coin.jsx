@@ -14,8 +14,9 @@ import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbo
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
 
-// 일봉(S3/S4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조, 재fetch 방지). 크립토 일봉=cryptod.
-const COIN_DAILY_SIGNALS = ["cryptod"];
+// 일봉(S3/S4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조, 재fetch 방지).
+// v2(bb1525a)에서 크립토 일봉이 bybit 스트림으로 통합(태그 S3/S4로 구분). cryptod는 통합 전 히스토리용.
+const COIN_DAILY_SIGNALS = ["bybit", "cryptod"];
 
 /* ------------------------- 상단 배너 ------------------------- */
 function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qrSize = 92 }) {

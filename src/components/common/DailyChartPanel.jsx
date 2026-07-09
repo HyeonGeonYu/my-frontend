@@ -1,15 +1,15 @@
 // src/components/common/DailyChartPanel.jsx
-// 일봉(1D) 차트 패널 — 캔들 + 90일 MA·σ 기반 S3/S4 진입밴드(MA±K1·σ).
-// 복잡한 useCoreCandles(1분봉 전용)를 건드리지 않고 ChartView를 재사용한다.
+// 일봉(1D) 차트 패널 — 캔들 + S3/S4 진입밴드(MA±K1·σ).
+// ✅ HANDOFF_MASTER v2: MA창(win)이 심볼×방향별(60~200일) → 방향별로 각자 win의 롤링 MA·σ 계산해
+//    ChartView bandData로 주입. 복잡한 useCoreCandles(1분봉 전용)를 건드리지 않고 ChartView 재사용.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import ChartView from "./ChartView";
 import { calcRollingMaSd, fetchSignals, isDailySignal, buildSignalAnnotations } from "../../lib/tradeUtils";
-import { k1setFor } from "../../lib/strategyParams";
+import { dailyBandSpec } from "../../lib/strategyParams";
 import { rowsToBars, inferDigitsFromRows } from "./ChartPanelCore/coreUtils";
 
 const DAY_SEC = 86400;
-const BAND_WIN = 90; // 일봉 MA·σ 창 = 90일 (봇 S3/S4와 동일)
 
 export default function DailyChartPanel({
   source,
@@ -23,14 +23,22 @@ export default function DailyChartPanel({
   height = 320,
 }) {
   const [bars, setBars] = useState([]);
-  const [maSd, setMaSd] = useState([]); // 90일 롤링 {time, ma, sd}
+  const [bandData, setBandData] = useState(null); // {ma, s1Long, s1Short, s2Long, s2Short}
   const [markers, setMarkers] = useState([]); // 일봉(S3/S4) 신호 마커
   const [range, setRange] = useState(null);
   const [digits, setDigits] = useState(2);
   const [loading, setLoading] = useState(false);
 
-  // S3(추세)/S4(역추세) 일봉 밴드 K1 — STRAT_PARAMS 단일 소스에서 파생.
-  const k1set = useMemo(() => k1setFor(symbol, "1D"), [symbol]);
+  // S3/S4 방향별 {k, w} — STRAT_PARAMS 단일 소스에서 파생.
+  const spec = useMemo(() => dailyBandSpec(symbol), [symbol]);
+  const maxWin = useMemo(
+    () => Math.max(90, ...Object.values(spec || {}).map((d) => d.w || 90)),
+    [spec]
+  );
+  const winsLabel = useMemo(() => {
+    const ws = [...new Set(Object.values(spec || {}).map((d) => d.w || 90))].sort((a, b) => a - b);
+    return ws.length ? `MA${ws.join("/")}` : "MA—";
+  }, [spec]);
 
   const wrapRef = useRef(null);
   const [measuredWidth, setMeasuredWidth] = useState(null);
@@ -40,7 +48,7 @@ export default function DailyChartPanel({
     const ac = new AbortController();
     setLoading(true);
     setBars([]);
-    setMaSd([]);
+    setBandData(null);
     setMarkers([]);
 
     (async () => {
@@ -48,9 +56,9 @@ export default function DailyChartPanel({
         const sym = String(symbol || "").toUpperCase();
         const end = Number(anchorEndUtcSec) + Number(dayOffset) * DAY_SEC;
         const start = end - lookbackDays * DAY_SEC;
-        // 90일 σ에 창 앞쪽 90봉 필요 → maBuf 넉넉히(일봉 단위). interval "D".
+        // 가장 큰 win(최대 200일) σ에 창 앞쪽 봉 필요 → maBuf 넉넉히(일봉 단위). interval "D".
         const rows = await source.fetchWindow(
-          sym, "D", start, end, ac.signal, BAND_WIN + 10
+          sym, "D", start, end, ac.signal, maxWin + 10
         );
         if (ac.signal.aborted) return;
 
@@ -58,12 +66,30 @@ export default function DailyChartPanel({
         const all = rowsToBars(rows).filter(
           (b) => Number.isFinite(b.close) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low)
         );
-        const ms = calcRollingMaSd(all, BAND_WIN);
         const barsVisible = all.filter((b) => b.time >= start && b.time < end);
+
+        // ✅ 방향별 win으로 각자 롤링 MA·σ 계산 → 밴드/앵커 데이터 (win별 계산은 1회씩 캐시)
+        if (spec) {
+          const msByWin = new Map();
+          const msFor = (w) => {
+            if (!msByWin.has(w)) {
+              msByWin.set(w, calcRollingMaSd(all, w).filter((p) => p.time >= start && p.time < end));
+            }
+            return msByWin.get(w);
+          };
+          const bd = {};
+          for (const [slot, d] of Object.entries(spec)) {
+            const sign = (slot === "s1Long" || slot === "s2Short") ? +1 : -1; // 위쪽 밴드=+K1σ
+            bd[slot] = msFor(d.w || 90).map((p) => ({ time: p.time, value: p.ma + sign * d.k * p.sd }));
+          }
+          // 회색 MA 앵커 = 가장 짧은 win(가장 반응 빠른 기준선)
+          const minWin = Math.min(...Object.values(spec).map((d) => d.w || 90));
+          bd.ma = msFor(minWin).map((p) => ({ time: p.time, value: p.ma }));
+          setBandData(bd);
+        }
 
         setDigits(inferDigitsFromRows(rows, 2));
         setBars(barsVisible);
-        setMaSd(ms.filter((p) => p.time >= start && p.time < end));
         setRange({ start, end });
 
         // 일봉 신호(S3/S4) 마커 — 지정 네임스페이스 스트림에서 읽어 일봉봉에 스냅.
@@ -89,7 +115,7 @@ export default function DailyChartPanel({
     })();
 
     return () => ac.abort();
-  }, [source, symbol, anchorEndUtcSec, dayOffset, lookbackDays, signalNames]);
+  }, [source, symbol, anchorEndUtcSec, dayOffset, lookbackDays, signalNames, spec, maxWin]);
 
   // 컨테이너 폭 추적 (ChartPanelCore와 동일 정책)
   const fixedWidth = typeof width === "number" ? width : null;
@@ -117,7 +143,7 @@ export default function DailyChartPanel({
       <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>
         {symbol}
         <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.6 }}>
-          (일봉 · MA90·σ90 · S3/S4 밴드 · 최근 {lookbackDays}일)
+          (일봉 · {winsLabel} · S3/S4 밴드 · 최근 {lookbackDays}일)
         </span>
       </div>
 
@@ -138,8 +164,7 @@ export default function DailyChartPanel({
           width={chartWidth}
           height={height}
           displayCandles={bars}
-          maSd={maSd}
-          k1set={k1set}
+          bandData={bandData}
           entryLines={entryLines}
           visibleRange={range}
           intervalSec={DAY_SEC}
