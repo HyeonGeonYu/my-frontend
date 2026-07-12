@@ -11,8 +11,6 @@ import {
 
 import {
   MA_BUF,
-  BAND_WIN,
-  BAND_BUF,
   MAX_1M_BARS,
   digitsCache,
   clampDigits,
@@ -38,7 +36,9 @@ export default function useCoreCandles({
 
   // UI/Behavior
   bounds,
-  bandsEnabled = true, // ✅ false면 z-band 7일 히스토리 백필 안 함(캔들만 빠르게) — CFD 등 무거운 소스용
+  // ✅ v4(1분봉책): 슬롯별 {k, w(분)} — s1Long/s1Short=S11(실선), s2Long/s2Short=S12(점선).
+  //   심볼×방향별 MA창(6~24h)이 달라 win별 롤링 MA·σ를 각각 계산. 없으면 밴드 비활성(캔들만).
+  bandSpec,
 
   // overrides
   priceScale,
@@ -65,10 +65,18 @@ export default function useCoreCandles({
   const [notesView, setNotesView] = useState([]);
   const [displayCandles, setDisplayCandles] = useState([]);
   const [ma100, setMa100] = useState([]);
-  const [maSd, setMaSd] = useState([]); // ✅ z-score 밴드용 7일 롤링 {time, ma, sd}
-  const [bandLoading, setBandLoading] = useState(false); // ✅ 밴드 7일 히스토리 백필 진행중
+  const [maSd, setMaSd] = useState([]); // ✅ 최단 win 롤링 {time, ma, sd} — 배지/앵커 판단용
+  const [bandData, setBandData] = useState(null); // ✅ 슬롯별 사전계산 밴드 {ma, s1Long, ...}
+  const [bandLoading, setBandLoading] = useState(false); // ✅ 밴드 히스토리 백필 진행중
   const [markers, setMarkers] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
+
+  // 밴드 스펙에서 창 크기(분) 파생 — 백필 버퍼/충분조건에 사용
+  const bandsEnabled = !!(bandSpec && Object.keys(bandSpec).length);
+  const maxWin = useMemo(
+    () => (bandsEnabled ? Math.max(...Object.values(bandSpec).map((d) => Number(d.w) || 0)) : 0),
+    [bandSpec, bandsEnabled]
+  );
 
   // WS에서 stale 방지
   const visibleRangeRef = useRef(null);
@@ -147,10 +155,30 @@ export default function useCoreCandles({
       const ma = calcSMA(forMa, 100).filter((p) => p.time >= start && p.time < end);
       setMa100(ma);
 
-      // ✅ z-score 밴드용 7일 롤링 MA·σ (봇과 동일 win). prefetch로 7일치 쌓이면 최근 구간부터 채워짐.
-      const forBand = sliceWithBuffer(arrAll, start, end, BAND_BUF);
-      const ms = calcRollingMaSd(forBand, BAND_WIN).filter((p) => p.time >= start && p.time < end);
-      setMaSd(ms);
+      // ✅ z-score 밴드 — 슬롯별 win(분)이 달라 win별 롤링 MA·σ 각각 계산 → bandData.
+      if (bandsEnabled) {
+        const forBand = sliceWithBuffer(arrAll, start, end, maxWin);
+        const msByWin = new Map();
+        const msFor = (w) => {
+          if (!msByWin.has(w)) {
+            msByWin.set(w, calcRollingMaSd(forBand, w).filter((p) => p.time >= start && p.time < end));
+          }
+          return msByWin.get(w);
+        };
+        const bd = {};
+        for (const [slot, d] of Object.entries(bandSpec)) {
+          const sign = (slot === "s1Long" || slot === "s2Short") ? +1 : -1; // z≥+K1 슬롯=위 밴드
+          bd[slot] = msFor(Number(d.w)).map((p) => ({ time: p.time, value: p.ma + sign * Number(d.k) * p.sd }));
+        }
+        const minWin = Math.min(...Object.values(bandSpec).map((d) => Number(d.w) || Infinity));
+        const msMin = msFor(minWin);
+        bd.ma = msMin.map((p) => ({ time: p.time, value: p.ma })); // 회색 앵커 = 최단 창 MA
+        setBandData(bd);
+        setMaSd(msMin); // 배지(로딩중/데이터부족) 판단용
+      } else {
+        setBandData(null);
+        setMaSd([]);
+      }
 
       // ✅ markers (signals hook 주입)
       try {
@@ -177,7 +205,7 @@ export default function useCoreCandles({
 
       onStats?.(symbol, {price: lastClose, ma100: ma100Latest, chg3mPct, priceScale: autoDigits});
     },
-    [getMarkersForWindow, getNotesForWindow, onStats, symbol, autoDigits]
+    [getMarkersForWindow, getNotesForWindow, onStats, symbol, autoDigits, bandSpec, bandsEnabled, maxWin]
   );
 
   // ✅ prefetch
@@ -248,26 +276,27 @@ export default function useCoreCandles({
     const cached = source.getCachedRows(symUpper, dayKey);
     const ac = new AbortController();
 
-    // ✅ z-band 7일 히스토리 백필 (공용) — 닫힌 과거봉은 IndexedDB 캐시(TTL 8일)에서 먼저 시도,
-    //   미스일 때만 무거운 BAND_BUF REST fetch. 재방문/새로고침 시 밴드가 즉시 뜸.
+    // ✅ z-band 히스토리 백필 (공용) — 닫힌 과거봉은 IndexedDB 캐시(TTL 8일)에서 먼저 시도,
+    //   미스일 때만 REST fetch. 버퍼는 심볼의 최대 win(분) 기준(v4: 6~24h — 구 7일 대비 대폭 축소).
     const backfillBands = async () => {
       try {
         const beforeCnt = (allBarsRef.current || []).filter((b) => b.time < start).length;
-        if (beforeCnt >= BAND_WIN) return;
+        if (beforeCnt >= maxWin) return;
 
-        const cacheKey = `${sourceKey}:${symUpper}:hist:${start}`;
-        const histStart = start - BAND_BUF * 60;
+        const cacheKey = `${sourceKey}:${symUpper}:hist:${start}:${maxWin}`;
+        const histStart = start - maxWin * 60;
 
         let histBars = await bandHistGet(cacheKey);
         if (loadSeqRef.current !== mySeq) return;
 
-        if (!histBars || histBars.length < BAND_WIN) {
-          const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, BAND_BUF);
+        if (!histBars) {
+          const histRows = await source.fetchWindow(symUpper, "1", start, end, ac.signal, maxWin);
           if (loadSeqRef.current !== mySeq) return;
           histBars = rowsToBars(histRows);
-          // 닫힌 과거봉([start-7d, start))만 캐시 — 불변이라 TTL 만료 전까지 재사용 안전
+          // 닫힌 과거봉([start-maxWin, start))만 캐시 — 불변이라 TTL 만료 전까지 재사용 안전.
+          //   부분 실패 방어: 절반 이상 확보됐을 때만 저장(휴장 갭은 절반 미만으로 안 떨어짐).
           const closed = histBars.filter((b) => b.time >= histStart && b.time < start);
-          if (closed.length >= BAND_WIN) bandHistSet(cacheKey, closed);
+          if (closed.length >= maxWin * 0.5) bandHistSet(cacheKey, closed);
           try { source.touchCandleCache?.(symUpper, dayKey, histRows); } catch {}
         }
 
@@ -430,6 +459,7 @@ export default function useCoreCandles({
     priceScale,
     onStats,
     bandsEnabled,
+    maxWin,
     sourceKey,
   ]);
 
@@ -520,6 +550,7 @@ export default function useCoreCandles({
     displayCandles,
     ma100,
     maSd,
+    bandData,
     bandLoading,
     markers,
     visibleRange,

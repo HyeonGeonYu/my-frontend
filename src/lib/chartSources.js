@@ -388,17 +388,19 @@ function enrichAnnotationsWithSignals(sigs = [], markers = [], notes = []) {
 
 // -------------------- signals (namespaced) --------------------
 
-async function ensureSignalsNamespaced({ sourceId, symUpper, signalName }) {
-  // signalName이 없을 수도 있으니 문자열로 고정
-  const sigName = String(signalName || "default");
-  const key = `${sourceId}:sig:${sigName}:${symUpper}`;
+async function ensureSignalsNamespaced({ sourceId, symUpper, signalName, signalNames }) {
+  // ✅ v4: 1분 신호가 여러 스트림에 분산(구 채널 드레인 + 신규 s11/s11m) → 배열이면 전부 fetch·병합
+  const names = Array.isArray(signalNames) && signalNames.length
+    ? signalNames
+    : [String(signalName || "default")];
+  const key = `${sourceId}:sig:${names.join("+")}:${symUpper}`;
 
   if (!signalCache.has(key)) {
-    // fetchSignals는 네 프로젝트 유틸을 그대로 사용
-    // - coin: signalName="bybit" 같은 식
-    // - cfd : signalName="mt5"
-    const sigsRaw = await fetchSignals(symUpper, sigName).catch(() => []);
-    // 1분 차트: 일봉(S3/S4) 신호 제외(현재는 스트림 분리라 no-op, 통합 시 방어).
+    const lists = await Promise.all(
+      names.map((nm) => fetchSignals(symUpper, nm).catch(() => []))
+    );
+    const sigsRaw = lists.flat();
+    // 1분 차트: 일봉(S3/S4) 신호 제외(bybit/mt5 스트림에 일봉 신호 통합됨 — 필수 방어).
     const sigs = sigsRaw.filter((s) => !isDailySignal(s));
     const { markers, notes } = buildSignalAnnotations(sigs);
 
@@ -423,7 +425,7 @@ async function ensureSignalsNamespaced({ sourceId, symUpper, signalName }) {
  * Bybit Source
  * - signalName: 기본 "bybit" (필요하면 페이지에서 바꿔서 주입)
  */
-export function makeBybitSource({ signalName = "bybit" } = {}) {
+export function makeBybitSource({ signalName = "bybit", signalNames = ["bybit", "s11"] } = {}) {
   const wsHub = getWsHub("wss://stream.bybit.com/v5/public/linear");
   const id = "bybit";
 
@@ -431,6 +433,7 @@ export function makeBybitSource({ signalName = "bybit" } = {}) {
     id,
     wsHub,
     signalName,
+    signalNames,
 
     // candle cache helpers (optional)
     getDayWindowByOffset,
@@ -452,7 +455,7 @@ export function makeBybitSource({ signalName = "bybit" } = {}) {
 
     // Signals (cached)
     async ensureSignals(symUpper) {
-      const s = await ensureSignalsNamespaced({ sourceId: id, symUpper, signalName });
+      const s = await ensureSignalsNamespaced({ sourceId: id, symUpper, signalName, signalNames });
       return s || { markers: [], notes: [] };
     },
 
@@ -529,7 +532,7 @@ class TokenWsHub {
  * CFD Source (HNO)
  * - signalName: "mt5" 고정(원하면 바꿀 수 있게 해둠)
  */
-export function makeCfdSource({ signalName = "mt5" } = {}) {
+export function makeCfdSource({ signalName = "mt5", signalNames = ["mt5", "s11m"] } = {}) {
   const wsHub = new TokenWsHub(
     "wss://api.hyeongeonnoil.com/ws",
     "/api/cfd-ws-token"
@@ -540,6 +543,7 @@ export function makeCfdSource({ signalName = "mt5" } = {}) {
     id,
     wsHub,
     signalName,
+    signalNames,
 
     getDayWindowByOffset,
 
@@ -560,7 +564,7 @@ export function makeCfdSource({ signalName = "mt5" } = {}) {
 
     // Signals (cached)
     async ensureSignals(symUpper) {
-      const s = await ensureSignalsNamespaced({ sourceId: id, symUpper, signalName });
+      const s = await ensureSignalsNamespaced({ sourceId: id, symUpper, signalName, signalNames });
       return s || { markers: [], notes: [] };
     },
 

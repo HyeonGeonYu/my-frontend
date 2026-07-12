@@ -227,6 +227,25 @@ export const signalsRepo = {
     return arr.filter((s) => (s.ts_ms || 0) >= startMs && (s.ts_ms || 0) < endMs);
   },
 
+  // ✅ 멀티 네임스페이스 병합 로드 (v4: 1분 신호가 bybit+s11 / mt5+s11m 로 분산)
+  async load8dMulti({ names = ["bybit"], days = DEFAULT_DAYS, limit = DEFAULT_LIMIT } = {}) {
+    const list = await Promise.all(
+      names.map((name) => this.load8d({ name, days, limit }).catch(() => null))
+    );
+    const ok = list.filter(Boolean);
+    const signals = ok.flatMap((d) => d.signals).sort((a, b) => (a.ts_ms || 0) - (b.ts_ms || 0));
+    const idx = buildIndexes(signals);
+    const symbols = Array.from(idx.bySymbol.keys()).filter((s) => s !== "UNKNOWN").sort();
+    return { name: names.join("+"), days, limit, signals, symbols, ...idx };
+  },
+
+  async getForChartMulti({ names = ["bybit"], symbol, dayOffset = 0, days = DEFAULT_DAYS, limit = DEFAULT_LIMIT } = {}) {
+    const lists = await Promise.all(
+      names.map((name) => this.getForChart({ name, symbol, dayOffset, days, limit }).catch(() => []))
+    );
+    return lists.flat().sort((a, b) => (a.ts_ms || 0) - (b.ts_ms || 0));
+  },
+
   clear() {
     _cache.clear();
   },

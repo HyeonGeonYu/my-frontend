@@ -1,170 +1,154 @@
 // src/lib/strategyParams.js
-// 심볼별 전략 파라미터 (K1 / B / 쿨다운 / MA창). 출처: tradingBot bots/trade_config.py
-//   (HANDOFF_MASTER v2, 2026-07-09 — 일봉 S3/S4 MA창 심볼×방향별 재배정, 커밋 c5e05b5)
-//   s1 = 추세(1분봉)   : TREND_BYBIT ∪ TREND_MT5      (z≥+K1 롱 / z≤−K1 숏) · win 고정 10080(7일)
-//   s2 = 역추세(1분봉) : REV_BYBIT  ∪ REV_MT5         (z≤−K1 롱 / z≥+K1 숏) · win 고정 10080(7일)
-//   s3 = 추세(일봉)    : FXD_TREND ∪ CRYPTOD_TREND ∪ MT5D_TREND
-//   s4 = 역추세(일봉)  : FXD_REV   ∪ CRYPTOD_REV   ∪ MT5D_REV
-//   각 방향 = {k:K1, b, cd:쿨다운, w:MA창(일봉만, 일수 60~200)}.
-//   전략 없는 심볼/방향은 키 자체를 넣지 않음(차트에 표기 안 함).
+// 심볼별 전략 파라미터. 출처: tradingBot bots/trade_config.py (권위원본)
+//   (HANDOFF_MASTER v4 §2-A′, 2026-07-12 — S11 「1분봉책」 도입, 구 S1/S2 드레인·폐기. 커밋 29bdfbd)
+//
+//   s11 = z추세(1분봉책)   : S11_TREND ∪ S11M_TREND  (z≥+K1 롱 / z≤−K1 숏) · 창 심볼별 6~24시간(분)
+//   s12 = z역추세(1분봉책) : S11_REV                  (z≤−K1 롱)            · 창 22~24시간(분)
+//   s13 = 급락페이드       : S11_FADE ∪ S11M_FADE     (M분 수익률≤−X% → 롱) · 밴드 없음(수익률 트리거)
+//   s3  = 추세(일봉)       : FXD_TREND ∪ CRYPTOD_TREND ∪ MT5D_TREND
+//   s4  = 역추세(일봉)     : FXD_REV   ∪ CRYPTOD_REV   ∪ MT5D_REV
+//
+//   z계열 방향 = {k:K1, b, cd:쿨다운, w:MA창 수치(s11/s12=분, s3/s4=일), wl:MA창 표시라벨}.
+//   s13 방향  = {m:트리거 분, drop:하락률, hold:보유 표시, retr?:되돌림 익절 배수}.
+//   구 S1/S2는 드레인 중(신규진입 없음) → 표기 제외.
 export const STRAT_PARAMS = {
-  // ── 크립토 (Bybit) ──
+  // ── 크립토 (Bybit, ns=s11) ──
   BTCUSDT: {
-    s1: { L: { k: 3.2, b: -2.0, cd: "3h" } },
-    s2: { L: { k: 3.3, b: -2.0, cd: "3h" }, S: { k: 4.6, b: -0.4, cd: "0.5h" } },
-    s3: { L: { k: 2.5, b: -2.0, cd: "2d", w: 90 }, S: { k: 2.4, b: 0.2, cd: "1d", w: 90 } },
-    s4: { L: { k: 1.1, b: 0.8, cd: "10d", w: 150 } },
+    s11: { L: { k: 6.0, b: 0.0, cd: "3h", w: 1440, wl: "24h" } },
+    s12: { L: { k: 5.0, b: -1.0, cd: "1h", w: 1320, wl: "22h" } },
+    s13: { L: { m: 60, drop: 0.04, retr: 1.5, hold: "48h", cd: "0.5h" } },
+    s3: { L: { k: 2.5, b: -2.0, cd: "2d", w: 90, wl: "90d" }, S: { k: 2.4, b: 0.2, cd: "1d", w: 90, wl: "90d" } },
+    s4: { L: { k: 1.1, b: 0.8, cd: "10d", w: 150, wl: "150d" } },
   },
   ETHUSDT: {
-    s1: { L: { k: 2.35, b: 1.2, cd: "2.5h" }, S: { k: 3.45, b: -1.8, cd: "3h" } },
-    s2: { L: { k: 3.15, b: -1.2, cd: "2h" }, S: { k: 3.3, b: -1.2, cd: "3h" } },
-    s3: { L: { k: 2.5, b: -3.0, cd: "1d", w: 60 }, S: { k: 1.6, b: -0.8, cd: "5d", w: 90 } },
-    s4: { L: { k: 1.9, b: -0.4, cd: "2d", w: 200 }, S: { k: 2.6, b: 2.2, cd: "1d", w: 200 } },
+    s11: { L: { k: 6.0, b: -3.0, cd: "3h", w: 720, wl: "12h" } },
+    s13: { L: { m: 30, drop: 0.04, hold: "24h", cd: "0.5h" } },
+    s3: { L: { k: 2.5, b: -3.0, cd: "1d", w: 60, wl: "60d" }, S: { k: 1.6, b: -0.8, cd: "5d", w: 90, wl: "90d" } },
+    s4: { L: { k: 1.9, b: -0.4, cd: "2d", w: 200, wl: "200d" }, S: { k: 2.6, b: 2.2, cd: "1d", w: 200, wl: "200d" } },
   },
   SOLUSDT: {
-    s1: { L: { k: 3.4, b: -2.0, cd: "3h" }, S: { k: 3.4, b: -2.0, cd: "1.5h" } },
-    s2: { L: { k: 3.3, b: 1.8, cd: "3h" } },
-    s3: { L: { k: 2.9, b: -3.0, cd: "1d", w: 90 }, S: { k: 1.7, b: 0.2, cd: "2d", w: 90 } },
-    s4: { L: { k: 1.8, b: 0.4, cd: "1d", w: 200 } },
+    s11: { L: { k: 5.5, b: 2.5, cd: "3h", w: 1440, wl: "24h" } },
+    s13: { L: { m: 15, drop: 0.05, hold: "24h", cd: "0.5h" } },
+    s3: { L: { k: 2.9, b: -3.0, cd: "1d", w: 90, wl: "90d" }, S: { k: 1.7, b: 0.2, cd: "2d", w: 90, wl: "90d" } },
+    s4: { L: { k: 1.8, b: 0.4, cd: "1d", w: 200, wl: "200d" } },
   },
   XRPUSDT: {
-    s1: { L: { k: 2.55, b: -0.4, cd: "3h" } },
-    s2: { L: { k: 3.5, b: -0.4, cd: "2.25h" }, S: { k: 5.0, b: -2.0, cd: "0.5h" } },
-    s3: { L: { k: 3.1, b: -3.0, cd: "1d", w: 90 }, S: { k: 1.6, b: -1.4, cd: "5d", w: 90 } },
-    s4: { L: { k: 1.6, b: -1.4, cd: "2d", w: 200 }, S: { k: 1.1, b: 0.2, cd: "7d", w: 200 } },
+    s11: { S: { k: 5.0, b: -0.5, cd: "1h", w: 720, wl: "12h" } },
+    s13: { L: { m: 30, drop: 0.05, hold: "24h", cd: "0.5h" } },
+    s3: { L: { k: 3.1, b: -3.0, cd: "1d", w: 90, wl: "90d" }, S: { k: 1.6, b: -1.4, cd: "5d", w: 90, wl: "90d" } },
+    s4: { L: { k: 1.6, b: -1.4, cd: "2d", w: 200, wl: "200d" }, S: { k: 1.1, b: 0.2, cd: "7d", w: 200, wl: "200d" } },
   },
   XAUTUSDT: {
-    s1: { L: { k: 3.25, b: -2.0, cd: "2h" }, S: { k: 3.5, b: 0.8, cd: "0.75h" } },
-    s2: { L: { k: 2.75, b: -1.8, cd: "3h" } },
+    s11: { L: { k: 4.0, b: -2.5, cd: "1h", w: 1440, wl: "24h" } },
+    s12: { L: { k: 4.25, b: -3.0, cd: "3h", w: 1440, wl: "24h" } },
   },
 
-  // ── MT5 지수·금속·유가·크립토CFD ──
+  // ── MT5 지수·금속·유가·크립토CFD (1분봉책 ns=s11m) ──
   BTCUSD: {
-    s1: { L: { k: 3.25, b: -2.0, cd: "2.75h" } },
-    s2: { L: { k: 3.5, b: -2.0, cd: "2.25h" } },
-    s3: { L: { k: 2.5, b: -2.0, cd: "2d", w: 90 }, S: { k: 2.4, b: -0.2, cd: "1d", w: 90 } },
-    s4: { L: { k: 1.0, b: -3.0, cd: "5d", w: 200 } },
+    s3: { L: { k: 2.5, b: -2.0, cd: "2d", w: 90, wl: "90d" }, S: { k: 2.4, b: -0.2, cd: "1d", w: 90, wl: "90d" } },
+    s4: { L: { k: 1.0, b: -3.0, cd: "5d", w: 200, wl: "200d" } },
   },
   ETHUSD: {
-    s1: { L: { k: 3.5, b: 1.6, cd: "1.75h" } },
-    s3: { L: { k: 2.8, b: -3.0, cd: "1d", w: 60 }, S: { k: 2.0, b: 0.0, cd: "2d", w: 60 } },
-    s4: { L: { k: 1.9, b: -0.4, cd: "1d", w: 200 } },
+    s3: { L: { k: 2.8, b: -3.0, cd: "1d", w: 60, wl: "60d" }, S: { k: 2.0, b: 0.0, cd: "2d", w: 60, wl: "60d" } },
+    s4: { L: { k: 1.9, b: -0.4, cd: "1d", w: 200, wl: "200d" } },
   },
   US100: {
-    s1: { L: { k: 2.8, b: -1.8, cd: "2.75h" } },
-    s2: { L: { k: 3.25, b: -0.8, cd: "1.5h" } },
-    s3: { L: { k: 1.2, b: -1.8, cd: "10d", w: 90 } },
-    s4: { L: { k: 2.0, b: -3.0, cd: "1d", w: 150 } },
+    s11: { L: { k: 5.25, b: -2.5, cd: "1h", w: 720, wl: "12h" } },
+    s3: { L: { k: 1.2, b: -1.8, cd: "10d", w: 90, wl: "90d" } },
+    s4: { L: { k: 2.0, b: -3.0, cd: "1d", w: 150, wl: "150d" } },
   },
   JP225: {
-    s1: { L: { k: 3.35, b: -2.0, cd: "2h" }, S: { k: 3.25, b: 0.8, cd: "1.25h" } },
-    s2: { L: { k: 2.7, b: -2.0, cd: "3h" }, S: { k: 3.8, b: 1.0, cd: "0.75h" } },
-    s3: { L: { k: 2.7, b: 1.4, cd: "1d", w: 200 } },
-    s4: { L: { k: 2.0, b: -3.0, cd: "1d", w: 200 } },
+    s11: { L: { k: 4.0, b: -1.5, cd: "3h", w: 1440, wl: "24h" } },
+    s13: { L: { m: 240, drop: 0.03, hold: "48h", cd: "0.5h" } },
+    s3: { L: { k: 2.7, b: 1.4, cd: "1d", w: 200, wl: "200d" } },
+    s4: { L: { k: 2.0, b: -3.0, cd: "1d", w: 200, wl: "200d" } },
   },
   HK50: {
-    s1: { L: { k: 2.05, b: 0.6, cd: "3h" } },
-    s2: { L: { k: 2.6, b: -2.0, cd: "2h" }, S: { k: 3.0, b: 1.6, cd: "1h" } },
-    s4: { L: { k: 1.8, b: -3.0, cd: "3d", w: 200 }, S: { k: 2.2, b: 2.0, cd: "1d", w: 150 } },
+    s11: { L: { k: 5.75, b: -3.0, cd: "1h", w: 360, wl: "6h" } },
+    s13: { L: { m: 120, drop: 0.02, hold: "72h", cd: "0.5h" } },
+    s4: { L: { k: 1.8, b: -3.0, cd: "3d", w: 200, wl: "200d" }, S: { k: 2.2, b: 2.0, cd: "1d", w: 150, wl: "150d" } },
   },
   GER40: {
-    s1: { L: { k: 2.75, b: -1.8, cd: "3h" } },
-    s2: { L: { k: 3.5, b: -2.0, cd: "1.25h" } },
-    s4: { L: { k: 2.2, b: -3.0, cd: "1d", w: 200 } },
+    s11: { L: { k: 3.75, b: -3.0, cd: "3h", w: 1440, wl: "24h" } },
+    s4: { L: { k: 2.2, b: -3.0, cd: "1d", w: 200, wl: "200d" } },
   },
   UK100: {
-    s1: { L: { k: 3.25, b: -1.2, cd: "1.75h" }, S: { k: 3.5, b: 0.8, cd: "1h" } },
-    s2: { L: { k: 3.35, b: -2.0, cd: "1.5h" }, S: { k: 3.8, b: 1.8, cd: "0.5h" } },
-    s4: { L: { k: 1.7, b: -0.8, cd: "2d", w: 90 }, S: { k: 2.3, b: 1.0, cd: "1d", w: 200 } },
+    s11: { L: { k: 3.75, b: -3.0, cd: "3h", w: 1440, wl: "24h" } },
+    s4: { L: { k: 1.7, b: -0.8, cd: "2d", w: 90, wl: "90d" }, S: { k: 2.3, b: 1.0, cd: "1d", w: 200, wl: "200d" } },
   },
   XAUUSD: {
-    s1: { L: { k: 3.45, b: -1.8, cd: "1.25h" }, S: { k: 3.2, b: 0.2, cd: "1h" } },
-    s2: { L: { k: 2.35, b: -1.8, cd: "3h" } },
-    s3: { L: { k: 2.2, b: -1.4, cd: "3d", w: 90 } },
-    s4: { L: { k: 2.1, b: -2.2, cd: "1d", w: 90 }, S: { k: 2.8, b: 1.2, cd: "1d", w: 200 } },
+    s3: { L: { k: 2.2, b: -1.4, cd: "3d", w: 90, wl: "90d" } },
+    s4: { L: { k: 2.1, b: -2.2, cd: "1d", w: 90, wl: "90d" }, S: { k: 2.8, b: 1.2, cd: "1d", w: 200, wl: "200d" } },
   },
   XAGUSD: {
-    s1: { L: { k: 2.75, b: -1.2, cd: "3h" }, S: { k: 2.65, b: 1.2, cd: "2h" } },
-    s2: { L: { k: 2.85, b: -1.8, cd: "3h" }, S: { k: 3.8, b: -2.0, cd: "1h" } },
-    s3: { L: { k: 2.5, b: 0.8, cd: "1d", w: 200 } },
-    s4: { L: { k: 2.0, b: -1.0, cd: "1d", w: 90 } },
+    s11: { L: { k: 4.75, b: -2.5, cd: "1h", w: 1320, wl: "22h" } },
+    s3: { L: { k: 2.5, b: 0.8, cd: "1d", w: 200, wl: "200d" } },
+    s4: { L: { k: 2.0, b: -1.0, cd: "1d", w: 90, wl: "90d" } },
   },
   WTI: {
-    s1: { L: { k: 2.9, b: -1.4, cd: "2.5h" }, S: { k: 3.2, b: 1.8, cd: "1h" } },
-    s2: { L: { k: 2.9, b: -2.0, cd: "3h" }, S: { k: 3.4, b: 0.6, cd: "1h" } },
-    s3: { L: { k: 1.5, b: -3.0, cd: "7d", w: 90 }, S: { k: 2.3, b: 2.0, cd: "1d", w: 90 } },
-    s4: { L: { k: 1.4, b: 0.8, cd: "5d", w: 200 } },
+    s11: { L: { k: 4.5, b: -2.0, cd: "3h", w: 720, wl: "12h" } },
+    s3: { L: { k: 1.5, b: -3.0, cd: "7d", w: 90, wl: "90d" }, S: { k: 2.3, b: 2.0, cd: "1d", w: 90, wl: "90d" } },
+    s4: { L: { k: 1.4, b: 0.8, cd: "5d", w: 200, wl: "200d" } },
   },
 
-  // ── FX 메이저 (1분=S1/S2, 일봉=S3/S4) ──
+  // ── FX 메이저 ──
   EURUSD: {
-    s1: { L: { k: 3.8, b: -1.0, cd: "1h" } },
-    s2: { L: { k: 3.7, b: -0.6, cd: "0.75h" } },
-    s4: { L: { k: 2.2, b: -0.6, cd: "1d", w: 200 } },
+    s4: { L: { k: 2.2, b: -0.6, cd: "1d", w: 200, wl: "200d" } },
   },
   GBPUSD: {
-    s1: { L: { k: 3.4, b: 0.4, cd: "1h" } },
-    s2: { L: { k: 3.5, b: -0.4, cd: "1h" } },
-    s4: { L: { k: 2.4, b: 1.6, cd: "1d", w: 150 }, S: { k: 2.1, b: 0.6, cd: "1d", w: 150 } },
+    s4: { L: { k: 2.4, b: 1.6, cd: "1d", w: 150, wl: "150d" }, S: { k: 2.1, b: 0.6, cd: "1d", w: 150, wl: "150d" } },
   },
   AUDUSD: {
-    s1: { L: { k: 3.7, b: 2.0, cd: "0.5h" } },
-    s2: { L: { k: 3.5, b: -2.0, cd: "1.25h" }, S: { k: 2.8, b: -2.0, cd: "2.25h" } },
-    s4: { L: { k: 2.3, b: -2.2, cd: "1d", w: 90 }, S: { k: 1.8, b: 0.2, cd: "3d", w: 90 } },
+    s4: { L: { k: 2.3, b: -2.2, cd: "1d", w: 90, wl: "90d" }, S: { k: 1.8, b: 0.2, cd: "3d", w: 90, wl: "90d" } },
   },
   USDJPY: {
-    s1: { S: { k: 3.0, b: -1.4, cd: "1.5h" } },
-    s2: { S: { k: 3.3, b: -0.6, cd: "1.75h" } },
-    s3: { L: { k: 2.6, b: -1.0, cd: "1d", w: 120 } },
-    s4: { L: { k: 2.1, b: -3.0, cd: "1d", w: 150 } },
+    s11: { L: { k: 4.5, b: -2.5, cd: "1h", w: 1440, wl: "24h" } },
+    s13: { L: { m: 120, drop: 0.01, hold: "48h", cd: "0.5h" } },
+    s3: { L: { k: 2.6, b: -1.0, cd: "1d", w: 120, wl: "120d" } },
+    s4: { L: { k: 2.1, b: -3.0, cd: "1d", w: 150, wl: "150d" } },
   },
   USDCHF: {
-    s1: { S: { k: 4.1, b: -2.0, cd: "0.75h" } },
-    s2: { S: { k: 3.7, b: -1.6, cd: "0.75h" } },
-    s4: { L: { k: 2.3, b: -0.6, cd: "1d", w: 200 }, S: { k: 1.5, b: -0.2, cd: "3d", w: 200 } },
+    s4: { L: { k: 2.3, b: -0.6, cd: "1d", w: 200, wl: "200d" }, S: { k: 1.5, b: -0.2, cd: "3d", w: 200, wl: "200d" } },
   },
   USDCAD: {
-    s2: { S: { k: 3.6, b: -2.0, cd: "0.75h" } },
-    s4: { L: { k: 1.9, b: 1.2, cd: "1d", w: 150 }, S: { k: 2.4, b: 0.6, cd: "1d", w: 200 } },
+    s4: { L: { k: 1.9, b: 1.2, cd: "1d", w: 150, wl: "150d" }, S: { k: 2.4, b: 0.6, cd: "1d", w: 200, wl: "200d" } },
   },
   NZDUSD: {
-    s2: { L: { k: 3.6, b: -2.0, cd: "1h" }, S: { k: 3.1, b: -1.0, cd: "2.25h" } },
-    s4: { L: { k: 2.2, b: -3.0, cd: "1d", w: 200 }, S: { k: 1.4, b: -1.2, cd: "2d", w: 150 } },
+    s4: { L: { k: 2.2, b: -3.0, cd: "1d", w: 200, wl: "200d" }, S: { k: 1.4, b: -1.2, cd: "2d", w: 150, wl: "150d" } },
   },
 };
 
 export const STRAT_META = {
-  s1: { label: "S1 추세·1m", color: "#ffb86c" },
-  s2: { label: "S2 역추세·1m", color: "#7ee787" },
+  s11: { label: "S11 z추세·1m", color: "#ffb86c" },
+  s12: { label: "S12 z역추세·1m", color: "#7ee787" },
+  s13: { label: "S13 급락페이드·1m", color: "#c084fc" },
   s3: { label: "S3 추세·일", color: "#ffd166" },
   s4: { label: "S4 역추세·일", color: "#5dcaa5" },
 };
 
-// 최대보유기간 (s1_max_hold_sec) — v2: 1분(S1/S2)=14일 · 일봉(S3/S4)=15일 전 채널 공통.
+// 최대보유기간 — v4: s11/s12=14일 · s13=셀별(hold에 표기) · 일봉(S3/S4)=15일.
 export function maxHoldFor(symbol, stratKey) {
-  if (stratKey === "s1" || stratKey === "s2") return "14d";
+  if (stratKey === "s11" || stratKey === "s12") return "14d";
   if (stratKey === "s3" || stratKey === "s4") return "15d";
-  return null;
+  return null; // s13은 방향 데이터의 hold를 표시
 }
 
-// 차트 진입밴드용 K1 세트 — STRAT_PARAMS 단일 소스에서 파생(별도 하드코딩 맵 금지).
-//   ChartView k1set 형식 {s1Long,s1Short,s2Long,s2Short}: 색=방향(롱/숏), 선=전략(실선/점선).
-//   1분봉 전용(win 공통 10080). 일봉은 방향별 win이 달라 dailyBandSpec 사용.
-export function k1setFor(symbol, timeframe = "1m") {
+// 1분봉 밴드 스펙 — 방향별 {k, w(분)}. 슬롯: s11→실선(s1슬롯), s12→점선(s2슬롯). s13은 밴드 없음.
+export function minuteBandSpec(symbol) {
   const p = STRAT_PARAMS[String(symbol || "").toUpperCase()];
   if (!p) return undefined;
-  const trend = timeframe === "1D" ? p.s3 : p.s1;
-  const rev = timeframe === "1D" ? p.s4 : p.s2;
-  const set = {};
-  if (trend?.L) set.s1Long = trend.L.k;
-  if (trend?.S) set.s1Short = trend.S.k;
-  if (rev?.L) set.s2Long = rev.L.k;
-  if (rev?.S) set.s2Short = rev.S.k;
-  return Object.keys(set).length ? set : undefined;
+  const out = {};
+  const put = (slot, d) => {
+    if (d && Number.isFinite(Number(d.k)) && Number.isFinite(Number(d.w))) out[slot] = { k: Number(d.k), w: Number(d.w) };
+  };
+  put("s1Long", p.s11?.L);
+  put("s1Short", p.s11?.S);
+  put("s2Long", p.s12?.L);
+  put("s2Short", p.s12?.S);
+  return Object.keys(out).length ? out : undefined;
 }
 
-// 일봉 밴드 스펙 — 방향별 {k, w(MA창 일수)}. 슬롯명은 ChartView 밴드 시리즈와 동일
-//   (s3→s1 슬롯=실선, s4→s2 슬롯=점선; Long=파랑, Short=주황).
+// 일봉 밴드 스펙 — 방향별 {k, w(일)}. 슬롯: s3→실선, s4→점선.
 export function dailyBandSpec(symbol) {
   const p = STRAT_PARAMS[String(symbol || "").toUpperCase()];
   if (!p) return undefined;
@@ -179,9 +163,16 @@ export function dailyBandSpec(symbol) {
   return Object.keys(out).length ? out : undefined;
 }
 
-// 부호 표시(− 사용) + 칸 텍스트 (일봉은 MA창 병기)
+// z계열 파라미터 표시: K1/B/쿨다운·MA창
 export function fmtParam(d) {
   const b = Number(d.b);
   const bStr = b < 0 ? `−${Math.abs(b)}` : `${b}`;
-  return `${d.k}/${bStr}/${d.cd}` + (d.w ? `·MA${d.w}` : "");
+  return `${d.k}/${bStr}/${d.cd}` + (d.wl ? `·MA${d.wl}` : "");
+}
+
+// s13(급락페이드) 표시: "60분 −4% → 롱 · 보유≤48h (·되돌림×1.5)"
+export function fmtFade(d) {
+  const dropPct = `${(Number(d.drop) * 100).toFixed(0)}%`;
+  const retr = d.retr ? ` ·되돌림×${d.retr}` : "";
+  return `${d.m}분 −${dropPct}↘ 롱 · 보유≤${d.hold}${retr}`;
 }

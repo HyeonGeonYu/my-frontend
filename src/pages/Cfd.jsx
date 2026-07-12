@@ -5,7 +5,7 @@ import DailyChartPanel from "../components/common/DailyChartPanel";
 import AssetPanel from "../components/AssetPanel";
 import BandLegend from "../components/common/BandLegend";
 import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
-import { k1setFor } from "../lib/strategyParams";
+import { minuteBandSpec } from "../lib/strategyParams";
 import useIsMobile from "../hooks/useIsMobile";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
@@ -34,8 +34,8 @@ function canonMt5(sym) {
     const u = String(sym || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
     return MT5_ALIAS[u] || u;
 }
-function resolveK1Mt5(sym) {
-    return k1setFor(canonMt5(sym), "1m");
+function resolveBandMt5(sym) {
+    return minuteBandSpec(canonMt5(sym));
 }
 
 
@@ -514,8 +514,7 @@ export default function Cfd() {
                                             symbol={s}
                                             dayOffset={dayOffset}
                                             anchorEndUtcSec={anchorEndUtcSec}
-                                            k1set={resolveK1Mt5(s)}
-                                            bandsEnabled={!!resolveK1Mt5(s)}
+                                            bandSpec={resolveBandMt5(s)}
                                             entryLines={ent}
                                             crossTimes={metaMap[s]?.cross_times}
                                             onStats={onStats}

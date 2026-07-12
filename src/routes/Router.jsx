@@ -7,6 +7,7 @@ import Commodity from "../pages/Commodity";
 import Coin from "../pages/Coin";
 import Cfd from "../pages/Cfd";
 import Archive from "../pages/Archive";
+import Updates from "../pages/Updates";
 import Others from "../pages/Others";
 import Layout from "../components/Layout";
 import useIsMobile from "../hooks/useIsMobile";
@@ -56,6 +57,7 @@ function AppRouter() {
           <Route path="/coin" element={<Coin />} />
           <Route path="/cfd" element={<Cfd />} />
           <Route path="/archive" element={<Archive />} />
+          <Route path="/updates" element={<Updates />} />
           <Route path="/others" element={<Others />} />
         </Route>
       </Routes>
@@ -71,6 +73,7 @@ const navItems = [
   { path: "/coin", label: "코인", emoji: "🪙" },
   { path: "/cfd", label: "CFD", emoji: "💹" },
   { path: "/archive", label: "아카이브", emoji: "🗂️" },
+  { path: "/updates", label: "업데이트", emoji: "🛠️" },
   { path: "/others", label: "기타", emoji: "🔧" },
 ];
 

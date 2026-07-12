@@ -128,6 +128,12 @@ export default function StreamsCenter({
     const raw = source?.signalName || source?.name || source?.key || "bybit";
     return String(raw).split(":").pop().toLowerCase(); // "cfd:mt5" -> "mt5"
   }, [source]);
+  // v4: 멀티 스트림(구 채널 + s11/s11m) 병합
+  const names = useMemo(() => {
+    return Array.isArray(source?.signalNames) && source.signalNames.length
+      ? source.signalNames
+      : [name];
+  }, [source, name]);
 
   const [loading, setLoading] = useState(false);
   const [allSignals, setAllSignals] = useState([]);
@@ -148,7 +154,7 @@ export default function StreamsCenter({
 
     (async () => {
       try {
-        const data = await signalsRepo.load8d({ name, days, limit });
+        const data = await signalsRepo.load8dMulti({ names, days, limit });
         if (!alive) return;
         setAllSignals(data?.signals || []);
       } catch (e) {
@@ -162,7 +168,7 @@ export default function StreamsCenter({
     return () => {
       alive = false;
     };
-  }, [name, days, limit]);
+  }, [names, days, limit]);
 
   const symbols = useMemo(() => {
     const set = new Set();

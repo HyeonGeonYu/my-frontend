@@ -342,12 +342,15 @@ export default function useCoreSignals({ source, dayOffset, crossTimes }) {
 
             markersAllRef.current = (s?.markers || []).map((m) => appendExecText(m, execMap));
 
-            // 2) notes는 repo 기반 우선
+            // 2) notes는 repo 기반 우선 (v4: 멀티 스트림 병합 — 구 채널 드레인 + 신규 s11/s11m)
             try {
                 const raw = source?.signalName || source?.name || source?.key || "bybit";
-                const name = String(raw).split(":").pop().toLowerCase(); // "cfd:mt5" -> "mt5"
-                const dayNotes = await signalsRepo.getForChart({
-                    name,
+                const fallback = String(raw).split(":").pop().toLowerCase(); // "cfd:mt5" -> "mt5"
+                const names = Array.isArray(source?.signalNames) && source.signalNames.length
+                    ? source.signalNames
+                    : [fallback];
+                const dayNotes = await signalsRepo.getForChartMulti({
+                    names,
                     symbol: symUpper,
                     dayOffset,
                     days: 8,

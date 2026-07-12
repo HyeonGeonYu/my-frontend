@@ -20,8 +20,7 @@ export default function ChartPanelCore({
   height = 320,
 
   thr,
-  k1set,
-  bandsEnabled = true,
+  bandSpec, // ✅ v4: 슬롯별 {k, w(분)} — 없으면 밴드 없음(캔들만)
   entryLines,
   crossTimes,
 
@@ -43,6 +42,7 @@ export default function ChartPanelCore({
     notesView,
     displayCandles,
     maSd,
+    bandData,
     bandLoading,
     markers,
     visibleRange,
@@ -54,7 +54,7 @@ export default function ChartPanelCore({
     dayOffset,
     anchorEndUtcSec,
     bounds,
-    bandsEnabled,
+    bandSpec,
     priceScale,
     ensureSignals,
     getMarkersForWindow,
@@ -101,14 +101,19 @@ export default function ChartPanelCore({
       <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 6 }}>
         {symbol}
         <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.6 }}>
-          (1분봉 · 밴드 MA·σ 7일=10080봉)
+          {(() => {
+            const wins = [...new Set(Object.values(bandSpec || {}).map((d) => Number(d.w) || 0))]
+              .filter(Boolean).sort((a, b) => a - b);
+            const lbl = wins.length ? wins.map((w) => (w % 60 === 0 ? `${w / 60}h` : `${w}m`)).join("/") : null;
+            return lbl ? `(1분봉 · 밴드 MA·σ ${lbl})` : "(1분봉 · 밴드 없음)";
+          })()}
         </span>
         <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.45 }}>
           (dayOffset: {dayOffset} · digits: {autoDigits})
         </span>
         {(() => {
-          const hasK1 = k1set && Object.values(k1set).some((v) => Number.isFinite(Number(v)));
-          if (!hasK1 || loading || (Array.isArray(maSd) && maSd.length > 0)) return null;
+          const hasBands = bandSpec && Object.keys(bandSpec).length > 0;
+          if (!hasBands || loading || (Array.isArray(maSd) && maSd.length > 0)) return null;
           // maSd 비어있음: 백필 진행중이면 '로딩중', 끝났는데도 없으면 '데이터 부족'
           const isLoading = !!bandLoading;
           return (
@@ -121,8 +126,8 @@ export default function ChartPanelCore({
                 borderRadius: 8, padding: "2px 7px",
               }}
               title={isLoading
-                ? "밴드용 7일(10080봉) 히스토리를 받는 중입니다."
-                : "7일 σ(10080봉) 계산에 필요한 1분봉이 부족합니다 — 휴장이거나 데이터 히스토리가 짧을 때."}
+                ? "밴드용 MA창 히스토리를 받는 중입니다."
+                : "σ 계산에 필요한 1분봉이 부족합니다 — 휴장이거나 데이터 히스토리가 짧을 때."}
             >
               {isLoading ? "밴드 로딩중…" : "밴드: 데이터 부족"}
             </span>
@@ -156,8 +161,7 @@ export default function ChartPanelCore({
           height={height}
           tickFormatter={tickFormatter}
           displayCandles={displayCandles}
-          maSd={maSd}
-          k1set={k1set}
+          bandData={bandData}
           entryLines={entryLines}
           markers={markers}
           priceScale={autoDigits}
