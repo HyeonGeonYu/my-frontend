@@ -965,12 +965,12 @@ function Logic1mBookTab() {
             <div style={{ fontWeight: 900, marginBottom: 6 }}>S11 「1분봉책」 — 3패밀리: z추세 · z역추세 · 급락페이드</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
                 2026-07-12 도입(구 S1/S2 대체). MA·σ 창을 7일 → <b>심볼별 6~24시간</b>으로 줄여 반응속도를 높이고,
-                크립토 롱에서 유해했던 손절(SL)을 제거했습니다(no-SL). 무게이트 베이스 자립 + 상장 전기간 연도균형으로 재검증.
+                크립토 롱에서 유해했던 손절(SL)을 제거했습니다(no-SL). 무게이트 베이스 자립 + 상장 전기간(6.3년) 연도균형으로 재검증. Bybit 11셀(롱 10 + 숏 1) + MT5 11셀(전부 롱) — 숏 전 심볼 스윕 결과 XRP z추세숏만 생존한 <b>설계적 롱 편향</b>이며, 하락장 방어는 역추세롱·급락페이드가 폭락 때 싸게 사는 구조(2022 하락장 +28%).
             </div>
 
             <div style={LBOX}>
                 <b>패밀리 ① z추세</b> (실선 밴드)
-                <div>진입: z ≥ +K1 → 롱 (XRP만 z ≤ −K1 → 숏)</div>
+                <div>진입: z ≥ +K1 → 롱 (숏은 XRP 1셀뿐: z ≤ −K1, 12h창·K5.0·SL 필수·월 ~5건)</div>
                 <div>TP = MA + B·σ 재앵커 · 롱 SL 없음(XAUT추세롱·XRP숏만 SL 유지) · 최대보유 14일</div>
                 <div style={{ marginTop: 4, opacity: 0.75 }}>Bybit: BTC(MA24h)·ETH(12h)·SOL(24h)·XAUT(24h) 롱, XRP 숏 · MT5: JP225/US100/GER40/UK100/HK50/XAGUSD/WTI/USDJPY 롱</div>
             </div>
