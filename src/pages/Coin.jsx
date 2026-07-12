@@ -566,7 +566,7 @@ function TradingLogicTabs() {
     const tabs = [
         { key: "overview", label: "개요" },
         { key: "model", label: "공통 수식" },
-        { key: "book", label: "1분봉책 (S11~S13)" },
+        { key: "book", label: "S11 1분봉책" },
         { key: "live", label: "심볼별 전략표" },
     ];
 
@@ -597,7 +597,7 @@ function TradingLogicTabs() {
                 <div>
                     <div style={{ fontSize: 17, fontWeight: 900 }}>트레이딩 로직 설명</div>
                     <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7, lineHeight: 1.5 }}>
-                        1분봉책 S11(z추세)·S12(z역추세)·S13(급락페이드) + 일봉 S3(추세)·S4(역추세). 구 S1/S2는 드레인(청산만) 중.
+                        S11 「1분봉책」(z추세·z역추세·급락페이드 3패밀리) + 일봉 S3(추세)·S4(역추세). 구 S1/S2는 드레인(청산만) 중.
                     </div>
                 </div>
 
@@ -840,10 +840,10 @@ function LogicOverviewTab() {
     const head = { ...cell, fontWeight: 900, color: "#00ffcc", borderBottom: "1px solid #2a2a2a" };
     return (
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — 1분봉책(S11~S13) + 일봉(S3/S4)</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — S11 1분봉책(3패밀리) + 일봉(S3/S4)</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
                 가격이 이동평균에서 표준편차(σ) 기준 얼마나 떨어졌는지(z-score)로 진입을 판단합니다.
-                <b>1분봉 = S11(z추세)·S12(z역추세)·S13(급락페이드)</b>, <b>일봉 = S3(추세)·S4(역추세)</b>.
+                <b>1분봉 = S11 「1분봉책」 하나</b>(내부 3패밀리: z추세·z역추세·급락페이드), <b>일봉 = S3(추세)·S4(역추세)</b>.
                 구 S1/S2(7일 창)는 2026-07-12 폐기 — 신규 진입 없이 보유분 청산만 진행(드레인). 아래 표의 방향 정의는 z계열(S11/S12/S3/S4) 공통입니다.
             </div>
 
@@ -883,9 +883,9 @@ function LogicOverviewTab() {
 
             <div style={{ marginTop: 12, fontSize: 12, opacity: 0.85, lineHeight: 1.7 }}>
                 <b>핵심 아이디어</b><br />
-                • 추세(S11/S3): 이미 한쪽으로 크게 움직인(과열/급락) 자산은 그 방향으로 더 간다고 보고 따라붙음.<br />
-                • 역추세(S12/S4): 과하게 벌어진 자산은 평균으로 되돌아온다고 보고 반대로 잡음(추매 없음 — 구 S2와 다름).<br />
-                • 급락페이드(S13): 밴드가 아니라 <b>M분 수익률 ≤ −X%</b> 급락 자체를 트리거로 롱 — 시간청산(24~72h) 중심.<br />
+                • z추세(S11 패밀리/S3): 이미 한쪽으로 크게 움직인(과열/급락) 자산은 그 방향으로 더 간다고 보고 따라붙음.<br />
+                • z역추세(S11 패밀리/S4): 과하게 벌어진 자산은 평균으로 되돌아온다고 보고 반대로 잡음(추매 없음 — 구 S2와 다름).<br />
+                • 급락페이드(S11 패밀리): 밴드가 아니라 <b>M분 수익률 ≤ −X%</b> 급락 자체를 트리거로 롱 — 시간청산(24~72h) 중심.<br />
                 • 같은 z 신호라도 자산군에 따라 추세/역추세 적합이 갈리고, 1분 롱은 SL 없이(no-SL) 운용합니다.
             </div>
 
@@ -930,10 +930,10 @@ function LogicModelTab() {
             <div style={LBOX}>
                 <b>포지션 운용 (전략별 상이)</b>
                 <div>• <b>z계열(S11/S12/S3/S4)</b>: 신호 재발생 시 독립 게임으로 중첩(ontop), 각 게임이 자기 TP로 따로 청산 · <b>1분 롱은 SL 없음</b>(no-SL, XAUT추세롱·XRP숏만 SL 유지)</div>
-                <div>• <b>급락페이드(S13)</b>: M분 수익률 ≤ −X% → 롱 · BTC는 되돌림×1.5 익절+48h 캡, 나머지는 시간청산(24~72h) · SL 없음</div>
+                <div>• <b>급락페이드(S11 패밀리)</b>: M분 수익률 ≤ −X% → 롱 · BTC는 되돌림×1.5 익절+48h 캡, 나머지는 시간청산(24~72h) · SL 없음</div>
                 <div style={{ marginTop: 4 }}>• 진입 쿨다운: 심볼별로 직전 진입 후 일정 시간 신규/추매 금지</div>
                 <div>• 사이징: 진입당 자본 5%, 최대 유효레버리지 10x(≈200랏)까지 — 거래소 최소주문 미달 시 5→10→15→20% 자동 상향</div>
-                <div>• 최대보유: 1분 z계열 14일 / S13 24~72h / 일봉 15일 — 초과 시 강제청산</div>
+                <div>• 최대보유: 1분 z계열 14일 / 급락페이드 24~72h / 일봉 15일 — 초과 시 강제청산</div>
                 <div>• 수수료 0.11% 왕복 가정(리포팅)</div>
             </div>
 
@@ -962,27 +962,27 @@ function LogicModelTab() {
 function Logic1mBookTab() {
     return (
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>「1분봉책」 — S11 z추세 · S12 z역추세 · S13 급락페이드</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>S11 「1분봉책」 — 3패밀리: z추세 · z역추세 · 급락페이드</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
                 2026-07-12 도입(구 S1/S2 대체). MA·σ 창을 7일 → <b>심볼별 6~24시간</b>으로 줄여 반응속도를 높이고,
                 크립토 롱에서 유해했던 손절(SL)을 제거했습니다(no-SL). 무게이트 베이스 자립 + 상장 전기간 연도균형으로 재검증.
             </div>
 
             <div style={LBOX}>
-                <b>S11 · z추세</b> (실선 밴드)
+                <b>패밀리 ① z추세</b> (실선 밴드)
                 <div>진입: z ≥ +K1 → 롱 (XRP만 z ≤ −K1 → 숏)</div>
                 <div>TP = MA + B·σ 재앵커 · 롱 SL 없음(XAUT추세롱·XRP숏만 SL 유지) · 최대보유 14일</div>
                 <div style={{ marginTop: 4, opacity: 0.75 }}>Bybit: BTC(MA24h)·ETH(12h)·SOL(24h)·XAUT(24h) 롱, XRP 숏 · MT5: JP225/US100/GER40/UK100/HK50/XAGUSD/WTI/USDJPY 롱</div>
             </div>
 
             <div style={LBOX}>
-                <b>S12 · z역추세</b> (점선 밴드)
+                <b>패밀리 ② z역추세</b> (점선 밴드)
                 <div>진입: z ≤ −K1 → 롱 · TP = MA − B·σ · SL 없음 · 최대보유 14일</div>
                 <div style={{ marginTop: 4, opacity: 0.75 }}>BTC(MA22h)·XAUT(24h) 롱 온리. <b>추매 없음</b> — 구 S2와 다름.</div>
             </div>
 
             <div style={LADD}>
-                <b style={{ color: "#c084fc" }}>S13 · 급락페이드</b> (밴드 없음 — 수익률 트리거)
+                <b style={{ color: "#c084fc" }}>패밀리 ③ 급락페이드</b> (밴드 없음 — 수익률 트리거)
                 <div style={{ marginTop: 4 }}>진입: 최근 <b>M분 수익률 ≤ −X%</b> 급락 → 롱 (쿨다운 30분)</div>
                 <div>청산: BTC = 되돌림×1.5 익절 + 48h 캡 · 나머지 = 시간청산(24~72h) · SL 없음</div>
                 <div style={{ marginTop: 4, opacity: 0.75 }}>
@@ -1026,10 +1026,10 @@ function LogicLiveTab() {
 
     return (
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 — S11·S12·S13·S3·S4 한눈에</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 — S11(3패밀리)·S3·S4 한눈에</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
                 z계열 칸 = <b>K1 / B / 쿨다운 · MA창</b> (롱 L / 숏 S, "—"=미채택). S13 = 급락 트리거·보유.
-                <b> S11~S13 = 1분봉</b>, <b>S3·S4 = 일봉</b>. 빈 전략은 "—".
+                <b> S11(z추세/z역추세/급락페이드) = 1분봉</b>, <b>S3·S4 = 일봉</b>. 빈 칸은 "—".
             </div>
 
             <div style={{ overflowX: "auto" }}>
@@ -1038,8 +1038,8 @@ function LogicLiveTab() {
                         <tr>
                             <th style={head}>심볼</th>
                             <th style={{ ...head, color: "#ffb86c" }}>S11 z추세·1m</th>
-                            <th style={{ ...head, color: "#7ee787" }}>S12 z역추세·1m</th>
-                            <th style={{ ...head, color: "#c084fc" }}>S13 급락페이드·1m</th>
+                            <th style={{ ...head, color: "#7ee787" }}>S11 z역추세·1m</th>
+                            <th style={{ ...head, color: "#c084fc" }}>S11 급락페이드·1m</th>
                             <th style={{ ...head, color: "#ffd166" }}>S3 추세·일</th>
                             <th style={{ ...head, color: "#5dcaa5" }}>S4 역추세·일</th>
                         </tr>
@@ -1072,7 +1072,7 @@ function LogicLiveTab() {
             </div>
 
             <div style={{ marginTop: 8, fontSize: 11.5, opacity: 0.75, lineHeight: 1.6 }}>
-                • 1분봉책(S11/S12): 게임 중첩, 쿨다운 시간 단위, 최대보유 14일, 롱 SL無. S13은 셀별 보유(24~72h).<br />
+                • S11 z계열(z추세/z역추세): 게임 중첩, 쿨다운 시간 단위, 최대보유 14일, 롱 SL無. 급락페이드는 셀별 보유(24~72h).<br />
                 • 일봉(S3/S4): MA창 심볼×방향별 60~200일, 쿨다운 일(日) 단위, 최대보유 15일, 추매 없음.
             </div>
 

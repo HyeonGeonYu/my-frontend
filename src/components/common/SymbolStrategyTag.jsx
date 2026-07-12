@@ -1,5 +1,5 @@
 // src/components/common/SymbolStrategyTag.jsx
-// 차트 위에 그 심볼의 전략(S11/S12/S13·S3/S4)·파라미터를 표기.
+// 차트 위에 그 심볼의 전략(S11 3패밀리·S3/S4)·파라미터를 표기.
 // ✅ 차트 밴드와 동일한 시각 언어: 색=방향(파랑 롱/주황 숏), 선=전략(실선 추세/점선 역추세).
 //    현재 타임프레임에 없는 전략(1m이면 S3/S4, 일봉이면 S11~S13)은 흐리게.
 //    S13(급락페이드)은 밴드가 없어 선 견본 대신 ↘ 아이콘.
@@ -73,7 +73,7 @@ export default function SymbolStrategyTag({ symbol, timeframe }) {
           </span>
         );
       })}
-      <span style={{ color: "#666", fontSize: 9.5 }}>· K1/B/쿨다운·MA창 · 색=방향(파랑 롱/주황 숏) · 실선=추세/점선=역추세 · S13=수익률 트리거(밴드 없음)</span>
+      <span style={{ color: "#666", fontSize: 9.5 }}>· K1/B/쿨다운·MA창 · 색=방향(파랑 롱/주황 숏) · 실선=추세/점선=역추세 · 급락페이드=수익률 트리거(밴드 없음)</span>
     </div>
   );
 }

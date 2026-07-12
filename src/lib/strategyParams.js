@@ -120,8 +120,8 @@ export const STRAT_PARAMS = {
 
 export const STRAT_META = {
   s11: { label: "S11 z추세·1m", color: "#ffb86c" },
-  s12: { label: "S12 z역추세·1m", color: "#7ee787" },
-  s13: { label: "S13 급락페이드·1m", color: "#c084fc" },
+  s12: { label: "S11 z역추세·1m", color: "#7ee787" },
+  s13: { label: "S11 급락페이드·1m", color: "#c084fc" },
   s3: { label: "S3 추세·일", color: "#ffd166" },
   s4: { label: "S4 역추세·일", color: "#5dcaa5" },
 };

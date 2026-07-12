@@ -29,7 +29,7 @@ export default function Updates() {
     <div style={{ padding: isMobile ? "12px 8px" : "40px", color: "#fff", backgroundColor: "#111", minHeight: "100vh" }}>
       <h1 style={{ color: "#00ffcc", fontSize: isMobile ? 22 : undefined }}>🛠 전략 업데이트 기록</h1>
       <p style={{ fontSize: 13, opacity: 0.65, marginTop: 4 }}>
-        트레이딩봇 전략 변경 이력 — 최신순. 현재 라이브: <b>S11/S12/S13(1분봉책)</b> + <b>S3/S4(일봉)</b>.
+        트레이딩봇 전략 변경 이력 — 최신순. 현재 라이브: <b>S11 1분봉책(3패밀리)</b> + <b>S3/S4(일봉)</b>.
       </p>
 
       <div style={{ maxWidth: 860, marginTop: 20, display: "grid", gap: 14 }}>

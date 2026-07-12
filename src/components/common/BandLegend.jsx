@@ -1,6 +1,6 @@
 // src/components/common/BandLegend.jsx
 // z-score 진입 밴드 범례: 색=방향(파랑 롱/주황 숏), 선=전략(실선 추세/점선 역추세).
-// v4: 1분봉=S11(z추세)/S12(z역추세)/S13(급락페이드·밴드없음), 일봉=S3/S4.
+// v4: 1분봉=S11 1분봉책(z추세/z역추세/급락페이드 3패밀리), 일봉=S3/S4.
 import React from "react";
 
 const BLUE = "#3a9bdc";   // 롱 진입
@@ -32,14 +32,14 @@ export default function BandLegend({ mode = "1m" }) {
             <Item color={BLUE} dashed={false} label="파랑 = 롱 진입" />
             <Item color={AMBER} dashed={false} label="주황 = 숏 진입" />
             <Item color={GRAY} dashed={false} label={daily ? "실선 = S3 추세" : "실선 = S11 z추세"} />
-            <Item color={GRAY} dashed={true} label={daily ? "점선 = S4 역추세" : "점선 = S12 z역추세"} />
+            <Item color={GRAY} dashed={true} label={daily ? "점선 = S4 역추세" : "점선 = S11 z역추세"} />
             <span style={{ fontSize: 11.5, color: "#cfcfcf", whiteSpace: "nowrap" }}>
                 신호: <span style={{ color: BLUE }}>▲</span>/<span style={{ color: AMBER }}>▼</span> 진입(채움) · 테두리만 = 청산 · 탭하면 상세
             </span>
             <span style={{ fontSize: 11, color: "#666", whiteSpace: "nowrap" }}>
                 {daily
                     ? "· 회색 점선 = MA(최단 창) · 각 밴드는 자기 MA창 기준"
-                    : "· 회색 점선 = MA(최단 창) · S13 급락페이드는 수익률 트리거(밴드 없음)"}
+                    : "· 회색 점선 = MA(최단 창) · S11 급락페이드는 수익률 트리거(밴드 없음)"}
             </span>
         </div>
     );
