@@ -133,34 +133,51 @@ export function maxHoldFor(symbol, stratKey) {
   return null; // s13은 방향 데이터의 hold를 표시
 }
 
+// ⚠️ 스펙 결과는 심볼별로 캐시해 항상 같은 객체 참조를 반환 — 렌더마다 새 객체를 만들면
+//    effect 의존성이 매번 바뀌어 무한 refetch 루프(ERR_INSUFFICIENT_RESOURCES)가 남.
+const _minuteSpecCache = new Map();
+const _dailySpecCache = new Map();
+
 // 1분봉 밴드 스펙 — 방향별 {k, w(분)}. 슬롯: s11→실선(s1슬롯), s12→점선(s2슬롯). s13은 밴드 없음.
 export function minuteBandSpec(symbol) {
-  const p = STRAT_PARAMS[String(symbol || "").toUpperCase()];
-  if (!p) return undefined;
-  const out = {};
-  const put = (slot, d) => {
-    if (d && Number.isFinite(Number(d.k)) && Number.isFinite(Number(d.w))) out[slot] = { k: Number(d.k), w: Number(d.w) };
-  };
-  put("s1Long", p.s11?.L);
-  put("s1Short", p.s11?.S);
-  put("s2Long", p.s12?.L);
-  put("s2Short", p.s12?.S);
-  return Object.keys(out).length ? out : undefined;
+  const sym = String(symbol || "").toUpperCase();
+  if (_minuteSpecCache.has(sym)) return _minuteSpecCache.get(sym);
+  const p = STRAT_PARAMS[sym];
+  let result;
+  if (p) {
+    const out = {};
+    const put = (slot, d) => {
+      if (d && Number.isFinite(Number(d.k)) && Number.isFinite(Number(d.w))) out[slot] = { k: Number(d.k), w: Number(d.w) };
+    };
+    put("s1Long", p.s11?.L);
+    put("s1Short", p.s11?.S);
+    put("s2Long", p.s12?.L);
+    put("s2Short", p.s12?.S);
+    result = Object.keys(out).length ? out : undefined;
+  }
+  _minuteSpecCache.set(sym, result);
+  return result;
 }
 
 // 일봉 밴드 스펙 — 방향별 {k, w(일)}. 슬롯: s3→실선, s4→점선.
 export function dailyBandSpec(symbol) {
-  const p = STRAT_PARAMS[String(symbol || "").toUpperCase()];
-  if (!p) return undefined;
-  const out = {};
-  const put = (slot, d) => {
-    if (d && Number.isFinite(Number(d.k))) out[slot] = { k: Number(d.k), w: Number(d.w) || 90 };
-  };
-  put("s1Long", p.s3?.L);
-  put("s1Short", p.s3?.S);
-  put("s2Long", p.s4?.L);
-  put("s2Short", p.s4?.S);
-  return Object.keys(out).length ? out : undefined;
+  const sym = String(symbol || "").toUpperCase();
+  if (_dailySpecCache.has(sym)) return _dailySpecCache.get(sym);
+  const p = STRAT_PARAMS[sym];
+  let result;
+  if (p) {
+    const out = {};
+    const put = (slot, d) => {
+      if (d && Number.isFinite(Number(d.k))) out[slot] = { k: Number(d.k), w: Number(d.w) || 90 };
+    };
+    put("s1Long", p.s3?.L);
+    put("s1Short", p.s3?.S);
+    put("s2Long", p.s4?.L);
+    put("s2Short", p.s4?.S);
+    result = Object.keys(out).length ? out : undefined;
+  }
+  _dailySpecCache.set(sym, result);
+  return result;
 }
 
 // z계열 파라미터 표시: K1/B/쿨다운·MA창

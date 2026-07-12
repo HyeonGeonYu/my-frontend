@@ -71,11 +71,17 @@ export default function useCoreCandles({
   const [markers, setMarkers] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
 
+  // ⚠️ bandSpec 참조 안정화 — 호출측이 렌더마다 새 객체를 넘겨도 내용이 같으면 같은 참조 유지.
+  //   (참조가 흔들리면 renderWindow→로드 effect가 매 렌더 재실행 → 무한 refetch 폭주)
+  const bandSpecKey = JSON.stringify(bandSpec || null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const spec = useMemo(() => bandSpec || null, [bandSpecKey]);
+
   // 밴드 스펙에서 창 크기(분) 파생 — 백필 버퍼/충분조건에 사용
-  const bandsEnabled = !!(bandSpec && Object.keys(bandSpec).length);
+  const bandsEnabled = !!(spec && Object.keys(spec).length);
   const maxWin = useMemo(
-    () => (bandsEnabled ? Math.max(...Object.values(bandSpec).map((d) => Number(d.w) || 0)) : 0),
-    [bandSpec, bandsEnabled]
+    () => (bandsEnabled ? Math.max(...Object.values(spec).map((d) => Number(d.w) || 0)) : 0),
+    [spec, bandsEnabled]
   );
 
   // WS에서 stale 방지
@@ -166,11 +172,11 @@ export default function useCoreCandles({
           return msByWin.get(w);
         };
         const bd = {};
-        for (const [slot, d] of Object.entries(bandSpec)) {
+        for (const [slot, d] of Object.entries(spec)) {
           const sign = (slot === "s1Long" || slot === "s2Short") ? +1 : -1; // z≥+K1 슬롯=위 밴드
           bd[slot] = msFor(Number(d.w)).map((p) => ({ time: p.time, value: p.ma + sign * Number(d.k) * p.sd }));
         }
-        const minWin = Math.min(...Object.values(bandSpec).map((d) => Number(d.w) || Infinity));
+        const minWin = Math.min(...Object.values(spec).map((d) => Number(d.w) || Infinity));
         const msMin = msFor(minWin);
         bd.ma = msMin.map((p) => ({ time: p.time, value: p.ma })); // 회색 앵커 = 최단 창 MA
         setBandData(bd);
@@ -205,7 +211,7 @@ export default function useCoreCandles({
 
       onStats?.(symbol, {price: lastClose, ma100: ma100Latest, chg3mPct, priceScale: autoDigits});
     },
-    [getMarkersForWindow, getNotesForWindow, onStats, symbol, autoDigits, bandSpec, bandsEnabled, maxWin]
+    [getMarkersForWindow, getNotesForWindow, onStats, symbol, autoDigits, spec, bandsEnabled, maxWin]
   );
 
   // ✅ prefetch
