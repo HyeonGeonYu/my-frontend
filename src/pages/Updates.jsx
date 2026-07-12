@@ -71,6 +71,53 @@ export default function Updates() {
                 </li>
               ))}
             </ul>
+
+            {(n.tables || []).map((t, ti) => (
+              <div key={ti} style={{ marginTop: 10 }}>
+                {t.title && (
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#9fb4cc", marginBottom: 5 }}>{t.title}</div>
+                )}
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 420 }}>
+                    <thead>
+                      <tr>
+                        {(t.headers || []).map((h, hi) => (
+                          <th
+                            key={hi}
+                            style={{
+                              padding: "5px 8px", textAlign: "left", fontSize: 11.5,
+                              color: "#00ffcc", fontWeight: 900,
+                              borderBottom: "1px solid #2a2a2a", whiteSpace: "nowrap",
+                            }}
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(t.rows || []).map((row, ri) => (
+                        <tr key={ri}>
+                          {row.map((c, ci) => (
+                            <td
+                              key={ci}
+                              style={{
+                                padding: "5px 8px", fontSize: 12, color: "#cfd6df",
+                                borderBottom: "1px solid #1f1f1f", verticalAlign: "top",
+                                fontWeight: ci === 0 ? 800 : 400,
+                                whiteSpace: ci === 0 ? "nowrap" : "normal",
+                              }}
+                            >
+                              {c}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         ))}
       </div>
