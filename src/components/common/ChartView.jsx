@@ -350,6 +350,7 @@ export default function ChartView({
     const bS2ShortRef = useRef(null);  // MA + k1·σ  (주황 점선)
     const bS2LongRef = useRef(null);   // MA − k1·σ  (파랑 점선)
     const bS1ShortRef = useRef(null);  // MA − k1·σ  (주황 실선)
+    const fadeRef = useRef(null);      // 급락페이드 트리거선 (보라 점선)
     const entryLineRefs = useRef([]);  // 보유 포지션 평균 진입가 priceLine 들
 
     const tickFmtRef = useRef(tickFormatter);
@@ -713,6 +714,15 @@ export default function ChartView({
         bS2ShortRef.current = mkBand(AMBER, true);  // S2 역추세 숏 (주황 점선)
         bS2LongRef.current = mkBand(BLUE, true);    // S2 역추세 롱 (파랑 점선)
         bS1ShortRef.current = mkBand(AMBER, false); // S1 추세 숏  (주황 실선)
+        // 급락페이드 트리거선: M분 전 종가 × (1 − drop). 가격이 이 선 이하로 급락하면 페이드 롱.
+        fadeRef.current = chart.addLineSeries({
+            lineWidth: 2,
+            lineStyle: 1, // Dotted
+            priceLineVisible: false,
+            lastValueVisible: true,
+            color: "#c084fc",
+            priceFormat: { type: "price", precision: ps, minMove },
+        });
 
         chartRef.current = chart;
         onChartReady?.(chart);
@@ -764,6 +774,7 @@ export default function ChartView({
         const allLines = [
             maRef.current, upperRef.current, lowerRef.current, maSdRef.current,
             bS1LongRef.current, bS2ShortRef.current, bS2LongRef.current, bS1ShortRef.current,
+            fadeRef.current,
         ];
         if (!chart || !candleSeries || !maSeries || allLines.some((b) => !b)) return;
 
@@ -803,6 +814,7 @@ export default function ChartView({
         const bS2Short = bS2ShortRef.current;
         const bS2Long = bS2LongRef.current;
         const bS1Short = bS1ShortRef.current;
+        const fadeLine = fadeRef.current;
         if (!candleSeries || !maSeries || !upper || !lower || !maSdSeries ||
             !bS1Long || !bS2Short || !bS2Long || !bS1Short) return;
 
@@ -825,6 +837,7 @@ export default function ChartView({
             bS2Short.setData(Array.isArray(bandData.s2Short) ? bandData.s2Short : []);
             bS2Long.setData(Array.isArray(bandData.s2Long) ? bandData.s2Long : []);
             bS1Short.setData(Array.isArray(bandData.s1Short) ? bandData.s1Short : []);
+            fadeLine?.setData(Array.isArray(bandData.fade) ? bandData.fade : []);
         } else {
             // ✅ z-band 모드 (Coin/HFM 1분봉): 7일 MA 앵커 + 밴드 = MA ± K1·σ (공통 win)
             maSdSeries.setData(safeMaSd.map((p) => ({ time: p.time, value: p.ma })));
@@ -837,6 +850,7 @@ export default function ChartView({
             bS2Short.setData(band(k.s2Short, +1)); // 역추세 숏: z≥+K1 → MA + K1σ
             bS2Long.setData(band(k.s2Long, -1));   // 역추세 롱: z≤−K1 → MA − K1σ
             bS1Short.setData(band(k.s1Short, -1)); // 추세 숏: z≤−K1 → MA − K1σ
+            fadeLine?.setData([]);
         }
 
         const shapeOnlyMarkers = loading

@@ -153,6 +153,10 @@ export function minuteBandSpec(symbol) {
     put("s1Short", p.s11?.S);
     put("s2Long", p.s12?.L);
     put("s2Short", p.s12?.S);
+    // 급락페이드 트리거선: 시점별 트리거가 = M분 전 종가 × (1 − drop). 밴드와 별도 특수 슬롯.
+    if (p.s13?.L && Number.isFinite(Number(p.s13.L.m)) && Number.isFinite(Number(p.s13.L.drop))) {
+      out.fade = { m: Number(p.s13.L.m), drop: Number(p.s13.L.drop) };
+    }
     result = Object.keys(out).length ? out : undefined;
   }
   _minuteSpecCache.set(sym, result);

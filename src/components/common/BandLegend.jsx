@@ -33,13 +33,14 @@ export default function BandLegend({ mode = "1m" }) {
             <Item color={AMBER} dashed={false} label="주황 = 숏 진입" />
             <Item color={GRAY} dashed={false} label={daily ? "실선 = S3 추세" : "실선 = S11 z추세"} />
             <Item color={GRAY} dashed={true} label={daily ? "점선 = S4 역추세" : "점선 = S11 z역추세"} />
+            {!daily && <Item color="#c084fc" dashed={true} label="보라 점선 = 급락페이드 트리거(M분 전 가격 −X%)" />}
             <span style={{ fontSize: 11.5, color: "#cfcfcf", whiteSpace: "nowrap" }}>
                 신호: <span style={{ color: BLUE }}>▲</span>/<span style={{ color: AMBER }}>▼</span> 진입(채움) · 테두리만 = 청산 · 탭하면 상세
             </span>
             <span style={{ fontSize: 11, color: "#666", whiteSpace: "nowrap" }}>
                 {daily
                     ? "· 회색 점선 = MA(최단 창) · 각 밴드는 자기 MA창 기준"
-                    : "· 회색 점선 = MA(최단 창) · S11 급락페이드는 수익률 트리거(밴드 없음)"}
+                    : "· 회색 점선 = MA(최단 창) · 가격이 보라선 아래로 떨어지면 페이드 롱 트리거"}
             </span>
         </div>
     );

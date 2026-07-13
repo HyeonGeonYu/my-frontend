@@ -77,12 +77,16 @@ export default function useCoreCandles({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const spec = useMemo(() => bandSpec || null, [bandSpecKey]);
 
-  // 밴드 스펙에서 창 크기(분) 파생 — 백필 버퍼/충분조건에 사용
+  // 밴드 스펙에서 창 크기(분) 파생 — 백필 버퍼/충분조건에 사용.
+  //   z 슬롯의 w(분)와 fade 트리거의 m(분) 중 최댓값만큼 과거봉 필요.
   const bandsEnabled = !!(spec && Object.keys(spec).length);
-  const maxWin = useMemo(
-    () => (bandsEnabled ? Math.max(...Object.values(spec).map((d) => Number(d.w) || 0)) : 0),
-    [spec, bandsEnabled]
-  );
+  const maxWin = useMemo(() => {
+    if (!bandsEnabled) return 0;
+    const wins = Object.entries(spec).map(([slot, d]) =>
+      slot === "fade" ? Number(d.m) || 0 : Number(d.w) || 0
+    );
+    return Math.max(...wins, 0);
+  }, [spec, bandsEnabled]);
 
   // WS에서 stale 방지
   const visibleRangeRef = useRef(null);
@@ -172,15 +176,36 @@ export default function useCoreCandles({
           return msByWin.get(w);
         };
         const bd = {};
-        for (const [slot, d] of Object.entries(spec)) {
+        const zSlots = Object.entries(spec).filter(([slot]) => slot !== "fade");
+        for (const [slot, d] of zSlots) {
           const sign = (slot === "s1Long" || slot === "s2Short") ? +1 : -1; // z≥+K1 슬롯=위 밴드
           bd[slot] = msFor(Number(d.w)).map((p) => ({ time: p.time, value: p.ma + sign * Number(d.k) * p.sd }));
         }
-        const minWin = Math.min(...Object.values(spec).map((d) => Number(d.w) || Infinity));
-        const msMin = msFor(minWin);
-        bd.ma = msMin.map((p) => ({ time: p.time, value: p.ma })); // 회색 앵커 = 최단 창 MA
+        // 급락페이드 트리거선: 각 시점 t의 트리거가 = close(t − m분) × (1 − drop).
+        //   현재가가 이 선 이하로 떨어지면 페이드 롱 트리거(쿨다운 별개).
+        if (spec.fade) {
+          const mSec = Number(spec.fade.m) * 60;
+          const dropMul = 1 - Number(spec.fade.drop);
+          const closeByTime = new Map();
+          for (const b of forBand) if (Number.isFinite(b?.close)) closeByTime.set(b.time, b.close);
+          const line = [];
+          for (const b of forBand) {
+            if (b.time < start || b.time >= end) continue;
+            const past = closeByTime.get(b.time - mSec);
+            if (Number.isFinite(past)) line.push({ time: b.time, value: past * dropMul });
+          }
+          bd.fade = line;
+        }
+        if (zSlots.length) {
+          const minWin = Math.min(...zSlots.map(([, d]) => Number(d.w) || Infinity));
+          const msMin = msFor(minWin);
+          bd.ma = msMin.map((p) => ({ time: p.time, value: p.ma })); // 회색 앵커 = 최단 창 MA
+          setMaSd(msMin); // 배지(로딩중/데이터부족) 판단용
+        } else {
+          bd.ma = [];
+          setMaSd(bd.fade || []); // fade 전용 심볼: 배지 판단은 fade 라인 존재로
+        }
         setBandData(bd);
-        setMaSd(msMin); // 배지(로딩중/데이터부족) 판단용
       } else {
         setBandData(null);
         setMaSd([]);
