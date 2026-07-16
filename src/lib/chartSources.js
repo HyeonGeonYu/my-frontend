@@ -1,6 +1,7 @@
 // src/lib/chartSources.js
 import { getWsHub, buildSignalAnnotations } from "./tradeUtils";
-import { fetchSignals, isDailySignal } from "./tradeUtils";
+import { isDailySignal } from "./tradeUtils";
+import { signalsRepo } from "./signalsRepo";
 
 const PAGE_LIMIT = 1000;
 const ONE_DAY_SEC = 86400;
@@ -42,7 +43,7 @@ function getDayCache(cache, cacheKey, dayKey) {
 // -------------------- caches (namespaced) --------------------
 // NOTE: module-scope singleton caches (앱 생명주기 동안 유지, 새로고침 시 초기화)
 const candleCache = makeCandleCache(); // cacheKey -> Map(dayOffset->rows)
-const signalCache = new Map(); // signalKey -> { markers, notes }
+// (신호 캐시는 signalsRepo가 ns 단위로 담당 — 심볼별 signalCache 제거)
 
 // -------------------- BYBIT REST --------------------
 
@@ -389,34 +390,30 @@ function enrichAnnotationsWithSignals(sigs = [], markers = [], notes = []) {
 // -------------------- signals (namespaced) --------------------
 
 async function ensureSignalsNamespaced({ sourceId, symUpper, signalName, signalNames }) {
-  // ✅ v4: 1분 신호가 여러 스트림에 분산(구 채널 드레인 + 신규 s11/s11m) → 배열이면 전부 fetch·병합
+  // ✅ v4: 1분 신호가 여러 스트림에 분산(구 채널 드레인 + 신규 s11/s11m) → 배열이면 전부 병합.
+  //   ⚡ Redis 절감: 심볼별 /api/signals 호출을 없애고, signalsRepo가 ns당 1회만 로드한
+  //   통짜 8일치(캐시 공유)에서 이 심볼을 필터해 마커를 만든다. (notes 경로와 같은 캐시 재사용)
   const names = Array.isArray(signalNames) && signalNames.length
     ? signalNames
     : [String(signalName || "default")];
-  const key = `${sourceId}:sig:${names.join("+")}:${symUpper}`;
 
-  if (!signalCache.has(key)) {
-    const lists = await Promise.all(
-      names.map((nm) => fetchSignals(symUpper, nm).catch(() => []))
-    );
-    const sigsRaw = lists.flat();
-    // 1분 차트: 일봉(S3/S4) 신호 제외(bybit/mt5 스트림에 일봉 신호 통합됨 — 필수 방어).
-    const sigs = sigsRaw.filter((s) => !isDailySignal(s));
-    const { markers, notes } = buildSignalAnnotations(sigs);
-
-    const enriched = enrichAnnotationsWithSignals(
-      sigs,
-      markers || [],
-      notes || []
-    );
-
-    signalCache.set(key, {
-      markers: enriched.markers || [],
-      notes: enriched.notes || [],
-    });
+  let sigsRaw = [];
+  try {
+    const data = await signalsRepo.load8dMulti({ names });
+    sigsRaw = data?.bySymbol?.get(symUpper) || [];
+  } catch {
+    sigsRaw = [];
   }
 
-  return signalCache.get(key);
+  // 1분 차트: 일봉(S3/S4) 신호 제외(bybit/mt5 스트림에 일봉 신호 통합됨 — 필수 방어).
+  const sigs = sigsRaw.filter((s) => !isDailySignal(s));
+  const { markers, notes } = buildSignalAnnotations(sigs);
+  const enriched = enrichAnnotationsWithSignals(sigs, markers || [], notes || []);
+
+  return {
+    markers: enriched.markers || [],
+    notes: enriched.notes || [],
+  };
 }
 
 // -------------------- Source factories --------------------
@@ -434,6 +431,7 @@ export function makeBybitSource({ signalName = "bybit", signalNames = ["bybit", 
     wsHub,
     signalName,
     signalNames,
+    tradeRecordsNs: "agent:CopyZannavi:u7c9f14d2a1:BYBIT",
 
     // candle cache helpers (optional)
     getDayWindowByOffset,
@@ -544,6 +542,7 @@ export function makeCfdSource({ signalName = "mt5", signalNames = ["mt5", "s11m"
     wsHub,
     signalName,
     signalNames,
+    tradeRecordsNs: "agent:CopyZannaviMT5:u8f3a9c1e7b:MT5",
 
     getDayWindowByOffset,
 

@@ -8,6 +8,7 @@ import BandLegend from "../components/common/BandLegend";
 import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
 import { minuteBandSpec, STRAT_PARAMS, fmtParam, fmtFade } from "../lib/strategyParams";
 import useIsMobile from "../hooks/useIsMobile";
+import { fetchConfigCached } from "../lib/configCache";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
@@ -1085,17 +1086,6 @@ function LogicLiveTab() {
 }
 
 
-/* ------------------------- threshold meta ------------------------- */
-async function fetchThresholdMeta(symbol, ns) {
-    const qs = new URLSearchParams({ symbol: String(symbol || "") });
-    if (ns) qs.set("name", String(ns));
-    const url = `/api/thresholds?${qs.toString()}`;
-
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json()) || null;
-}
-
 /* ------------------------- symbols 추출 유틸 ------------------------- */
 function extractSymbolsFromConfig(cfgRaw) {
     const root = cfgRaw?.config ?? cfgRaw;
@@ -1176,9 +1166,7 @@ export default function Coin() {
         let alive = true;
         (async () => {
             try {
-                const r = await fetch("/api/config", { cache: "no-store" });
-                if (!r.ok) return;
-                const j = await r.json();
+                const j = await fetchConfigCached("bybit"); // ⚡ 5분 캐시(거의 불변)
                 if (alive) setConfigState(j?.config ?? j);
             } catch {
             } finally {
@@ -1216,7 +1204,6 @@ export default function Coin() {
 
     const symbolsReady = symbolsConfig.length > 0;
     const requiredSymbols = useMemo(() => symbolsConfig.map((s) => s.symbol), [symbolsConfig]);
-    const requiredSymbolsKey = useMemo(() => requiredSymbols.join(","), [requiredSymbols]);
     /* ------------------------- asset ------------------------- */
     const [asset, setAsset] = useState({ wallet: { USDT: 0 }, positions: {} });
 
@@ -1239,9 +1226,9 @@ export default function Coin() {
 
         (async () => {
             try {
-                const symbolsQs = requiredSymbolsKey ? `&symbols=${encodeURIComponent(requiredSymbolsKey)}` : "";
-
-                const res = await fetch(`/api/asset?ns=${encodeURIComponent(assetNs)}${symbolsQs}`, { cache: "no-store" });
+                // ⚡ symbols 파라미터 제거 → 서버가 HSCAN 1회(~2명령)로 전 포지션 반환
+                //   (심볼별 HGET N+1 명령 대비 절감)
+                const res = await fetch(`/api/asset?ns=${encodeURIComponent(assetNs)}`, { cache: "no-store" });
 
                 const j = res.ok ? await res.json() : null;
                 if (!alive || !j) return;
@@ -1253,7 +1240,7 @@ export default function Coin() {
         return () => {
             alive = false;
         };
-    }, [assetNs, symbolsReady, requiredSymbolsKey]);
+    }, [assetNs, symbolsReady]);
 
     /* ------------------------- stats ------------------------- */
     const [statsMap, setStatsMap] = useState({});
@@ -1262,31 +1249,6 @@ export default function Coin() {
             ...prev, [symbol]: { ...prev[symbol], ...stats },
         }));
     }, []);
-
-    /* ------------------------- threshold/meta ------------------------- */
-    const [metaMap, setMetaMap] = useState({});
-    useEffect(() => {
-        let alive = true;
-        if (!symbolsReady) return;
-
-        (async () => {
-            try {
-                const results = await Promise.all(symbolsConfig.map((s) => fetchThresholdMeta(s.symbol, signalNs).catch(() => null)));
-                if (!alive) return;
-
-                const merged = {};
-                results.forEach((m, i) => {
-                    if (m) merged[symbolsConfig[i].symbol] = m;
-                });
-                setMetaMap((prev) => ({ ...prev, ...merged }));
-            } catch {
-            }
-        })();
-
-        return () => {
-            alive = false;
-        };
-    }, [symbolsConfig, symbolsReady, signalNs]);
 
     /* ------------------------- equity (현재 평가액) ------------------------- */
     const START_USDT = 500;
@@ -1590,7 +1552,6 @@ export default function Coin() {
                             {symbolsConfig.map((s) => {
                                 const sym = s.symbol;
                                 const st = statsMap[sym];
-                                const meta = metaMap[sym] || {};
                                 const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
                                 const active = selectedSymbol === sym;
 
@@ -1612,7 +1573,6 @@ export default function Coin() {
                                             ma100={st?.ma100 ?? null}
                                             chg3mPct={st?.chg3mPct ?? null}
                                             ps={ps}
-                                            meta={meta}
                                             closesUnit="minutes"
                                         />
                                     </div>
@@ -1659,7 +1619,6 @@ export default function Coin() {
                                         onStats={onStats}
                                         bandSpec={minuteBandSpec(s.symbol)}
                                         entryLines={ent}
-                                        crossTimes={metaMap[s.symbol]?.cross_times}
                                         bounds={{ min: -7, max: 0 }}
                                     />
                                 )}

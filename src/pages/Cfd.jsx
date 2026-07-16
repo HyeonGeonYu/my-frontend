@@ -7,6 +7,7 @@ import BandLegend from "../components/common/BandLegend";
 import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
 import { minuteBandSpec } from "../lib/strategyParams";
 import useIsMobile from "../hooks/useIsMobile";
+import { fetchConfigCached } from "../lib/configCache";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol, calcEquityUSDT} from "../lib/tradeUtils";
@@ -46,17 +47,6 @@ function extractSymbolsFromConfig(cfg) {
     return arr.map((s) => String(s).trim()).filter(Boolean).map((s) => s.toUpperCase());
 }
 
-/* ------------------------- threshold meta ------------------------- */
-async function fetchThresholdMeta(symbol, name) {
-    const qs = new URLSearchParams({symbol: String(symbol || "")});
-    if (name) qs.set("name", String(name));
-    const url = `/api/thresholds?${qs.toString()}`;
-
-    const res = await fetch(url, {cache: "no-store"});
-    if (!res.ok) return null;
-    return (await res.json()) || null;
-}
-
 export default function Cfd() {
     const isMobile = useIsMobile();
     /* ------------------------- config ------------------------- */
@@ -69,10 +59,10 @@ export default function Cfd() {
         let alive = true;
         (async () => {
             try {
-                const r = await fetch("/api/config?name=mt5", {cache: "no-store"});
-                const j = r.ok ? await r.json() : null;
+                const j = await fetchConfigCached("mt5"); // ⚡ 5분 캐시(거의 불변)
                 if (!alive) return;
                 setConfigState(j?.config ?? j);
+            } catch {
             } finally {
                 if (alive) setConfigLoaded(true);
             }
@@ -93,79 +83,15 @@ export default function Cfd() {
     const [selectedSymbol, setSelectedSymbol] = useState(null);
     const [timeframe, setTimeframe] = useState("1m"); // "1m" | "1D"
 
-    /* ------------------------- threshold meta ------------------------- */
-    const [metaMap, setMetaMap] = useState({});
-
-    useEffect(() => {
-        let alive = true;
-        if (!symbolsReady) return;
-
-        (async () => {
-            try {
-                const namespace = "mt5";
-                const results = await Promise.all(symbols.map((s) => fetchThresholdMeta(s, namespace).catch(() => null)));
-                if (!alive) return;
-
-                const merged = {};
-                results.forEach((m, i) => {
-                    if (m) merged[symbols[i]] = m;
-                });
-                setMetaMap((prev) => ({...prev, ...merged}));
-            } catch {
-            }
-        })();
-
-        return () => {
-            alive = false;
-        };
-    }, [symbols, symbolsReady]);
-
-    /* ------------------------- min + sorting + visibility ------------------------- */
-    const minMaThreshold = useMemo(() => {
-        const n = Number(configState?.min_ma_threshold);
-        return Number.isFinite(n) ? n : null;
-    }, [configState]);
-
+    /* ------------------------- sorting + visibility ------------------------- */
     // ✅ 차트/티커 순서 = 포지션 크기(진입금액) 큰 순 (포지션 없으면 뒤로, 알파벳)
     const symbolsSortedByMa = useMemo(
         () => sortSymbolsByPosition(symbols, asset),
         [symbols, asset]
     );
 
-   const {filteredSymbols} = useMemo(() => {
-        const visible = [];
-        const hidden = [];
-
-        for (const s of symbolsSortedByMa) {
-            const tRaw = metaMap[s]?.ma_threshold;
-
-            // ✅ sigma(S1/S2) 전환 후 mt5는 basic ma_threshold가 없음(null) → 숨기지 말고 표시.
-            //   (옛 basic 전략 때만 쓰던 min 게이트. ma_threshold가 실제 양수일 때만 적용)
-            if (tRaw == null) {
-                visible.push(s);
-                continue;
-            }
-
-            const t = Number(tRaw);
-
-            if (!Number.isFinite(t)) {
-                visible.push(s);
-                continue;
-            }
-
-            if (Number.isFinite(minMaThreshold) && t < minMaThreshold) {
-                hidden.push({
-                    symbol: s,
-                    reason: `min 미만 (${t.toFixed(4)} < ${minMaThreshold.toFixed(4)})`,
-                });
-                continue;
-            }
-
-            visible.push(s);
-        }
-
-        return {filteredSymbols: visible, hiddenSymbols: hidden};
-    }, [symbolsSortedByMa, metaMap, minMaThreshold]);
+    // ✅ 옛 basic MA100 min-게이트는 제거(시그마 전환 후 무의미) → 정렬된 전 심볼 표시.
+    const filteredSymbols = symbolsSortedByMa;
 
     const visibleSymbols = useMemo(() => {
     if (!selectedSymbol) return filteredSymbols;
@@ -179,9 +105,11 @@ export default function Cfd() {
     }, []);
 
     /* ------------------------- MT5 자산 (데모/USD) — fetch ------------------------- */
+    // ⚡ Redis 절감: 15s→30s + 탭 숨김 시 폴링 정지(안 보는 탭이 계속 읽지 않게).
     useEffect(() => {
         let alive = true;
         const load = async () => {
+            if (typeof document !== "undefined" && document.hidden) return; // 숨김 탭은 스킵
             try {
                 const res = await fetch(`/api/asset?ns=${encodeURIComponent(MT5_ASSET_NS)}&wallet=USD`, {cache: "no-store"});
                 const j = await res.json();
@@ -191,8 +119,10 @@ export default function Cfd() {
             }
         };
         load();
-        const t = setInterval(load, 15000);
-        return () => { alive = false; clearInterval(t); };
+        const t = setInterval(load, 30000);
+        const onVis = () => { if (!document.hidden) load(); }; // 다시 보일 때 즉시 1회 갱신
+        document.addEventListener("visibilitychange", onVis);
+        return () => { alive = false; clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
     }, []);
 
     // ✅ 자산 포지션 심볼(FX 등)의 현재가 — CFD 차트(지수/금속)엔 없으니 직접 받아와 미실현 PnL 채움.
@@ -206,6 +136,7 @@ export default function Cfd() {
         if (!syms.length) return;
         let alive = true;
         const load = async () => {
+            if (typeof document !== "undefined" && document.hidden) return; // 숨김 탭은 스킵
             const out = {};
             await Promise.all(syms.map(async (s) => {
                 try {
@@ -221,8 +152,10 @@ export default function Cfd() {
             if (alive && Object.keys(out).length) setFxPriceMap((prev) => ({...prev, ...out}));
         };
         load();
-        const t = setInterval(load, 15000);
-        return () => { alive = false; clearInterval(t); };
+        const t = setInterval(load, 30000);
+        const onVis = () => { if (!document.hidden) load(); };
+        document.addEventListener("visibilitychange", onVis);
+        return () => { alive = false; clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
     }, [posKey]);
 
     // 자산 패널용 통합 stats: 차트에서 온 가격 + FX 직접 받은 가격
@@ -448,7 +381,6 @@ export default function Cfd() {
                             <div style={{display: "grid", gap: 12}}>
     {filteredSymbols.map((sym) => {
         const st = symbolStatsMap[sym];
-        const meta = metaMap[sym];
         const ps = typeof st?.priceScale === "number" ? st.priceScale : 2;
         const active = selectedSymbol === sym;
 
@@ -470,7 +402,6 @@ export default function Cfd() {
                     ma100={st?.ma100 ?? null}
                     chg3mPct={st?.chg3mPct ?? null}
                     ps={ps}
-                    meta={meta}
                     closesUnit="minutes"
                 />
             </div>
@@ -516,7 +447,6 @@ export default function Cfd() {
                                             anchorEndUtcSec={anchorEndUtcSec}
                                             bandSpec={resolveBandMt5(s)}
                                             entryLines={ent}
-                                            crossTimes={metaMap[s]?.cross_times}
                                             onStats={onStats}
                                             bounds={{min: -7, max: 0}}
                                         />

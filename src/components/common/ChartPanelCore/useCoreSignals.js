@@ -2,6 +2,7 @@
 import { useCallback, useRef } from "react";
 import { buildCrossMarkers } from "../../../lib/tradeUtils";
 import { signalsRepo } from "../../../lib/signalsRepo";
+import { tradeRecordsRepo } from "../../../lib/tradeRecordsRepo";
 import { getNetPnlPctFromSignal, fmtSignedPct } from "./coreUtils";
 
 
@@ -77,8 +78,6 @@ function buildBaseArchiveLikeText(item, exec) {
         signalType,
     ].filter(Boolean).join(" · ");
 }
-
-const TRADE_RECORDS_NS = "agent:CopyZannavi:u7c9f14d2a1:BYBIT";
 
 function toNumOrNull(v) {
     if (v === null || v === undefined || v === "") return null;
@@ -294,29 +293,11 @@ function assignWindowSignalNumbers(items = [], { markerText = true } = {}) {
         });
 }
 
-async function fetchTradeRecordsForChart({ symbol, dayOffset }) {
-    const qs = new URLSearchParams({
-        ns: TRADE_RECORDS_NS,
-        symbol: String(symbol || "").toUpperCase(),
-        days: "10",
-        limit: "1000",
-    });
-
-    // api가 dayOffset을 아직 안 쓰고 days 기반이면 없어도 됨.
-    // 만들어둔 api가 dayOffset 지원하면 같이 넘겨도 됨.
-    qs.set("dayOffset", String(dayOffset || 0));
-
-    const res = await fetch(`/api/tradeRecords?${qs.toString()}`, {
-        cache: "no-store",
-    });
-
-    const json = await res.json().catch(() => null);
-
-    if (!res.ok || !json || json.retCode !== 0) {
-        throw new Error(json?.retMsg || json?.error || "tradeRecords fetch failed");
-    }
-
-    return Array.isArray(json.records) ? json.records : [];
+// ⚡ Redis 절감: 심볼별 /api/tradeRecords 호출 제거 → ns당 1회 로드(캐시)에서 심볼 필터.
+//   (tradeRecords Redis 키는 ns 단위 스트림 하나 — 심볼마다 재읽을 이유 없음)
+async function fetchTradeRecordsForChart({ ns, symbol }) {
+    if (!ns) return [];
+    return tradeRecordsRepo.getForSymbol(ns, symbol).catch(() => []);
 }
 
 export default function useCoreSignals({ source, dayOffset, crossTimes }) {
@@ -331,8 +312,8 @@ export default function useCoreSignals({ source, dayOffset, crossTimes }) {
             let tradeRecords = [];
             try {
                 tradeRecords = await fetchTradeRecordsForChart({
+                    ns: source?.tradeRecordsNs,
                     symbol: symUpper,
-                    dayOffset,
                 });
             } catch {
                 tradeRecords = [];
