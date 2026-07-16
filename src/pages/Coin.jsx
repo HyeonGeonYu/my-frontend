@@ -15,7 +15,7 @@ import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbo
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
 
-// 일봉(S3/S4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조, 재fetch 방지).
+// 일봉(S33=s3/s4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조, 재fetch 방지).
 // v2(bb1525a)에서 크립토 일봉이 bybit 스트림으로 통합(태그 S3/S4로 구분). cryptod는 통합 전 히스토리용.
 const COIN_DAILY_SIGNALS = ["bybit", "cryptod"];
 
@@ -598,7 +598,7 @@ function TradingLogicTabs() {
                 <div>
                     <div style={{ fontSize: 17, fontWeight: 900 }}>트레이딩 로직 설명</div>
                     <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7, lineHeight: 1.5 }}>
-                        S11 「1분봉책」(z추세·z역추세·급락페이드 3패밀리) + 일봉 S3(추세)·S4(역추세). 구 S1/S2는 드레인(청산만) 중.
+                        3책 구조: S11 「1분봉책」 · S22 「4시간봉책」 · S33 「일봉책」. 구 S1/S2는 드레인(청산만) 중.
                     </div>
                 </div>
 
@@ -841,10 +841,10 @@ function LogicOverviewTab() {
     const head = { ...cell, fontWeight: 900, color: "#00ffcc", borderBottom: "1px solid #2a2a2a" };
     return (
         <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — S11 1분봉책(3패밀리) + 일봉(S3/S4)</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>전략 체계 — S11 「1분봉책」 · S22 「4시간봉책」 · S33 「일봉책」</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
                 가격이 이동평균에서 표준편차(σ) 기준 얼마나 떨어졌는지(z-score)로 진입을 판단합니다.
-                <b>1분봉 = S11 「1분봉책」 하나</b>(내부 3패밀리: z추세·z역추세·급락페이드), <b>일봉 = S3(추세)·S4(역추세)</b>.
+                <b>1분봉 = S11</b>(z추세·z역추세·급락페이드 3패밀리), <b>4시간봉 = S22</b>(z추세·z역추세·페이드·ewz추세·유동성스윕), <b>일봉 = S33</b>(추세·역추세).
                 구 S1/S2(7일 창)는 2026-07-12 폐기 — 신규 진입 없이 보유분 청산만 진행(드레인). 아래 표의 방향 정의는 z계열(S11/S12/S3/S4) 공통입니다.
             </div>
 
@@ -895,7 +895,7 @@ function LogicOverviewTab() {
                 background: "rgba(93,202,165,0.07)", border: "1px solid rgba(93,202,165,0.35)",
                 fontSize: 12, lineHeight: 1.7,
             }}>
-                <b style={{ color: "#5dcaa5" }}>S3 · S4 — 일봉(D1) 채널</b><br />
+                <b style={{ color: "#5dcaa5" }}>S33 — 일봉(D1) 채널</b><br />
                 같은 추세/역추세를 <b>일봉</b>에 적용한 버전(MA·σ 창 = 심볼×방향별 60~200일). 크립토·지수·금속·유가·FX 메이저에 적용,
                 1분봉책과는 <b>별개 신호채널·별개 포지션</b>입니다. 쿨다운 일(日) 단위, 최대보유 15일, 추매 없음.
                 심볼별 파라미터는 <b>심볼별 전략표</b> 탭에서 한눈에 볼 수 있습니다.
@@ -1027,10 +1027,10 @@ function LogicLiveTab() {
 
     return (
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 — S11(3패밀리)·S3·S4 한눈에</div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>심볼별 파라미터 — S11(1분)·S33(일봉) 한눈에 (S22 4시간은 아래 안내 참고)</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
                 z계열 칸 = <b>K1 / B / 쿨다운 · MA창</b> (롱 L / 숏 S, "—"=미채택). S13 = 급락 트리거·보유.
-                <b> S11(z추세/z역추세/급락페이드) = 1분봉</b>, <b>S3·S4 = 일봉</b>. 빈 칸은 "—".
+                <b> S11 = 1분봉</b>, <b>S33(s3/s4) = 일봉</b>. 빈 칸은 "—". S22 4시간봉책은 별도 채널(하단 안내).
             </div>
 
             <div style={{ overflowX: "auto" }}>
@@ -1041,8 +1041,8 @@ function LogicLiveTab() {
                             <th style={{ ...head, color: "#ffb86c" }}>S11 z추세·1m</th>
                             <th style={{ ...head, color: "#7ee787" }}>S11 z역추세·1m</th>
                             <th style={{ ...head, color: "#c084fc" }}>S11 급락페이드·1m</th>
-                            <th style={{ ...head, color: "#ffd166" }}>S3 추세·일</th>
-                            <th style={{ ...head, color: "#5dcaa5" }}>S4 역추세·일</th>
+                            <th style={{ ...head, color: "#ffd166" }}>S33 추세·일</th>
+                            <th style={{ ...head, color: "#5dcaa5" }}>S33 역추세·일</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1074,7 +1074,7 @@ function LogicLiveTab() {
 
             <div style={{ marginTop: 8, fontSize: 11.5, opacity: 0.75, lineHeight: 1.6 }}>
                 • S11 z계열(z추세/z역추세): 게임 중첩, 쿨다운 시간 단위, 최대보유 14일, 롱 SL無. 급락페이드는 셀별 보유(24~72h).<br />
-                • 일봉(S3/S4): MA창 심볼×방향별 60~200일, 쿨다운 일(日) 단위, 최대보유 15일, 추매 없음.
+                • 일봉(S33): MA창 심볼×방향별 60~250일, 쿨다운 일(日) 단위, 최대보유 15일, 추매 없음. (13.5년 재검증 — 파라미터 교체 9·기각 7·드레인 3)
             </div>
 
             <div style={LWARN}>
