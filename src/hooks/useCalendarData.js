@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
-
 export const useMarketHolidaysData = () => {
   const [holidaysData, setHolidays] = useState(null); // 공휴일 데이터 상태
   const [loading, setLoading] = useState(true); // 로딩 상태
@@ -10,7 +8,7 @@ export const useMarketHolidaysData = () => {
   useEffect(() => {
     setLoading(true);
 
-    fetch(`${API_BASE_URL}/market-holidays`)  // API 호출
+    fetch(`/api/market-holidays`)  // API 호출
       .then((res) => res.json())
       .then((holidayData) => {
         setHolidays(holidayData);  // 공휴일 데이터 설정

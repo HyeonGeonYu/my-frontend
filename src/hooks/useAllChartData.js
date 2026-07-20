@@ -1,8 +1,6 @@
 // hooks/useAllChartData.js
 import { useState, useEffect } from "react";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
-
 export const useAllChartData = (endpointInput) => {
   const [processedData, setData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -20,7 +18,7 @@ export const useAllChartData = (endpointInput) => {
       try {
         const results = await Promise.all(
           endpointList.map(async (endpointPath) => {
-            const endpoint = `${API_BASE_URL}/chartdata/${endpointPath}`;
+            const endpoint = `/api/chartdata?cat=${encodeURIComponent(endpointPath)}`;
             const res = await fetch(endpoint);
             if (!res.ok) throw new Error(`HTTP ${res.status}: ${endpoint}`);
             const chartData = await res.json();
