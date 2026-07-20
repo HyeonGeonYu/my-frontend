@@ -18,22 +18,26 @@ export const FX_SYMBOLS = new Set([
   "USDJPY", "EURUSD", "GBPUSD", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
 ]);
 
-// 전략 태그 → 사람이 읽는 라벨 (봇 utils/logger.py _STRAT_KR 미러)
+// 전략 태그 → 사람이 읽는 라벨 (봇 utils/logger.py _STRAT_KR 미러).
+//   S3/S4는 책 배지(S33=일봉책)가 봉을 말해주므로 "추세/역추세"로 표기(중복 제거).
 const STRAT_KR = {
-  S1: "추세", S2: "역추세", S3: "일봉추세", S4: "일봉역추세",
+  S1: "추세", S2: "역추세", S3: "추세", S4: "역추세",
   S11: "z추세", S12: "z역추세", S13: "급락페이드", S14: "ewz추세", S15: "유동성스윕",
 };
 
-// ns → 책(봉) 라벨. bybit/mt5 ns는 일봉(s3/s4)과 구 1분(s1/s2 드레인)이 공존 → 전략으로 분기.
-function bookLabel(ns, strat) {
+// ns → 소속 책 {code, tf}. S11=1분봉책 / S22=4시간봉책 / S33=일봉책 / 구=드레인 중 구 1분 채널.
+//   bybit/mt5 ns는 일봉(s3/s4)과 구 1분(s1/s2)이 공존 → 전략으로 분기.
+function bookOf(ns, strat) {
   const n = String(ns || "").toLowerCase();
-  if (n === "s11" || n === "s11m") return "1분";
-  if (n === "s22" || n === "s22m") return "4h";
-  if (n === "fxd" || n === "cryptod" || n === "mt5d") return "일봉";
+  if (n === "s11" || n === "s11m") return { code: "S11", tf: "1분" };
+  if (n === "s22" || n === "s22m") return { code: "S22", tf: "4h" };
+  if (n === "fxd" || n === "cryptod" || n === "mt5d") return { code: "S33", tf: "일봉" };
   if (n === "bybit" || n === "mt5") {
-    return strat === "S3" || strat === "S4" ? "일봉" : "구1분";
+    return strat === "S3" || strat === "S4"
+      ? { code: "S33", tf: "일봉" }
+      : { code: "구", tf: "1분" };
   }
-  return n;
+  return { code: n, tf: "" };
 }
 
 // 페이지별 유니버스 결정 (심볼 기반 — 봇 universe_of 미러)
@@ -134,13 +138,15 @@ export async function loadTradeStats(page, nsList) {
       const pnl = sig?.pnl_pct !== null && sig?.pnl_pct !== undefined ? Number(sig.pnl_pct) : null;
       const w = entryWeightPct(page, ns, strat, symbol);
       const uni = universeOf(page, symbol);
-      const book = bookLabel(ns, strat);
-      const rowKey = `${book}·${strat}`;
-      const label = `${book} ${STRAT_KR[strat] || strat}`;
+      const book = bookOf(ns, strat);
+      const rowKey = `${book.code}·${strat}`;
+      const label = STRAT_KR[strat] || strat;
 
       if (!groups.has(uni)) groups.set(uni, { total: emptyBucket(), rows: new Map() });
       const g = groups.get(uni);
-      if (!g.rows.has(rowKey)) g.rows.set(rowKey, { key: rowKey, label, strat, book, ...emptyBucket() });
+      if (!g.rows.has(rowKey)) {
+        g.rows.set(rowKey, { key: rowKey, label, strat, book: book.code, tf: book.tf, ...emptyBucket() });
+      }
 
       addTo(total, pnl, w);
       addTo(g.total, pnl, w);
@@ -156,7 +162,7 @@ export async function loadTradeStats(page, nsList) {
       universe,
       total: finalize(g.total),
       rows: [...g.rows.values()]
-        .map((r) => ({ key: r.key, label: r.label, strat: r.strat, book: r.book, ...finalize(r) }))
+        .map((r) => ({ key: r.key, label: r.label, strat: r.strat, book: r.book, tf: r.tf, ...finalize(r) }))
         .sort((a, b) => Math.abs(b.contribPct) - Math.abs(a.contribPct)),
     }));
 
