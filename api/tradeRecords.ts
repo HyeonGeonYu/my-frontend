@@ -234,8 +234,9 @@ function calcResolvedPnlUsdt(
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // 트레이딩 데이터는 로컬 Redis(터널). 미설정 시 Upstash로 폴백(무중단 롤아웃).
+  const url = process.env.TRADING_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.TRADING_REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
     return json({ retCode: -1, retMsg: "Env missing UPSTASH_REDIS_REST_URL/TOKEN" }, 500);
