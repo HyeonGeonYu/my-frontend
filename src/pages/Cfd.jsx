@@ -12,6 +12,7 @@ import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol, calcEquityUSDT} from "../lib/tradeUtils";
 import Mt5EquityHistoryCard from "../components/common/Mt5EquityHistoryCard";
+import TradeStatsCard from "../components/common/TradeStatsCard";
 import { getDayLabel } from "../utils/date";
 
 // MT5(CFD·FX) 계정 — 데모/모의계좌. 자산은 USD 표시. (Bybit은 agent:CopyZannavi:...:BYBIT)
@@ -20,6 +21,9 @@ const MT5_ASSET_NS = "agent:CopyZannaviMT5:u8f3a9c1e7b:MT5";
 // 일봉(S3/S4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조).
 // v2(bb1525a)에서 MT5 비환율 일봉이 mt5 스트림으로 통합(태그 S3/S4로 구분). FX 일봉=fxd 유지, mt5d는 히스토리용.
 const CFD_DAILY_SIGNALS = ["fxd", "mt5", "mt5d"];
+
+// 매매전적 통계용 — MT5 계좌 전 채널: 1분책 s11m + 4h책 s22m + 일봉·구채널(mt5) + FX일봉(fxd) + 히스토리.
+const CFD_STATS_SIGNALS = ["s11m", "s22m", "mt5", "fxd", "mt5d"];
 
 // ✅ z-score 진입 밴드용 K1 — STRAT_PARAMS 단일 소스에서 파생(k1setFor). 별도 하드코딩 맵 금지.
 //   HFM 브로커 심볼 별칭은 canonical(US100 등)로 정규화 후 조회.
@@ -252,6 +256,10 @@ export default function Cfd() {
                         </div>
                         <Mt5EquityHistoryCard currentEquity={calcEquityUSDT(asset, assetStats, "USD")} />
                         <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" />
+                        {/* ✅ 매매 전적 통계 (최근 30일, MT5·환율 유니버스) */}
+                        <div style={{ marginTop: 12 }}>
+                            <TradeStatsCard page="cfd" nsList={CFD_STATS_SIGNALS} />
+                        </div>
                     </div>
 
                     <BandLegend mode={timeframe} />

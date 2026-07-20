@@ -14,10 +14,14 @@ import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
+import TradeStatsCard from "../components/common/TradeStatsCard";
 
 // 일봉(S33=s3/s4) 신호 스트림 네임스페이스 — 모듈 상수(안정 참조, 재fetch 방지).
 // v2(bb1525a)에서 크립토 일봉이 bybit 스트림으로 통합(태그 S3/S4로 구분). cryptod는 통합 전 히스토리용.
 const COIN_DAILY_SIGNALS = ["bybit", "cryptod"];
+
+// 매매전적 통계용 — 크립토 유니버스(U1) 전 채널: 1분책 s11 + 4h책 s22 + 일봉·구채널(bybit) + 히스토리.
+const COIN_STATS_SIGNALS = ["s11", "s22", "bybit", "cryptod"];
 
 /* ------------------------- 상단 배너 ------------------------- */
 function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qrSize = 92 }) {
@@ -1422,6 +1426,11 @@ export default function Coin() {
                     <div style={{ minWidth: 0, overflow: "hidden" }}>
                         <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState} />
                     </div>
+                </div>
+
+                {/* ✅ 매매 전적 통계 (최근 30일, 크립토 유니버스) */}
+                <div style={{ maxWidth: PAGE_MAX_W, margin: "0 auto 18px", minWidth: 0 }}>
+                    <TradeStatsCard page="coin" nsList={COIN_STATS_SIGNALS} />
                 </div>
                 {/* ✅ 밴드 범례 (1분봉=S1/S2, 일봉=S3/S4) */}
                 <div style={{ maxWidth: PAGE_MAX_W, margin: "0 auto 4px", minWidth: 0 }}>

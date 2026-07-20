@@ -126,9 +126,11 @@ export async function GET(req: Request): Promise<Response> {
     const fromParam = searchParams.get("from"); // ISO or ms parse 가능한 문자열
     const toParam = searchParams.get("to");
 
-    // ✅ limit: 기본 500 (8일치가 500 미만이라는 전제)
+    // ✅ limit: 기본 500 (8일치가 500 미만이라는 전제).
+    //   상한 3000 — 매매전적 통계(30일, ENTRY+EXIT 전체)용. XRANGE는 range 앞(과거)부터
+    //   limit개를 자르므로 상한이 낮으면 최신 데이터가 잘린다.
     const limitParam = parseInt(searchParams.get("limit") || "500", 10);
-    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 500;
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 3000) : 500;
 
     const nowMs = Date.now();
     const fromMs = fromParam ? new Date(fromParam).getTime() : toParam ? 0 : nowMs - days * DAY_MS;

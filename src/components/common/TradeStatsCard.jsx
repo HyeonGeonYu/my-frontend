@@ -1,0 +1,137 @@
+// src/components/common/TradeStatsCard.jsx
+// 매매 전적 통계 카드 (최근 30일) — 전체 게임수·승률·자산 기여도 + 유니버스별 전략 분해.
+//   데이터/정의: src/lib/tradeStats.js (시그널 EXIT 기반, 기여도 = Σ pnl% × 전략 진입비중).
+import React, { useEffect, useState } from "react";
+import { loadTradeStats, STATS_DAYS } from "../../lib/tradeStats";
+
+const fmtPct = (n, d = 1) =>
+  typeof n === "number" && Number.isFinite(n)
+    ? `${n >= 0 ? "+" : ""}${n.toFixed(d)}%`
+    : "—";
+const fmtWin = (n) =>
+  typeof n === "number" && Number.isFinite(n) ? `${n.toFixed(0)}%` : "—";
+const pnlColor = (n) =>
+  typeof n === "number" && Number.isFinite(n)
+    ? n > 0 ? "#16a34a" : n < 0 ? "#dc2626" : "#aaa"
+    : "#aaa";
+
+function SummaryChip({ label, value, color }) {
+  return (
+    <div
+      style={{
+        display: "inline-flex", alignItems: "baseline", gap: 6,
+        padding: "6px 10px", borderRadius: 999,
+        background: "#1a1a1a", border: "1px solid #2a2a2a",
+        fontSize: 12, whiteSpace: "nowrap",
+      }}
+    >
+      <span style={{ opacity: 0.7 }}>{label}</span>
+      <b style={{ fontSize: 14, color: color || "#fff" }}>{value}</b>
+    </div>
+  );
+}
+
+export default function TradeStatsCard({ page, nsList, title = `매매 전적 (최근 ${STATS_DAYS}일)` }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    setErr(null);
+    loadTradeStats(page, nsList)
+      .then((d) => { if (alive) setData(d); })
+      .catch((e) => { if (alive) setErr(e?.message || "load failed"); });
+    return () => { alive = false; };
+    // nsList는 페이지 모듈 상수(안정 참조) 전제
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  const cell = { padding: "5px 8px", borderBottom: "1px solid #222", fontSize: 12, whiteSpace: "nowrap" };
+  const head = { ...cell, fontWeight: 900, color: "#00ffcc", fontSize: 11 };
+  const num = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+
+  return (
+    <div
+      style={{
+        padding: 16, borderRadius: 16,
+        background: "#151515", border: "1px solid #2a2a2a",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+        width: "100%", boxSizing: "border-box",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+        <div style={{ fontSize: 11, opacity: 0.6 }}>청산(EXIT) 신호 기준 · 게임=청산 1건</div>
+      </div>
+
+      {err && (
+        <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>전적을 불러오지 못했습니다: {String(err)}</div>
+      )}
+      {!err && !data && (
+        <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>불러오는 중...</div>
+      )}
+
+      {data && (
+        <>
+          {/* 전체 요약 */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <SummaryChip label="게임" value={data.total.games} />
+            <SummaryChip label="승률" value={fmtWin(data.total.winRatePct)} />
+            <SummaryChip
+              label="자산 기여도"
+              value={fmtPct(data.total.contribPct, 2)}
+              color={pnlColor(data.total.contribPct)}
+            />
+          </div>
+
+          {data.total.games === 0 ? (
+            <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>최근 {STATS_DAYS}일 청산 기록이 없습니다.</div>
+          ) : (
+            data.groups.map((g) => (
+              <div key={g.universe} style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontWeight: 900, fontSize: 13, color: "#00ffcc" }}>{g.universe}</div>
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>
+                    {g.total.games}게임 · 승률 {fmtWin(g.total.winRatePct)} ·{" "}
+                    <b style={{ color: pnlColor(g.total.contribPct) }}>{fmtPct(g.total.contribPct, 2)}</b>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 300 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...head, textAlign: "left" }}>전략</th>
+                        <th style={{ ...head, textAlign: "right" }}>게임</th>
+                        <th style={{ ...head, textAlign: "right" }}>승률</th>
+                        <th style={{ ...head, textAlign: "right" }}>기여도</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.rows.map((r) => (
+                        <tr key={r.key}>
+                          <td style={{ ...cell, fontWeight: 700 }}>{r.label}</td>
+                          <td style={num}>{r.games}</td>
+                          <td style={num}>{fmtWin(r.winRatePct)}</td>
+                          <td style={{ ...num, fontWeight: 800, color: pnlColor(r.contribPct) }}>
+                            {fmtPct(r.contribPct, 2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))
+          )}
+
+          <div style={{ marginTop: 10, fontSize: 11, opacity: 0.55, lineHeight: 1.5 }}>
+            * 기여도 = Σ(청산 수익률 × 전략별 진입비중) — 자산 대비 추정치(수수료 반영, 복리·부분체결 미반영).
+            {data.missingPnl > 0 ? ` · 수익률 미기록 ${data.missingPnl}건은 승률·기여도에서 제외.` : ""}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
