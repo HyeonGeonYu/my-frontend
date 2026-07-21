@@ -86,7 +86,7 @@ function stratOf(sig) {
 }
 
 function emptyBucket() {
-  return { games: 0, wins: 0, withPnl: 0, contribPct: 0 };
+  return { games: 0, wins: 0, withPnl: 0, contribPct: 0, sumPnlPct: 0 };
 }
 
 function addTo(bucket, pnlPct, weightPct) {
@@ -95,6 +95,7 @@ function addTo(bucket, pnlPct, weightPct) {
     bucket.withPnl += 1;
     if (pnlPct > 0) bucket.wins += 1;
     bucket.contribPct += (pnlPct / 100) * weightPct;
+    bucket.sumPnlPct += pnlPct;
   }
 }
 
@@ -105,6 +106,8 @@ function finalize(bucket) {
     withPnl: bucket.withPnl,
     winRatePct: bucket.withPnl > 0 ? (bucket.wins / bucket.withPnl) * 100 : null,
     contribPct: bucket.contribPct,
+    // 게임당 평균 수익률(포지션 기준 pnl_pct 단순평균 — 진입비중 미반영)
+    avgPnlPct: bucket.withPnl > 0 ? bucket.sumPnlPct / bucket.withPnl : null,
   };
 }
 

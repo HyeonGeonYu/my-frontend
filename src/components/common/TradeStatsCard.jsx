@@ -132,6 +132,11 @@ export default function TradeStatsCard({ page, nsList, title = `매매 전적 (�
             <SummaryChip label="게임" value={data.total.games} />
             <SummaryChip label="승률" value={fmtWin(data.total.winRatePct)} />
             <SummaryChip
+              label="게임당 평균"
+              value={fmtPct(data.total.avgPnlPct, 2)}
+              color={pnlColor(data.total.avgPnlPct)}
+            />
+            <SummaryChip
               label="자산 기여도"
               value={fmtPct(data.total.contribPct, 2)}
               color={pnlColor(data.total.contribPct)}
@@ -146,7 +151,8 @@ export default function TradeStatsCard({ page, nsList, title = `매매 전적 (�
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                   <div style={{ fontWeight: 900, fontSize: 13, color: "#00ffcc" }}>{g.universe}</div>
                   <div style={{ fontSize: 11, opacity: 0.7 }}>
-                    {g.total.games}게임 · 승률 {fmtWin(g.total.winRatePct)} ·{" "}
+                    {g.total.games}게임 · 승률 {fmtWin(g.total.winRatePct)} · 평균{" "}
+                    <b style={{ color: pnlColor(g.total.avgPnlPct) }}>{fmtPct(g.total.avgPnlPct, 2)}</b> ·{" "}
                     <b style={{ color: pnlColor(g.total.contribPct) }}>{fmtPct(g.total.contribPct, 2)}</b>
                   </div>
                 </div>
@@ -158,6 +164,7 @@ export default function TradeStatsCard({ page, nsList, title = `매매 전적 (�
                         <th style={{ ...head, textAlign: "left" }}>{view === "strat" ? "전략" : "심볼"}</th>
                         <th style={{ ...head, textAlign: "right" }}>게임</th>
                         <th style={{ ...head, textAlign: "right" }}>승률</th>
+                        <th style={{ ...head, textAlign: "right" }}>평균수익</th>
                         <th style={{ ...head, textAlign: "right" }}>기여도</th>
                       </tr>
                     </thead>
@@ -170,6 +177,7 @@ export default function TradeStatsCard({ page, nsList, title = `매매 전적 (�
                           </td>
                           <td style={num}>{r.games}</td>
                           <td style={num}>{fmtWin(r.winRatePct)}</td>
+                          <td style={{ ...num, color: pnlColor(r.avgPnlPct) }}>{fmtPct(r.avgPnlPct, 2)}</td>
                           <td style={{ ...num, fontWeight: 800, color: pnlColor(r.contribPct) }}>
                             {fmtPct(r.contribPct, 2)}
                           </td>
@@ -183,7 +191,7 @@ export default function TradeStatsCard({ page, nsList, title = `매매 전적 (�
           )}
 
           <div style={{ marginTop: 10, fontSize: 11, opacity: 0.55, lineHeight: 1.5 }}>
-            * 기여도 = Σ(청산 수익률 × 전략별 진입비중) — 자산 대비 추정치(수수료 반영, 복리·부분체결 미반영).
+            * 평균수익 = 게임당 청산 수익률(포지션 기준) 단순평균 · 기여도 = Σ(청산 수익률 × 전략별 진입비중) — 자산 대비 추정치(수수료 반영, 복리·부분체결 미반영).
             {data.missingPnl > 0 ? ` · 수익률 미기록 ${data.missingPnl}건은 승률·기여도에서 제외.` : ""}
           </div>
         </>
