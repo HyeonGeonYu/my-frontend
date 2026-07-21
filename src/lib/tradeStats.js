@@ -18,11 +18,11 @@ export const FX_SYMBOLS = new Set([
   "USDJPY", "EURUSD", "GBPUSD", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
 ]);
 
-// 전략 태그 → 사람이 읽는 라벨 (봇 utils/logger.py _STRAT_KR 미러).
-//   S3/S4는 책 배지(S33=일봉책)가 봉을 말해주므로 "추세/역추세"로 표기(중복 제거).
+// 전략 태그 → 패밀리 라벨 (봇 utils/logger.py _STRAT_KR 미러, 2026-07-21 텔레그램과 통일).
+//   책 배지(S11/S22/S33/구)가 소속을 말해주므로 라벨은 패밀리명만.
 const STRAT_KR = {
   S1: "추세", S2: "역추세", S3: "추세", S4: "역추세",
-  S11: "z추세", S12: "z역추세", S13: "급락페이드", S14: "ewz추세", S15: "유동성스윕",
+  S11: "추세", S12: "역추세", S13: "급락페이드", S14: "ewz추세", S15: "유동성스윕",
 };
 
 // ns → 소속 책 {code, tf}. S11=1분봉책 / S22=4시간봉책 / S33=일봉책 / 구=드레인 중 구 1분 채널.
