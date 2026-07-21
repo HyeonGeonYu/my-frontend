@@ -10,6 +10,9 @@ const TAG_COLORS = {
   S22: "#3a9bdc", S33: "#5dcaa5",
   S1: "#9aa0a6", S2: "#9aa0a6",
   S3: "#ffd166", S4: "#5dcaa5",
+  "리스크": "#f0883e", "프론트": "#00ffcc",
+  "검증": "#9fb4cc", "재검증": "#9fb4cc",
+  MT5: "#8ab4f8", FX: "#7ee787",
 };
 
 function fmtDate(d) {
@@ -43,29 +46,60 @@ export default function Updates() {
               boxShadow: "0 6px 18px rgba(0,0,0,0.3)",
             }}
           >
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 10 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 900, color: "#00ffcc", whiteSpace: "nowrap" }}>
-                {fmtDate(n.date)}
-              </span>
-              <span style={{ fontSize: 15.5, fontWeight: 900 }}>{n.title}</span>
-              <span style={{ display: "inline-flex", gap: 5, flexWrap: "wrap" }}>
-                {(n.tags || []).map((t) => (
-                  <span
-                    key={t}
-                    style={{
-                      fontSize: 10, fontWeight: 800,
-                      color: TAG_COLORS[t] || "#9aa0a6",
-                      border: `1px solid ${(TAG_COLORS[t] || "#9aa0a6")}55`,
-                      borderRadius: 999, padding: "1px 7px", whiteSpace: "nowrap",
-                    }}
-                  >
-                    {t}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              {n.icon && (
+                <span style={{ fontSize: 26, lineHeight: 1.2, flexShrink: 0 }}>{n.icon}</span>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 10 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 900, color: "#00ffcc", whiteSpace: "nowrap" }}>
+                    {fmtDate(n.date)}
                   </span>
-                ))}
-              </span>
+                  <span style={{ fontSize: 15.5, fontWeight: 900 }}>{n.title}</span>
+                  <span style={{ display: "inline-flex", gap: 5, flexWrap: "wrap" }}>
+                    {(n.tags || []).map((t) => (
+                      <span
+                        key={t}
+                        style={{
+                          fontSize: 10, fontWeight: 800,
+                          color: TAG_COLORS[t] || "#9aa0a6",
+                          border: `1px solid ${(TAG_COLORS[t] || "#9aa0a6")}55`,
+                          borderRadius: 999, padding: "1px 7px", whiteSpace: "nowrap",
+                        }}
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+                {n.summary && (
+                  <div style={{ marginTop: 4, fontSize: 12.5, color: "#9fb4cc", lineHeight: 1.5 }}>
+                    {n.summary}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <ul style={{ margin: "10px 0 2px", paddingLeft: 18, display: "grid", gap: 5 }}>
+            {/* ✅ 핵심 수치 칩 */}
+            {(n.stats || []).length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {n.stats.map((s, si) => (
+                  <div
+                    key={si}
+                    style={{
+                      padding: "7px 12px", borderRadius: 10,
+                      background: "#101418", border: "1px solid #24303a",
+                      minWidth: 0,
+                    }}
+                  >
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#00ffcc", whiteSpace: "nowrap" }}>{s.v}</div>
+                    <div style={{ fontSize: 10.5, opacity: 0.65, marginTop: 1 }}>{s.k}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <ul style={{ margin: "10px 0 2px", paddingLeft: 4, display: "grid", gap: 5, listStyle: "none" }}>
               {(n.items || []).map((it, i) => (
                 <li key={i} style={{ fontSize: 13, lineHeight: 1.6, color: "#cfd6df" }}>
                   {it}
