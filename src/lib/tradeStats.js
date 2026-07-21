@@ -10,8 +10,33 @@
 
 import { signalsRepo } from "./signalsRepo";
 
-export const STATS_DAYS = 30;
+// 시그널 보존 한계(봇 35일) — 월 필터는 이 창 안에서만 가능(이번달 + 지난달 일부)
+export const STATS_DAYS = 35;
 const STATS_LIMIT = 3000;
+
+const KST_MS = 9 * 3600 * 1000;
+const kstIso = (tsMs) => new Date(tsMs + KST_MS).toISOString();
+
+/** 이번 달 키(KST) — "2026-07" */
+export function currentMonthKey() {
+  return kstIso(Date.now()).slice(0, 7);
+}
+/** 조회 가능한 가장 오래된 달(보존 35일 기준) */
+export function oldestMonthKey() {
+  return kstIso(Date.now() - STATS_DAYS * 86400e3).slice(0, 7);
+}
+export function prevMonthKey(mk) {
+  const [y, m] = mk.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+export function nextMonthKey(mk) {
+  const [y, m] = mk.split("-").map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+}
+export function monthLabel(mk) {
+  const [y, m] = String(mk || "").split("-");
+  return y && m ? `${y}년 ${Number(m)}월` : String(mk || "");
+}
 
 // 환율 7종 — 봇 FX_SYMBOLS 미러
 export const FX_SYMBOLS = new Set([
@@ -112,12 +137,14 @@ function finalize(bucket) {
 }
 
 /**
- * 최근 STATS_DAYS일 매매 전적 집계.
+ * 월별 매매 전적 집계 (35일 창 안에서 KST day_key 기준 월 필터).
  * @param {"coin"|"cfd"} page
  * @param {string[]} nsList 시그널 네임스페이스 목록
- * @returns {Promise<{total, groups:[{universe, total, rows:[{key,label,...}]}], missingPnl:number}>}
+ * @param {string} monthKey "2026-07" (생략 시 이번 달)
+ * @returns {Promise<{total, groups:[{universe, total, rows:[{key,label,...}]}], missingPnl:number, monthKey, partialFromDay:string|null}>}
  */
-export async function loadTradeStats(page, nsList) {
+export async function loadTradeStats(page, nsList, monthKey) {
+  const mk = monthKey || currentMonthKey();
   const loaded = await Promise.all(
     nsList.map((name) =>
       signalsRepo
@@ -134,6 +161,7 @@ export async function loadTradeStats(page, nsList) {
   for (const { ns, signals } of loaded) {
     for (const sig of signals) {
       if (String(sig?.kind || "").toUpperCase() !== "EXIT") continue;
+      if (!String(sig?.day_key || "").startsWith(mk)) continue;
       const strat = stratOf(sig);
       if (!strat) continue;
 
@@ -176,10 +204,16 @@ export async function loadTradeStats(page, nsList) {
         .sort((a, b) => Math.abs(b.contribPct) - Math.abs(a.contribPct)),
     }));
 
+  // 보존창(35일)이 달 초를 못 덮으면 부분 집계 — 커버 시작일을 알려 UI에서 표기
+  const boundaryDay = kstIso(Date.now() - STATS_DAYS * 86400e3).slice(0, 10);
+  const partialFromDay = boundaryDay > `${mk}-01` ? boundaryDay : null;
+
   const fin = finalize(total);
   return {
     total: fin,
     groups: outGroups,
     missingPnl: fin.games - fin.withPnl,
+    monthKey: mk,
+    partialFromDay,
   };
 }
