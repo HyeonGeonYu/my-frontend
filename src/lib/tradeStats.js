@@ -125,7 +125,7 @@ export async function loadTradeStats(page, nsList) {
   );
 
   const total = emptyBucket();
-  // universe -> { total, rows: Map(rowKey -> bucket+meta) }
+  // universe -> { total, rows: Map(전략 rowKey -> bucket+meta), symRows: Map(심볼 -> bucket+meta) }
   const groups = new Map();
 
   for (const { ns, signals } of loaded) {
@@ -142,15 +142,19 @@ export async function loadTradeStats(page, nsList) {
       const rowKey = `${book.code}·${strat}`;
       const label = STRAT_KR[strat] || strat;
 
-      if (!groups.has(uni)) groups.set(uni, { total: emptyBucket(), rows: new Map() });
+      if (!groups.has(uni)) groups.set(uni, { total: emptyBucket(), rows: new Map(), symRows: new Map() });
       const g = groups.get(uni);
       if (!g.rows.has(rowKey)) {
         g.rows.set(rowKey, { key: rowKey, label, strat, book: book.code, tf: book.tf, ...emptyBucket() });
+      }
+      if (!g.symRows.has(symbol)) {
+        g.symRows.set(symbol, { key: symbol, label: symbol, ...emptyBucket() });
       }
 
       addTo(total, pnl, w);
       addTo(g.total, pnl, w);
       addTo(g.rows.get(rowKey), pnl, w);
+      addTo(g.symRows.get(symbol), pnl, w);
     }
   }
 
@@ -163,6 +167,9 @@ export async function loadTradeStats(page, nsList) {
       total: finalize(g.total),
       rows: [...g.rows.values()]
         .map((r) => ({ key: r.key, label: r.label, strat: r.strat, book: r.book, tf: r.tf, ...finalize(r) }))
+        .sort((a, b) => Math.abs(b.contribPct) - Math.abs(a.contribPct)),
+      symRows: [...g.symRows.values()]
+        .map((r) => ({ key: r.key, label: r.label, ...finalize(r) }))
         .sort((a, b) => Math.abs(b.contribPct) - Math.abs(a.contribPct)),
     }));
 

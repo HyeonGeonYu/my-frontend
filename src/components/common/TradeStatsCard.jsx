@@ -60,6 +60,7 @@ function SummaryChip({ label, value, color }) {
 export default function TradeStatsCard({ page, nsList, title = `매매 전적 (최근 ${STATS_DAYS}일)` }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
+  const [view, setView] = useState("strat"); // "strat" 전략별 | "sym" 심볼별
 
   useEffect(() => {
     let alive = true;
@@ -86,9 +87,35 @@ export default function TradeStatsCard({ page, nsList, title = `매매 전적 (�
         width: "100%", boxSizing: "border-box",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-        <div style={{ fontSize: 11, opacity: 0.6 }}>청산(EXIT) 신호 기준 · 게임=청산 1건</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>청산(EXIT) 신호 기준 · 게임=청산 1건</div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[
+            { key: "strat", label: "전략별" },
+            { key: "sym", label: "심볼별" },
+          ].map((t) => {
+            const on = view === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setView(t.key)}
+                style={{
+                  padding: "6px 12px", borderRadius: 999,
+                  border: `1px solid ${on ? "#00ffcc" : "#333"}`,
+                  background: on ? "#00ffcc" : "#1a1a1a",
+                  color: on ? "#000" : "#fff",
+                  fontWeight: 900, fontSize: 12, cursor: "pointer",
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {err && (
@@ -128,17 +155,17 @@ export default function TradeStatsCard({ page, nsList, title = `매매 전적 (�
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 300 }}>
                     <thead>
                       <tr>
-                        <th style={{ ...head, textAlign: "left" }}>전략</th>
+                        <th style={{ ...head, textAlign: "left" }}>{view === "strat" ? "전략" : "심볼"}</th>
                         <th style={{ ...head, textAlign: "right" }}>게임</th>
                         <th style={{ ...head, textAlign: "right" }}>승률</th>
                         <th style={{ ...head, textAlign: "right" }}>기여도</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {g.rows.map((r) => (
+                      {(view === "strat" ? g.rows : g.symRows || []).map((r) => (
                         <tr key={r.key}>
                           <td style={{ ...cell, fontWeight: 700 }}>
-                            <BookBadge code={r.book} tf={r.tf} />
+                            {view === "strat" && <BookBadge code={r.book} tf={r.tf} />}
                             {r.label}
                           </td>
                           <td style={num}>{r.games}</td>
