@@ -2,13 +2,13 @@ export const config = { runtime: "edge" };
 
 const MT5_BASE = "https://api.hyeongeonnoil.com";
 
+// 읽기 전용 경로만 허용. 세션 업서트(POST /v1/sessions/*)는 봇이 로컬에서 직접 하므로
+// 공개 프록시에 절대 포함하지 않는다(무인증 쓰기 통로가 됨).
 const ALLOWED_PATHS = new Set([
     "/health",
     "/v5/market/candles/with-gaps",
     "/v5/market/sessions",
     "/v5/market/sessions/expanded",
-    "/v1/sessions/mt5",
-    "/v1/sessions/mt5/bulk",
 ]);
 
 function json(payload: unknown, status = 200): Response {
@@ -21,6 +21,10 @@ function json(payload: unknown, status = 200): Response {
 export default async function handler(req: Request): Promise<Response> {
     const apiKey = process.env.MT5_API_KEY;
     if (!apiKey) return json({ error: "MT5_API_KEY not configured" }, 500);
+
+    if (req.method !== "GET" && req.method !== "HEAD") {
+        return json({ error: "method not allowed" }, 405);
+    }
 
     const { searchParams } = new URL(req.url);
     const path = searchParams.get("_path") || "";
@@ -35,16 +39,9 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     try {
-        const isGet = req.method === "GET" || req.method === "HEAD";
         const res = await fetch(target.toString(), {
             method: req.method,
-            headers: {
-                "X-API-Key": apiKey,
-                ...(!isGet ? { "content-type": "application/json" } : {}),
-            },
-            body: isGet ? undefined : req.body,
-            // @ts-ignore
-            duplex: isGet ? undefined : "half",
+            headers: { "X-API-Key": apiKey },
         });
 
         const body = await res.text();
