@@ -12,6 +12,8 @@ import { fetchConfigCached } from "../lib/configCache";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
+import { loadEntryStrategyMap } from "../lib/entryStrategies";
+import EntryStrategyChips from "../components/common/EntryStrategyChips";
 import { getDayLabel } from "../utils/date";
 import { createChart, ColorType } from "lightweight-charts";
 import TradeStatsCard from "../components/common/TradeStatsCard";
@@ -22,6 +24,9 @@ const COIN_DAILY_SIGNALS = ["bybit", "cryptod"];
 
 // 매매전적 통계용 — 크립토 유니버스(U1) 전 채널: 1분책 s11 + 4h책 s22 + 일봉·구채널(bybit) + 히스토리.
 const COIN_STATS_SIGNALS = ["s11", "s22", "bybit", "cryptod"];
+
+// 포지션 진입전략 매핑용 — 이 계좌에 lot을 남길 수 있는 전 신호채널 (+구 σ-복귀 ns "s1" 드레인분).
+const COIN_POS_STRAT_SIGNALS = ["s11", "s22", "bybit", "cryptod", "s1"];
 
 /* ------------------------- 상단 배너 ------------------------- */
 function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qrSize = 92 }) {
@@ -1214,6 +1219,24 @@ export default function Coin() {
     // 심볼별 보유 포지션 진입가 (차트 진입가 선 + 테두리용)
     const entriesBySymbol = useMemo(() => positionEntriesBySymbol(asset), [asset]);
 
+    // 세부 진입 전략 매핑 (entry_signal_id → 전략). lot 구성이 바뀔 때만 재로드(레포 30s 캐시).
+    const [sigStratMap, setSigStratMap] = useState(null);
+    const lotIdsKey = useMemo(() => {
+        const ids = [];
+        for (const arr of Object.values(entriesBySymbol)) {
+            for (const e of arr) for (const lot of e.entries || []) ids.push(lot?.entry_signal_id || "");
+        }
+        return ids.sort().join(",");
+    }, [entriesBySymbol]);
+    useEffect(() => {
+        if (!lotIdsKey) return;
+        let alive = true;
+        loadEntryStrategyMap(COIN_POS_STRAT_SIGNALS)
+            .then((m) => { if (alive) setSigStratMap(m); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, [lotIdsKey]);
+
     // ✅ 차트 순서 = 포지션 크기(진입금액) 큰 순
     const sortedVisibleSymbols = useMemo(() => {
         const size = positionSizeBySymbol(asset);
@@ -1424,7 +1447,7 @@ export default function Coin() {
                     />
 
                     <div style={{ minWidth: 0, overflow: "hidden" }}>
-                        <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState} />
+                        <AssetPanel asset={asset} statsBySymbol={statsMap} config={configState} strategyBySignalId={sigStratMap} />
                     </div>
                 </div>
 
@@ -1603,8 +1626,9 @@ export default function Coin() {
                                 boxShadow: hasPos ? "0 0 0 1px rgba(47,224,141,0.25)" : "none",
                             }}>
                                 {hasPos && (
-                                    <div style={{ fontSize: 11, fontWeight: 800, color: "#2fe08d", marginBottom: 2 }}>
-                                        ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 1)}`).join(" · ")}
+                                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 800, color: "#2fe08d", marginBottom: 2 }}>
+                                        <span>● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 1)}`).join(" · ")}</span>
+                                        <EntryStrategyChips entries={ent.flatMap((e) => e.entries || [])} sigMap={sigStratMap} />
                                     </div>
                                 )}
                                 <SymbolStrategyTag symbol={s.symbol} timeframe={timeframe} />

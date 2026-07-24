@@ -631,6 +631,7 @@ export function buildPositionRows(asset, statsBySymbol = {}) {
         pnl,
         pnlPct,
         value, // 명목가치(USD) — 발행값 우선
+        entries: Array.isArray(p?.entries) ? p.entries : [], // lot 원본(entry_signal_id 포함) — 전략 구분용
       });
     }
   }
@@ -691,7 +692,7 @@ export function positionEntriesBySymbol(asset) {
       }
       const qty = q > 0 ? q : Math.abs(num(p.qty));
       const avg = q > 0 ? pxq / q : num(p.avg ?? p.avg_price ?? p.entry_price ?? p.price);
-      if (qty > 0 && isFinite(avg) && avg > 0) arr.push({ side, avg, qty });
+      if (qty > 0 && isFinite(avg) && avg > 0) arr.push({ side, avg, qty, entries }); // entries=lot 원본(전략 구분용)
     }
     if (arr.length) out[sym] = arr;
   }

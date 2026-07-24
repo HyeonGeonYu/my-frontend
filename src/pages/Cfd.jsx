@@ -11,6 +11,8 @@ import { fetchConfigCached } from "../lib/configCache";
 import {makeCfdSource} from "../lib/chartSources";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol, calcEquityUSDT} from "../lib/tradeUtils";
+import { loadEntryStrategyMap } from "../lib/entryStrategies";
+import EntryStrategyChips from "../components/common/EntryStrategyChips";
 import Mt5EquityHistoryCard from "../components/common/Mt5EquityHistoryCard";
 import TradeStatsCard from "../components/common/TradeStatsCard";
 import { getDayLabel } from "../utils/date";
@@ -168,6 +170,25 @@ export default function Cfd() {
     // 심볼별 보유 포지션 진입가 (차트 진입가 선 + 테두리용)
     const entriesBySymbol = useMemo(() => positionEntriesBySymbol(asset), [asset]);
 
+    // 세부 진입 전략 매핑 (entry_signal_id → 전략). lot 구성이 바뀔 때만 재로드(레포 30s 캐시).
+    //   CFD_STATS_SIGNALS가 이 계좌에 lot을 남기는 전 채널(s11m/s22m/mt5/fxd/mt5d)을 이미 커버.
+    const [sigStratMap, setSigStratMap] = useState(null);
+    const lotIdsKey = useMemo(() => {
+        const ids = [];
+        for (const arr of Object.values(entriesBySymbol)) {
+            for (const e of arr) for (const lot of e.entries || []) ids.push(lot?.entry_signal_id || "");
+        }
+        return ids.sort().join(",");
+    }, [entriesBySymbol]);
+    useEffect(() => {
+        if (!lotIdsKey) return;
+        let alive = true;
+        loadEntryStrategyMap(CFD_STATS_SIGNALS)
+            .then((m) => { if (alive) setSigStratMap(m); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, [lotIdsKey]);
+
     /* ------------------------- dayOffset + anchorEnd ------------------------- */
     // ✅ anchorEndUtcSec는 "이 페이지를 보는 시점" 기준으로 고정
     const [anchorEndUtcSec] = useState(() => next0650EndBoundaryUtcSec());
@@ -255,7 +276,7 @@ export default function Cfd() {
                             ⚠ 데모(모의) 계좌 · MT5
                         </div>
                         <Mt5EquityHistoryCard currentEquity={calcEquityUSDT(asset, assetStats, "USD")} />
-                        <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" />
+                        <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" strategyBySignalId={sigStratMap} />
                         {/* ✅ 매매 전적 통계 (최근 30일, MT5·환율 유니버스) */}
                         <div style={{ marginTop: 12 }}>
                             <TradeStatsCard page="cfd" nsList={CFD_STATS_SIGNALS} />
@@ -432,8 +453,9 @@ export default function Cfd() {
                                     boxShadow: hasPos ? "0 0 0 1px rgba(47,224,141,0.25)" : "none",
                                 }}>
                                     {hasPos && (
-                                        <div style={{fontSize: 11, fontWeight: 800, color: "#2fe08d", marginBottom: 2}}>
-                                            ● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 2)}`).join(" · ")}
+                                        <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 800, color: "#2fe08d", marginBottom: 2}}>
+                                            <span>● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 2)}`).join(" · ")}</span>
+                                            <EntryStrategyChips entries={ent.flatMap((e) => e.entries || [])} sigMap={sigStratMap} />
                                         </div>
                                     )}
                                     <SymbolStrategyTag symbol={s} timeframe={timeframe} />

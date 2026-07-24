@@ -1,12 +1,14 @@
 // src/components/AssetPanel.jsx
 import React, {useMemo, useState} from "react";
 import {fmtComma, buildPositionRows, calcEquityUSDT} from "../lib/tradeUtils";
+import EntryStrategyChips from "./common/EntryStrategyChips";
 
 // 퍼센트 출력 유틸
 const pctStr = (v, digits = 2) =>
     v == null || Number.isNaN(+v) ? "—" : `${(+v).toFixed(digits)}%`;
 
-export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "USDT"}) {
+// strategyBySignalId: entry_signal_id→전략 맵(loadEntryStrategyMap). 주면 행 아래에 전략 칩 표시.
+export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "USDT", strategyBySignalId = null}) {
     const wallet = +(asset?.wallet?.[walletCcy] ?? 0);
     const {rows: rawRows} = buildPositionRows(asset, statsBySymbol);
     // 행의 명목가치(USD): 발행 value 우선, 없으면 수량×평균가 근사
@@ -206,6 +208,13 @@ export default function AssetPanel({asset, statsBySymbol, config, walletCcy = "U
                                     >
                                         {entryText}
                                     </div>
+
+                                    {/* 세부 진입 전략 구분 칩 (entry_signal_id ↔ 신호 스트림 매칭) */}
+                                    {strategyBySignalId && r.entries?.length > 0 && (
+                                        <div style={{gridColumn: "1 / -1", marginTop: -2, marginBottom: 2}}>
+                                            <EntryStrategyChips entries={r.entries} sigMap={strategyBySignalId} />
+                                        </div>
+                                    )}
                                 </React.Fragment>
                             );
                         })}
