@@ -216,62 +216,22 @@ function EquityHistoryCard({ currentEquity }) {
             return s;
         }
 
-        function pickEquityUsdt(item) {
-            return (
-                toNum(item?.asset?.equityUsdt) ??
-                toNum(item?.asset?.equity_usdt) ??
-                toNum(item?.asset?.equity) ??
-                toNum(item?.asset?.wallet?.USDT) ??
-                null
-            );
-        }
-
         (async () => {
             setLoading(true);
 
             try {
-                const collected = [];
-                let total = 0;
-
-                // Archive가 page당 5개라면 90일은 최대 18페이지
-                // 여유 있게 25페이지까지 가져옴
-                for (let page = 1; page <= 25; page += 1) {
-                    const res = await fetch(`/api/list?page=${page}`, {
-                        cache: "no-store",
-                    });
-
-                    const json = await res.json();
-
-                    if (!res.ok || !json?.ok) {
-                        throw new Error(json?.error || `archive list failed: page ${page}`);
-                    }
-
-                    const arr = Array.isArray(json.data) ? json.data : [];
-                    total = Number(json.total || total || 0);
-
-                    collected.push(...arr);
-
-                    if (arr.length === 0) break;
-                    if (collected.length >= 90) break;
-                    if (total > 0 && collected.length >= total) break;
+                // ⚡ 경량 전용 API 1회 호출 (구: /api/list 18페이지 순차 = 카드 로딩 30초+)
+                const res = await fetch(`/api/equity-history?days=90`);
+                const json = await res.json();
+                if (!res.ok || !json?.ok) {
+                    throw new Error(json?.error || "equity-history failed");
                 }
 
-                const rows = collected
-                    .map((item) => {
-                        const day = normalizeDay(
-                            item?.day ||
-                            item?.date ||
-                            item?.created_at ||
-                            item?.updated_at
-                        );
-
-                        const equityUsdt = pickEquityUsdt(item);
-
-                        return {
-                            day,
-                            date: day,
-                            equityUsdt,
-                        };
+                const rows = (Array.isArray(json.rows) ? json.rows : [])
+                    .map((r) => {
+                        const day = normalizeDay(r?.day);
+                        const equityUsdt = toNum(r?.equityUsdt);
+                        return { day, date: day, equityUsdt };
                     })
                     .filter((r) => r.day && r.equityUsdt != null)
                     .sort((a, b) => a.day.localeCompare(b.day))
@@ -280,7 +240,7 @@ function EquityHistoryCard({ currentEquity }) {
                 if (!alive) return;
                 setAllRows(rows);
             } catch (e) {
-                console.error("EquityHistoryCard /api/list error", e);
+                console.error("EquityHistoryCard /api/equity-history error", e);
                 if (alive) setAllRows([]);
             } finally {
                 if (alive) setLoading(false);
