@@ -1251,7 +1251,7 @@ export default function Coin() {
         let alive = true;
         if (!symbolsReady) return;
 
-        (async () => {
+        const load = async () => {
             try {
                 // ⚡ symbols 파라미터 제거 → 서버가 HSCAN 1회(~2명령)로 전 포지션 반환
                 //   (심볼별 HGET N+1 명령 대비 절감)
@@ -1262,10 +1262,16 @@ export default function Coin() {
                 setAsset(j.asset);
             } catch {
             }
-        })();
+        };
+
+        load();
+        // CFD 페이지와 동일한 30초 갱신 — 백엔드는 로컬 Redis(trdb)라 폴링 비용 무해
+        //   (과거 1회 로드만 했던 건 Upstash 한도 시절의 보호였음)
+        const t = setInterval(load, 30000);
 
         return () => {
             alive = false;
+            clearInterval(t);
         };
     }, [assetNs, symbolsReady]);
 
