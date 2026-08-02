@@ -1186,8 +1186,14 @@ export default function Coin() {
                             </div>
                         </div>
 
-                        {/* 티커 카드 */}
-                        <div style={{ display: "grid", gap: 12 }}>
+                        {/* 티커 카드 — 모바일: 가로 스크롤 스트립(차트가 바로 보이게), 데스크톱: 세로 목록 */}
+                        <div
+                            style={
+                                isMobile
+                                    ? { display: "flex", overflowX: "auto", gap: 8, paddingBottom: 6, WebkitOverflowScrolling: "touch" }
+                                    : { display: "grid", gap: 12 }
+                            }
+                        >
                             {symbolsConfig.map((s) => {
                                 const sym = s.symbol;
                                 const st = statsMap[sym];
@@ -1198,7 +1204,7 @@ export default function Coin() {
                                     <div
                                         key={sym}
                                         style={{
-                                            width: "100%",
+                                            ...(isMobile ? { flex: "0 0 190px", width: 190 } : { width: "100%" }),
                                             cursor: "pointer",
                                             opacity: selectedSymbol && !active ? 0.45 : 1,
                                             border: active ? "1px solid #00ffcc" : "1px solid transparent",
@@ -1228,6 +1234,7 @@ export default function Coin() {
                             return (
                             <div key={s.symbol} style={{
                                 width: "100%", minWidth: 0,
+                                boxSizing: "border-box", // ✅ 모바일 짤림 수정: border/padding이 100% 폭을 밀어내지 않게
                                 border: hasPos ? "2px solid #2fe08d" : "2px solid transparent",
                                 borderRadius: 12, padding: hasPos ? 4 : 0,
                                 boxShadow: hasPos ? "0 0 0 1px rgba(47,224,141,0.25)" : "none",
