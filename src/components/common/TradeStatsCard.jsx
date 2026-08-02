@@ -80,11 +80,103 @@ function MonthNavButton({ dir, disabled, onClick }) {
   );
 }
 
-export default function TradeStatsCard({ page, nsList, title = "매매 전적" }) {
+// ── 월 에쿼티 섹션 (2026-08-02): 평가 USDT/USD 히스토리를 전적 카드의 월 내비와 통합 ──
+//   bybit=/api/equity-history(asset_snapshots) · mt5=/api/mt5-equity(daily_equity 해시)
+function useEquityRows(source) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    if (!source) return;
+    let alive = true;
+    const url = source === "mt5" ? "/api/mt5-equity" : "/api/equity-history?days=365";
+    fetch(url)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive) return;
+        const raw = Array.isArray(j?.rows) ? j.rows : [];
+        const norm = raw
+          .map((r) => ({
+            day: String(r.day || ""),
+            equity: Number(r.equityUsdt ?? r.equity ?? NaN),
+          }))
+          .filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.day) && Number.isFinite(r.equity))
+          .sort((a, b) => a.day.localeCompare(b.day));
+        setRows(norm);
+      })
+      .catch(() => alive && setRows([]));
+    return () => { alive = false; };
+  }, [source]);
+  return rows;
+}
+
+function Sparkline({ points, width = 560, height = 56 }) {
+  if (!points || points.length < 2) return null;
+  const vals = points.map((p) => p.equity);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const step = width / (points.length - 1);
+  const y = (v) => 4 + (height - 8) * (1 - (v - min) / span);
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${y(p.equity).toFixed(1)}`).join(" ");
+  const up = vals[vals.length - 1] >= vals[0];
+  const color = up ? "#16a34a" : "#dc2626";
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
+      <path d={path} fill="none" stroke={color} strokeWidth="2" />
+    </svg>
+  );
+}
+
+function EquitySection({ rows, month, currency, currentEquity }) {
+  if (rows === null) return <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>평가 불러오는 중...</div>;
+
+  const inMonth = rows.filter((r) => r.day.startsWith(month));
+  const isCurrent = month === currentMonthKey();
+  const points = [...inMonth];
+  if (isCurrent && Number.isFinite(currentEquity) && currentEquity > 0) {
+    points.push({ day: "지금", equity: currentEquity });
+  }
+  if (!points.length) {
+    return <div style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>이 달의 평가 기록이 없습니다.</div>;
+  }
+
+  // 월 손익 기준선 = 전월 마지막 평가(없으면 이 달 첫 값)
+  const prev = rows.filter((r) => r.day < `${month}-01`);
+  const base = prev.length ? prev[prev.length - 1].equity : points[0].equity;
+  const last = points[points.length - 1].equity;
+  const chg = last - base;
+  const chgPct = base > 0 ? (chg / base) * 100 : null;
+  const fmt = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  return (
+    <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12, background: "#101010", border: "1px solid #242424" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 900, color: "#00ffcc" }}>평가 {currency}</span>
+        <b style={{ fontSize: 16 }}>{fmt(last)}</b>
+        <b style={{ fontSize: 13, color: pnlColor(chg) }}>
+          {chg >= 0 ? "+" : ""}{fmt(chg)}{chgPct != null ? ` (${chgPct >= 0 ? "+" : ""}${chgPct.toFixed(2)}%)` : ""}
+        </b>
+        <span style={{ fontSize: 11, opacity: 0.55 }}>
+          월 손익 · 기록 {inMonth.length}일{isCurrent ? " + 현재" : ""}
+        </span>
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <Sparkline points={points} />
+      </div>
+    </div>
+  );
+}
+
+export default function TradeStatsCard({
+  page, nsList, title = "매매 전적",
+  equitySource = null,      // "bybit" | "mt5" — 지정 시 월 평가 섹션 표시
+  equityCurrency = "USDT",
+  currentEquity = null,     // 이번 달 마지막 점으로 붙일 현재 평가(라이브)
+}) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [view, setView] = useState("strat"); // "strat" 전략별 | "sym" 심볼별
   const [month, setMonth] = useState(currentMonthKey()); // "2026-07"
+  const equityRows = useEquityRows(equitySource);
 
   useEffect(() => {
     let alive = true;
@@ -162,6 +254,11 @@ export default function TradeStatsCard({ page, nsList, title = "매매 전적" }
       )}
       {!err && !data && (
         <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>불러오는 중...</div>
+      )}
+
+      {/* 월 평가(에쿼티) — 전적과 같은 달을 따라감 */}
+      {equitySource && (
+        <EquitySection rows={equityRows} month={month} currency={equityCurrency} currentEquity={currentEquity} />
       )}
 
       {data && (

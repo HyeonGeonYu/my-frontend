@@ -13,7 +13,6 @@ import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import {next0650EndBoundaryUtcSec, sortSymbolsByPosition, positionEntriesBySymbol, calcEquityUSDT} from "../lib/tradeUtils";
 import { loadEntryStrategyMap } from "../lib/entryStrategies";
 import EntryStrategyChips from "../components/common/EntryStrategyChips";
-import Mt5EquityHistoryCard from "../components/common/Mt5EquityHistoryCard";
 import TradeStatsCard from "../components/common/TradeStatsCard";
 import { getDayLabel } from "../utils/date";
 
@@ -275,11 +274,16 @@ export default function Cfd() {
                         }}>
                             ⚠ 데모(모의) 계좌 · MT5
                         </div>
-                        <Mt5EquityHistoryCard currentEquity={calcEquityUSDT(asset, assetStats, "USD")} />
                         <AssetPanel asset={asset} statsBySymbol={assetStats} config={configState} walletCcy="USD" strategyBySignalId={sigStratMap} />
-                        {/* ✅ 매매 전적 통계 (최근 30일, MT5·환율 유니버스) */}
+                        {/* ✅ 매매 전적 + 월 평가(에쿼티) 통합 카드 — 같은 ◀▶ 달로 이동 */}
                         <div style={{ marginTop: 12 }}>
-                            <TradeStatsCard page="cfd" nsList={CFD_STATS_SIGNALS} />
+                            <TradeStatsCard
+                                page="cfd"
+                                nsList={CFD_STATS_SIGNALS}
+                                equitySource="mt5"
+                                equityCurrency="USD"
+                                currentEquity={calcEquityUSDT(asset, assetStats, "USD")}
+                            />
                         </div>
                     </div>
 
