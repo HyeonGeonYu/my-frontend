@@ -108,59 +108,104 @@ function useEquityRows(source) {
   return rows;
 }
 
-function Sparkline({ points, width = 560, height = 56 }) {
-  if (!points || points.length < 2) return null;
+// 월별 에쿼티 그래프: x=월(월말 평가), 보고 있는 달의 점을 강조. 점 클릭 = 그 달로 이동(전적 조회 가능 범위 내).
+function MonthlySparkline({ points, viewedMonth, onSelect, isSelectable }) {
+  if (!points.length) return null;
+  const W = 560, H = 92, padX = 24, padTop = 12, padBot = 26;
   const vals = points.map((p) => p.equity);
   const min = Math.min(...vals);
   const max = Math.max(...vals);
   const span = max - min || 1;
-  const step = width / (points.length - 1);
-  const y = (v) => 4 + (height - 8) * (1 - (v - min) / span);
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${y(p.equity).toFixed(1)}`).join(" ");
+  const x = (i) => (points.length === 1 ? W / 2 : padX + ((W - 2 * padX) * i) / (points.length - 1));
+  const y = (v) => padTop + (H - padTop - padBot) * (1 - (v - min) / span);
+  const path = points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.equity).toFixed(1)}`)
+    .join(" ");
   const up = vals[vals.length - 1] >= vals[0];
   const color = up ? "#16a34a" : "#dc2626";
+  const multiYear = new Set(points.map((p) => p.month.slice(0, 4))).size > 1;
+  const label = (m) => (multiYear ? `${m.slice(2, 4)}.${+m.slice(5, 7)}` : `${+m.slice(5, 7)}월`);
+  const labelEvery = points.length > 9 ? 2 : 1;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
-      <path d={path} fill="none" stroke={color} strokeWidth="2" />
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      {points.length > 1 && <path d={path} fill="none" stroke={color} strokeWidth="2" />}
+      {points.map((p, i) => {
+        const sel = p.month === viewedMonth;
+        const clickable = !sel && isSelectable(p.month);
+        const showLabel = sel || i === points.length - 1 || i % labelEvery === 0;
+        return (
+          <g
+            key={p.month}
+            onClick={clickable ? () => onSelect(p.month) : undefined}
+            style={{ cursor: clickable ? "pointer" : "default" }}
+          >
+            <title>{`${p.month} · ${p.equity.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}</title>
+            {clickable && <circle cx={x(i)} cy={y(p.equity)} r="14" fill="transparent" />}
+            {sel && (
+              <circle cx={x(i)} cy={y(p.equity)} r="9" fill="none" stroke="#00ffcc" strokeOpacity="0.45" strokeWidth="2.5" />
+            )}
+            <circle cx={x(i)} cy={y(p.equity)} r={sel ? 5 : 3} fill={sel ? "#00ffcc" : "#777"} />
+            {showLabel && (
+              <text
+                x={x(i)} y={H - 7} textAnchor="middle"
+                fontSize="11" fontWeight={sel ? 900 : 500}
+                fill={sel ? "#00ffcc" : "#8a8a8a"}
+              >
+                {label(p.month)}
+              </text>
+            )}
+          </g>
+        );
+      })}
     </svg>
   );
 }
 
-function EquitySection({ rows, month, currency, currentEquity }) {
+function EquitySection({ rows, month, currency, currentEquity, onSelectMonth, isSelectable }) {
   if (rows === null) return <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>평가 불러오는 중...</div>;
 
-  const inMonth = rows.filter((r) => r.day.startsWith(month));
-  const isCurrent = month === currentMonthKey();
-  const points = [...inMonth];
-  if (isCurrent && Number.isFinite(currentEquity) && currentEquity > 0) {
-    points.push({ day: "지금", equity: currentEquity });
-  }
+  // 월별 압축: 각 달 마지막 기록 = 월말 평가 (rows는 day 오름차순 → 뒤 값이 덮어씀).
+  // 이번 달은 라이브 현재 평가가 있으면 그 값으로.
+  const byMonth = new Map();
+  rows.forEach((r) => byMonth.set(r.day.slice(0, 7), r.equity));
+  const nowKey = currentMonthKey();
+  if (Number.isFinite(currentEquity) && currentEquity > 0) byMonth.set(nowKey, currentEquity);
+  const points = [...byMonth.entries()]
+    .map(([m, equity]) => ({ month: m, equity }))
+    .sort((a, b) => a.month.localeCompare(b.month));
   if (!points.length) {
-    return <div style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>이 달의 평가 기록이 없습니다.</div>;
+    return <div style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>평가 기록이 없습니다.</div>;
   }
 
-  // 월 손익 기준선 = 전월 마지막 평가(없으면 이 달 첫 값)
-  const prev = rows.filter((r) => r.day < `${month}-01`);
-  const base = prev.length ? prev[prev.length - 1].equity : points[0].equity;
-  const last = points[points.length - 1].equity;
-  const chg = last - base;
-  const chgPct = base > 0 ? (chg / base) * 100 : null;
+  // 보고 있는 달의 값 + 월 손익(기준선 = 전월 마지막 평가)
+  const idx = points.findIndex((p) => p.month === month);
+  const cur = idx >= 0 ? points[idx].equity : null;
+  const base = idx > 0 ? points[idx - 1].equity : null;
+  const chg = cur != null && base != null ? cur - base : null;
+  const chgPct = chg != null && base > 0 ? (chg / base) * 100 : null;
   const fmt = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
   return (
     <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12, background: "#101010", border: "1px solid #242424" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, fontWeight: 900, color: "#00ffcc" }}>평가 {currency}</span>
-        <b style={{ fontSize: 16 }}>{fmt(last)}</b>
-        <b style={{ fontSize: 13, color: pnlColor(chg) }}>
-          {chg >= 0 ? "+" : ""}{fmt(chg)}{chgPct != null ? ` (${chgPct >= 0 ? "+" : ""}${chgPct.toFixed(2)}%)` : ""}
-        </b>
+        <b style={{ fontSize: 16 }}>{cur != null ? fmt(cur) : "—"}</b>
+        {chg != null && (
+          <b style={{ fontSize: 13, color: pnlColor(chg) }}>
+            {chg >= 0 ? "+" : ""}{fmt(chg)}{chgPct != null ? ` (${chgPct >= 0 ? "+" : ""}${chgPct.toFixed(2)}%)` : ""}
+          </b>
+        )}
         <span style={{ fontSize: 11, opacity: 0.55 }}>
-          월 손익 · 기록 {inMonth.length}일{isCurrent ? " + 현재" : ""}
+          {month === nowKey ? "현재 평가 · 전월말 대비" : "월말 평가 · 전월말 대비"}
         </span>
       </div>
       <div style={{ marginTop: 6 }}>
-        <Sparkline points={points} />
+        <MonthlySparkline
+          points={points}
+          viewedMonth={month}
+          onSelect={onSelectMonth}
+          isSelectable={isSelectable}
+        />
       </div>
     </div>
   );
@@ -256,9 +301,16 @@ export default function TradeStatsCard({
         <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>불러오는 중...</div>
       )}
 
-      {/* 월 평가(에쿼티) — 전적과 같은 달을 따라감 */}
+      {/* 월 평가(에쿼티) — 전적과 같은 달을 따라감, 점 클릭으로도 달 이동 */}
       {equitySource && (
-        <EquitySection rows={equityRows} month={month} currency={equityCurrency} currentEquity={currentEquity} />
+        <EquitySection
+          rows={equityRows}
+          month={month}
+          currency={equityCurrency}
+          currentEquity={currentEquity}
+          onSelectMonth={setMonth}
+          isSelectable={(m) => m >= oldestMonthKey() && m <= currentMonthKey()}
+        />
       )}
 
       {data && (
