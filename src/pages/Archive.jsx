@@ -1,6 +1,10 @@
 // src/pages/Archive.jsx
 import React, { useEffect, useState } from "react";
-import { useSupabaseArchiveData } from "../hooks/useSupabaseArchiveData";
+import {
+    useArchiveMonths,
+    useArchiveMonthDays,
+    fetchArchiveDay,
+} from "../hooks/useSupabaseArchiveData";
 import { newsParams } from "../constants/newsMeta";
 import { ClipboardCopy, Check } from "lucide-react";
 import ArchiveChartView from "../components/archive/ArchiveChartView";
@@ -675,62 +679,76 @@ const formatDateWithDay = (dateStr) => {
     return `${year}년 ${month + 1}월 ${day}일 (${dayName})`;
 };
 
+const formatMonthLabel = (m) => {
+    if (!/^\d{4}-\d{2}$/.test(m || "")) return m || "";
+    const [y, mm] = m.split("-").map(Number);
+    return `${y}년 ${mm}월`;
+};
+
 /* -------------------------------------------------------------------------- */
 /* Main Page                                                                   */
 /* -------------------------------------------------------------------------- */
 
 function Archive() {
     const isMobile = useIsMobile();
-    const [page, setPage] = useState(1);
-    const [expandedDate, setExpandedDate] = useState(null);
+    const [selectedMonth, setSelectedMonth] = useState(null);
+    const [expandedDay, setExpandedDay] = useState(null);
+    const [dayCache, setDayCache] = useState({});     // day -> item(상세)
+    const [dayLoading, setDayLoading] = useState({}); // day -> bool
+    const [dayError, setDayError] = useState({});     // day -> Error
     const [expandedSummary, setExpandedSummary] = useState({});
     const [contentCache, setContentCache] = useState({});
     const [contentLoading, setContentLoading] = useState({});
     const [expandedTrading, setExpandedTrading] = useState({});
     const [selectedTradeView, setSelectedTradeView] = useState(null);
 
-    const { data, total, loading, error } = useSupabaseArchiveData(page);
-
-    const [renderData, setRenderData] = useState([]);
+    const { months, loading: monthsLoading, error: monthsError } = useArchiveMonths();
 
     useEffect(() => {
-        if (!loading && Array.isArray(data)) {
-            setRenderData(data);
+        if (!selectedMonth && months.length > 0) {
+            setSelectedMonth(months[0].month);
         }
-    }, [loading, data]);
+    }, [months, selectedMonth]);
 
-    const isFetching = loading && renderData.length > 0;
+    const { days, loading: daysLoading, error: daysError } = useArchiveMonthDays(selectedMonth);
 
-    const perPage = 5;
-    const totalPages = Math.ceil(total / perPage);
+    const error = monthsError || daysError;
 
-    const pageWindowSize = 5;
-
-    const getPageWindow = (page, totalPages, windowSize) => {
-        const windowIndex = Math.floor((page - 1) / windowSize);
-        const start = windowIndex * windowSize + 1;
-        const end = Math.min(start + windowSize - 1, totalPages);
-        return { start, end, windowIndex };
+    const selectMonth = (m) => {
+        setSelectedMonth(m);
+        setExpandedDay(null);
+        setSelectedTradeView(null);
     };
 
-    const { start: windowStart, end: windowEnd } = getPageWindow(page, totalPages, pageWindowSize);
+    const toggleDay = async (day) => {
+        if (expandedDay === day) {
+            setExpandedDay(null);
+            setSelectedTradeView(null);
+            return;
+        }
 
-    const goPrevPage = () => setPage((p) => Math.max(1, p - 1));
-    const goNextPage = () => setPage((p) => Math.min(totalPages, p + 1));
+        setExpandedDay(day);
+        setSelectedTradeView(null);
 
-    const toggleDate = (date) => {
-        setExpandedDate((prev) => {
-            const next = prev === date ? null : date;
-            if (next === null) {
-                setSelectedTradeView(null);
-            }
-            return next;
-        });
+        // 상세는 처음 펼칠 때 1회만 지연 로드
+        if (dayCache[day] !== undefined || dayLoading[day]) return;
+
+        setDayLoading((prev) => ({ ...prev, [day]: true }));
+        setDayError((prev) => ({ ...prev, [day]: null }));
+
+        try {
+            const item = await fetchArchiveDay(day);
+            setDayCache((prev) => ({ ...prev, [day]: item }));
+        } catch (e) {
+            setDayError((prev) => ({ ...prev, [day]: e }));
+        } finally {
+            setDayLoading((prev) => ({ ...prev, [day]: false }));
+        }
     };
 
-    const toggleTrading = (date, day) => {
+    const toggleTrading = (day) => {
         setExpandedTrading((prev) => {
-            const nextExpanded = !prev[date];
+            const nextExpanded = !prev[day];
 
             // Trading Snapshot을 닫을 때, 그 날짜의 차트도 같이 닫기
             if (!nextExpanded && selectedTradeView?.day === day) {
@@ -739,7 +757,7 @@ function Archive() {
 
             return {
                 ...prev,
-                [date]: nextExpanded,
+                [day]: nextExpanded,
             };
         });
     };
@@ -768,11 +786,10 @@ function Archive() {
         }
     };
 
-    const pagerBtnBase = {
-        height: 40,
-        minWidth: 40,
-        padding: "0 12px",
-        borderRadius: 10,
+    const monthBtnBase = {
+        height: 38,
+        padding: "0 14px",
+        borderRadius: 999,
         border: "1px solid #2a2a2a",
         background: "#2a2a2a",
         color: "#fff",
@@ -782,23 +799,14 @@ function Archive() {
         justifyContent: "center",
         fontWeight: 700,
         userSelect: "none",
+        whiteSpace: "nowrap",
+        flex: "0 0 auto",
     };
 
-    const pagerBtnActive = {
+    const monthBtnActive = {
         background: "#00ffcc",
         color: "#000",
         border: "1px solid #00ffcc",
-    };
-
-    const pagerBtnGhost = {
-        background: "transparent",
-        border: "1px solid #00ffcc",
-        color: "#00ffcc",
-    };
-
-    const pagerBtnDisabled = {
-        opacity: 0.45,
-        cursor: "not-allowed",
     };
 
     return (
@@ -807,33 +815,54 @@ function Archive() {
 
             {error && <p style={{ color: "red" }}>❌ 오류 발생: {error.message}</p>}
 
+            {/* 월 선택 스트립 */}
+            {monthsLoading ? (
+                <p>⏳ 로딩 중...</p>
+            ) : months.length === 0 ? (
+                <p>데이터가 없습니다.</p>
+            ) : (
+                <div
+                    style={{
+                        display: "flex",
+                        gap: 8,
+                        overflowX: "auto",
+                        padding: "4px 0 12px",
+                        marginBottom: 8,
+                    }}
+                >
+                    {months.map(({ month, days: dayCount }) => {
+                        const active = month === selectedMonth;
+
+                        return (
+                            <button
+                                key={month}
+                                onClick={() => selectMonth(month)}
+                                style={{ ...monthBtnBase, ...(active ? monthBtnActive : null) }}
+                            >
+                                {formatMonthLabel(month)}
+                                <span style={{ opacity: 0.65, fontWeight: 600, marginLeft: 5 }}>
+                                    ({dayCount})
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
             <div style={{ position: "relative", minHeight: 600 }}>
-                {isFetching && (
-                    <div
-                        style={{
-                            position: "absolute",
-                            top: 8,
-                            right: 8,
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            background: "rgba(0,0,0,0.6)",
-                            border: "1px solid #333",
-                            color: "#aaa",
-                            fontSize: 12,
-                            zIndex: 20,
-                        }}
-                    >
-                        가져오는 중…
-                    </div>
+                {daysLoading && <p>⏳ {formatMonthLabel(selectedMonth)} 불러오는 중...</p>}
+
+                {!daysLoading && !monthsLoading && selectedMonth && days.length === 0 && (
+                    <p>이 달에는 데이터가 없습니다.</p>
                 )}
 
-                {loading && renderData.length === 0 && <p>⏳ 로딩 중...</p>}
+                {!daysLoading && days.map(({ day, date, tradeCount }) => {
+                    const item = dayCache[day];
+                    const isOpen = expandedDay === day;
 
-                {!loading && (data?.length ?? 0) === 0 && <p>데이터가 없습니다.</p>}
-
-                {renderData.map(({ date, day, data, trades = [], symbols = [], asset = null }) => (
+                    return (
                     <div
-                        key={date}
+                        key={day}
                         style={{
                             marginBottom: "20px",
                             borderBottom: "1px solid #333",
@@ -841,7 +870,7 @@ function Archive() {
                         }}
                     >
                         <h3
-                            onClick={() => toggleDate(date)}
+                            onClick={() => toggleDay(day)}
                             style={{
                                 cursor: "pointer",
                                 color: "#00ccff",
@@ -849,34 +878,53 @@ function Archive() {
                                 userSelect: "none",
                             }}
                         >
-                            {expandedDate === date ? "▼" : "▶"} {formatDateWithDay(date)}
+                            {isOpen ? "▼" : "▶"} {formatDateWithDay(date)}
+                            {tradeCount > 0 && (
+                                <span style={{ marginLeft: 8, fontSize: 13, color: "#aaa", fontWeight: 400 }}>
+                                    거래 {tradeCount}건
+                                </span>
+                            )}
                         </h3>
 
-                        {expandedDate === date && (
+                        {isOpen && (
                             <div style={{ paddingLeft: "16px" }}>
+                                {dayLoading[day] && <p style={{ color: "#aaa" }}>⏳ 불러오는 중...</p>}
+
+                                {dayError[day] && (
+                                    <p style={{ color: "#ff7777" }}>
+                                        불러오기 실패: {dayError[day].message}
+                                    </p>
+                                )}
+
+                                {!dayLoading[day] && !dayError[day] && item === null && (
+                                    <p style={{ color: "#aaa" }}>이 날짜에는 저장된 데이터가 없습니다.</p>
+                                )}
+
+                                {item && (
+                                <>
                                 <TradingArchivePanel
                                     day={day}
                                     date={date}
-                                    trades={trades}
-                                    symbols={symbols}
-                                    asset={asset}
+                                    trades={item.trades || []}
+                                    symbols={item.symbols || []}
+                                    asset={item.asset || null}
                                     selectedTradeView={selectedTradeView}
                                     setSelectedTradeView={setSelectedTradeView}
-                                    expanded={!!expandedTrading[date]}
-                                    onToggle={() => toggleTrading(date, day)}
+                                    expanded={!!expandedTrading[day]}
+                                    onToggle={() => toggleTrading(day)}
                                 />
 
-                                {!!expandedTrading[date] && selectedTradeView?.day === day && (
+                                {!!expandedTrading[day] && selectedTradeView?.day === day && (
                                     <ArchiveTradeDetail
                                         day={day}
                                         symbol={selectedTradeView.symbol}
-                                        trades={trades.filter((t) => t.symbol === selectedTradeView.symbol)}
-                                        asset={asset}
+                                        trades={(item.trades || []).filter((t) => t.symbol === selectedTradeView.symbol)}
+                                        asset={item.asset || null}
                                     />
                                 )}
 
                                 {(() => {
-                                    const youtubeData = data?.youtube_data || {};
+                                    const youtubeData = item.data?.youtube_data || {};
                                     const orderedCountries = Object.entries(youtubeData).sort(([a], [b]) => {
                                         const order = newsParams.order;
                                         const indexA = order.indexOf(a);
@@ -1037,85 +1085,14 @@ function Archive() {
                                         );
                                     });
                                 })()}
+                                </>
+                                )}
                             </div>
                         )}
                     </div>
-                ))}
+                    );
+                })}
             </div>
-
-            {totalPages > 1 && (
-                <div
-                    style={{
-                        marginTop: 28,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 14,
-                        flexWrap: "wrap",
-                    }}
-                >
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <button
-                            onClick={() => setPage(1)}
-                            disabled={page === 1}
-                            style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === 1 ? pagerBtnDisabled : null) }}
-                            title="첫 페이지"
-                        >
-                            First
-                        </button>
-
-                        <button
-                            onClick={goPrevPage}
-                            disabled={page === 1}
-                            style={{ ...pagerBtnBase, ...(page === 1 ? pagerBtnDisabled : null) }}
-                            title="이전 페이지"
-                        >
-                            ◀ Prev
-                        </button>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        {Array.from({ length: windowEnd - windowStart + 1 }, (_, i) => {
-                            const pageNum = windowStart + i;
-                            const isActive = page === pageNum;
-
-                            return (
-                                <button
-                                    key={pageNum}
-                                    onClick={() => setPage(pageNum)}
-                                    style={{ ...pagerBtnBase, ...(isActive ? pagerBtnActive : null) }}
-                                >
-                                    {pageNum}
-                                </button>
-                            );
-                        })}
-
-                        <span style={{ marginLeft: 6, color: "#aaa", fontSize: 14 }}>
-                            {windowStart}-{windowEnd} / {totalPages}
-                        </span>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <button
-                            onClick={goNextPage}
-                            disabled={page === totalPages}
-                            style={{ ...pagerBtnBase, ...(page === totalPages ? pagerBtnDisabled : null) }}
-                            title="다음 페이지"
-                        >
-                            Next ▶
-                        </button>
-
-                        <button
-                            onClick={() => setPage(totalPages)}
-                            disabled={page === totalPages}
-                            style={{ ...pagerBtnBase, ...pagerBtnGhost, ...(page === totalPages ? pagerBtnDisabled : null) }}
-                            title="마지막 페이지"
-                        >
-                            Last
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

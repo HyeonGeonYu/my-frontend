@@ -159,32 +159,10 @@ function extractAssetSummary(raw: any, assetSnapshot: any = null) {
 }
 
 
-export default async function handler(req: any, res: any) {
-    try {
-        if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
-            return res.status(500).json({
-                ok: false,
-                error: "SUPABASE_URL / SUPABASE_SECRET_KEY missing",
-            });
-        }
-
-        const page = Math.max(1, Number(req.query.page || 1));
-        const from = (page - 1) * PER_PAGE;
-        const to = from + PER_PAGE - 1;
-
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
-            auth: { persistSession: false },
-        });
-
-        const { data: dailyRows, error: dailyError, count } = await supabase
-            .from("daily_collections")
-            .select("*", { count: "exact" })
-            .order("day", { ascending: false })
-            .range(from, to);
-
-        if (dailyError) throw dailyError;
-
-        const days = (dailyRows || []).map((r: any) => r.day);
+// dailyRows(daily_collections 원본 row들)를 프론트 아이템으로 조립
+// (trade_records·asset_snapshots 조인 포함) — 페이지 모드와 단일 일자 모드 공용
+async function buildItems(supabase: any, dailyRows: any[]) {
+    const days = (dailyRows || []).map((r: any) => r.day);
 
         const [tradeResult, assetResult] = await Promise.all([
             days.length
@@ -230,36 +208,153 @@ export default async function handler(req: any, res: any) {
             }
         }
 
-        const items = await Promise.all(
-            (dailyRows || []).map(async (row: any) => {
-                const day = row.day;
-                const dayTrades = tradesByDay[day] || [];
-                const assetSnapshot = assetByDay[day] || null;
-                const assetRaw = assetSnapshot?.raw_json || null;
+    return (dailyRows || []).map((row: any) => {
+        const day = row.day;
+        const dayTrades = tradesByDay[day] || [];
+        const assetSnapshot = assetByDay[day] || null;
+        const assetRaw = assetSnapshot?.raw_json || null;
 
-                const tradeSymbols = dayTrades
-                    .map((t: any) => t.symbol)
-                    .filter(Boolean)
-                    .map((s: string) => String(s).toUpperCase());
+        const tradeSymbols = dayTrades
+            .map((t: any) => t.symbol)
+            .filter(Boolean)
+            .map((s: string) => String(s).toUpperCase());
 
-                const assetSymbols = extractPositionSymbols(assetRaw);
+        const assetSymbols = extractPositionSymbols(assetRaw);
 
-                const symbols = Array.from(
-                    new Set([...tradeSymbols, ...assetSymbols])
-                ).sort();
+        const symbols = Array.from(
+            new Set([...tradeSymbols, ...assetSymbols])
+        ).sort();
 
-                return {
-                    date: compactDay(day),
-                    day,
-                    data: stripTranscript(row.raw_json) || {},
-                    trades: dayTrades,
-                    tradeCount: dayTrades.length,
-                    symbols,
-                    assetSnapshot,
-                    asset: extractAssetSummary(assetRaw, assetSnapshot),
-                };
-            })
-        );
+        return {
+            date: compactDay(day),
+            day,
+            data: stripTranscript(row.raw_json) || {},
+            trades: dayTrades,
+            tradeCount: dayTrades.length,
+            symbols,
+            assetSnapshot,
+            asset: extractAssetSummary(assetRaw, assetSnapshot),
+        };
+    });
+}
+
+export default async function handler(req: any, res: any) {
+    try {
+        if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+            return res.status(500).json({
+                ok: false,
+                error: "SUPABASE_URL / SUPABASE_SECRET_KEY missing",
+            });
+        }
+
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
+            auth: { persistSession: false },
+        });
+
+        const monthsParam = String(req.query.months || "");
+        const monthParam = String(req.query.month || "");
+        const dayParam = String(req.query.day || "");
+
+        // ── 월 목록: day 컬럼만 전량 조회(경량) → 월별 그룹 ──
+        if (monthsParam === "1") {
+            const { data, error } = await supabase
+                .from("daily_collections")
+                .select("day")
+                .order("day", { ascending: false });
+
+            if (error) throw error;
+
+            const byMonth: Record<string, number> = {};
+            for (const r of data || []) {
+                const m = String(r.day || "").slice(0, 7);
+                if (!/^\d{4}-\d{2}$/.test(m)) continue;
+                byMonth[m] = (byMonth[m] || 0) + 1;
+            }
+
+            const months = Object.entries(byMonth)
+                .map(([month, dayCount]) => ({ month, days: dayCount }))
+                .sort((a, b) => b.month.localeCompare(a.month));
+
+            res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+            return res.status(200).json({ ok: true, months });
+        }
+
+        // ── 단일 일자 상세: 월 뷰에서 날짜를 펼칠 때 지연 로드 ──
+        if (dayParam) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dayParam)) {
+                return res.status(400).json({ ok: false, error: "day must be YYYY-MM-DD" });
+            }
+
+            const { data: dailyRows, error } = await supabase
+                .from("daily_collections")
+                .select("*")
+                .eq("day", dayParam)
+                .limit(1);
+
+            if (error) throw error;
+
+            const items = await buildItems(supabase, dailyRows || []);
+            return res.status(200).json({ ok: true, data: items });
+        }
+
+        // ── 월별 경량 일자 목록: day + 거래건수만 (raw_json 미조회) ──
+        if (monthParam) {
+            if (!/^\d{4}-\d{2}$/.test(monthParam)) {
+                return res.status(400).json({ ok: false, error: "month must be YYYY-MM" });
+            }
+
+            const [y, m] = monthParam.split("-").map(Number);
+            const fromDay = `${monthParam}-01`;
+            const nextMonthDay =
+                m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+
+            const { data: dayRows, error } = await supabase
+                .from("daily_collections")
+                .select("day")
+                .gte("day", fromDay)
+                .lt("day", nextMonthDay)
+                .order("day", { ascending: false });
+
+            if (error) throw error;
+
+            const days = (dayRows || []).map((r: any) => r.day);
+
+            const { data: trades, error: tradeError } = days.length
+                ? await supabase.from("trade_records").select("day").in("day", days)
+                : { data: [], error: null };
+
+            if (tradeError) throw tradeError;
+
+            const countByDay: Record<string, number> = {};
+            for (const t of trades || []) {
+                countByDay[t.day] = (countByDay[t.day] || 0) + 1;
+            }
+
+            return res.status(200).json({
+                ok: true,
+                month: monthParam,
+                days: days.map((d: string) => ({
+                    day: d,
+                    date: compactDay(d),
+                    tradeCount: countByDay[d] || 0,
+                })),
+            });
+        }
+
+        // ── (레거시) 페이지 모드 ──
+        const page = Math.max(1, Number(req.query.page || 1));
+        const from = (page - 1) * PER_PAGE;
+        const to = from + PER_PAGE - 1;
+
+        const { data: dailyRows, error: dailyError, count } = await supabase
+            .from("daily_collections")
+            .select("*", { count: "exact" })
+            .order("day", { ascending: false })
+            .range(from, to);
+
+        if (dailyError) throw dailyError;
+
+        const items = await buildItems(supabase, dailyRows || []);
 
         return res.status(200).json({
             ok: true,
