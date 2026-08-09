@@ -24,8 +24,34 @@ function Layout() {
       <main style={{ padding: isMobile ? 0 : "20px" }}>
         <Outlet />
       </main>
+
+      {/* 공통 푸터 — 문의 메일은 JS 조합으로 렌더(크롤러 평문 수집 방어) */}
+      <footer
+        style={{
+          textAlign: "center",
+          padding: isMobile ? "20px 12px 28px" : "28px 20px 36px",
+          borderTop: "1px solid #2a2a2a",
+          color: "#888",
+          fontSize: isMobile ? 12 : 13,
+          lineHeight: 1.7,
+        }}
+      >
+        <div>개인 운영 트레이딩 · 뉴스 대시보드입니다.</div>
+        <div>
+          비즈니스 · 제휴 및 기타 문의:{" "}
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            style={{ color: "#00bfff", textDecoration: "none" }}
+          >
+            {CONTACT_EMAIL}
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
+
+// 크롤러 평문 매칭 회피용 조합
+const CONTACT_EMAIL = ["kiolswqa0987", "gmail.com"].join("@");
 
 export default Layout;
