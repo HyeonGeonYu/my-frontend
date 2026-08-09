@@ -481,49 +481,18 @@ export function makeBybitSource({ signalName = "bybit", signalNames = ["bybit", 
   };
 }
 
-// -------------------- TokenWsHub --------------------
-// API key를 브라우저에 노출하지 않고 WS 연결을 위한 단기 토큰을 서버사이드에서 발급받아 사용
+// -------------------- CFD WS (단기 토큰) --------------------
+// API key를 브라우저에 노출하지 않고 서버사이드에서 발급받은 단기 토큰으로 WS 연결.
+// urlProvider가 재연결마다 새 토큰을 받아오므로 만료 토큰 재사용(403 폭주)이 없다.
 
-class TokenWsHub {
-  constructor(wsBaseUrl, tokenApiPath) {
-    this._wsBaseUrl = wsBaseUrl;
-    this._tokenApiPath = tokenApiPath;
-    this._hubPromise = null;
-  }
-
-  _getHub() {
-    if (this._hubPromise) return this._hubPromise;
-    this._hubPromise = fetch(this._tokenApiPath)
-      .then((r) => r.json())
-      .then((d) => {
-        const token = d?.token;
-        const url = token
-          ? `${this._wsBaseUrl}?token=${encodeURIComponent(token)}`
-          : this._wsBaseUrl;
-        return getWsHub(url);
-      })
-      .catch(() => {
-        this._hubPromise = null;
-        return getWsHub(this._wsBaseUrl);
-      });
-    return this._hubPromise;
-  }
-
-  subscribe(topic, fn) {
-    let unsub = null;
-    let cancelled = false;
-
-    this._getHub().then((hub) => {
-      if (!cancelled) {
-        unsub = hub.subscribe(topic, fn);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      if (unsub) unsub();
-    };
-  }
+function makeCfdWsHub() {
+  const base = "wss://api.hyeongeonnoil.com/ws";
+  return getWsHub(base, async () => {
+    const r = await fetch("/api/cfd-ws-token");
+    const d = await r.json();
+    const token = d?.token;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  });
 }
 
 /**
@@ -531,10 +500,7 @@ class TokenWsHub {
  * - signalName: "mt5" 고정(원하면 바꿀 수 있게 해둠)
  */
 export function makeCfdSource({ signalName = "mt5", signalNames = ["mt5", "s11m"] } = {}) {
-  const wsHub = new TokenWsHub(
-    "wss://api.hyeongeonnoil.com/ws",
-    "/api/cfd-ws-token"
-  );
+  const wsHub = makeCfdWsHub();
   const id = "cfd";
 
   return {

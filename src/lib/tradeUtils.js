@@ -365,9 +365,15 @@ export function sessionKeyKST_0650(tsSec) {
 /* ──────────────────────────────
  * 최소 WS 허브 (URL 주입형, Bybit/내서버 공용)
  * ────────────────────────────── */
+const RETRY_BASE_MS = 1200;
+const RETRY_MAX_MS = 60000;
+
 class WsHub {
-    constructor(url) {
+    constructor(url, urlProvider = null) {
         this.url = url;
+        // urlProvider: 연결/재연결 때마다 호출되는 async () => url.
+        // 토큰이 URL에 박히는 서버(내 서버 ?token=)는 만료 토큰 재사용을 막기 위해 필수.
+        this.urlProvider = urlProvider;
         this.ws = null;
         this.connected = false;
         this.pendingTopics = new Set();
@@ -375,6 +381,8 @@ class WsHub {
         this.queue = [];               // 연결 전 요청 토픽
         this.statusHandlers = new Set();
         this._pingTimer = null;
+        this._connecting = false;
+        this._retryDelayMs = RETRY_BASE_MS;
         this._connect();
     }
 
@@ -396,14 +404,28 @@ class WsHub {
         return () => this.statusHandlers.delete(fn);
     }
 
-    _connect() {
+    async _connect() {
+        if (this.ws || this._connecting) return;
+        this._connecting = true;
+
+        let url = this.url;
+        if (this.urlProvider) {
+            try {
+                url = await this.urlProvider();
+            } catch {
+                // 토큰 발급 실패 → 기본 URL로 시도하고 onclose 백오프에 맡긴다
+            }
+        }
+
+        this._connecting = false;
         if (this.ws) return;
 
-        const ws = new WebSocket(this.url);
+        const ws = new WebSocket(url);
         this.ws = ws;
 
         ws.onopen = () => {
             this.connected = true;
+            this._retryDelayMs = RETRY_BASE_MS;
             this._emitStatus();
 
             // flush queued topics
@@ -465,7 +487,10 @@ class WsHub {
                 clearInterval(this._pingTimer);
             } catch {
             }
-            setTimeout(() => this._connect(), 1200);
+            // 지수 백오프: 토큰 만료·서버 다운 시 1.2초 고정 폭주 방지
+            const delay = this._retryDelayMs;
+            this._retryDelayMs = Math.min(this._retryDelayMs * 2, RETRY_MAX_MS);
+            setTimeout(() => this._connect(), delay);
         };
 
         ws.onerror = () => {
@@ -533,15 +558,17 @@ class WsHub {
 const _hubCache = new Map();
 
 /**
- * getWsHub(url)
- * - 같은 url이면 같은 허브 인스턴스를 반환(연결/구독 공유)
+ * getWsHub(url, urlProvider?)
+ * - 같은 url(키)이면 같은 허브 인스턴스를 반환(연결/구독 공유)
  * - 다른 url이면 다른 허브 인스턴스(coin/bybit vs cfd/내서버)로 분리
+ * - urlProvider가 있으면 연결/재연결마다 호출해 실제 접속 URL을 새로 받는다
+ *   (단기 토큰 갱신용 — url 인자는 캐시 키 겸 폴백 URL)
  */
-export function getWsHub(url) {
+export function getWsHub(url, urlProvider = null) {
     const key = String(url || "");
     if (!key) throw new Error("getWsHub(url) requires url");
     if (_hubCache.has(key)) return _hubCache.get(key);
-    const hub = new WsHub(key);
+    const hub = new WsHub(key, urlProvider);
     _hubCache.set(key, hub);
     return hub;
 }

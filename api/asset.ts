@@ -202,17 +202,19 @@ export default async function handler(req: Request): Promise<Response> {
             } while (cursor !== 0);
         }
 
-        return json({
-            retCode: 0,
-            asset: {wallet, positions},
-            _debug: {
+        const payload: any = {retCode: 0, asset: {wallet, positions}};
+
+        if (searchParams.get("debug") === "1") {
+            payload._debug = {
                 ns,
                 redisKey: key,
                 walletField: walletKey,
                 symbols: wantSymbols.length ? wantSymbols : Object.keys(positions),
                 includeEmpty,
-            },
-        });
+            };
+        }
+
+        return json(payload);
     } catch (e: any) {
         return json(
             {retCode: -1, retMsg: e?.message || "server error"},

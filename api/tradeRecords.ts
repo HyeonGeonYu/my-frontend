@@ -275,28 +275,44 @@ export async function GET(req: Request): Promise<Response> {
 
     const raw = await redis.xrange(keyStream, fromId, toId, limit);
 
-    const signalKeyStream = "trading:bybit:signals";
-    const signalRaw = await redis.xrange(signalKeyStream, fromId, toId, Math.min(limit * 3, 5000));
+    // source_signal 복구용 시그널 스트림: ns의 거래소에 맞는 채널들을 조회.
+    // (구 하드코딩 trading:bybit:signals — MT5 ns에선 항상 미스, bybit 채널은 s11로 이관됨)
+    const exchange = ns.split(":").pop()?.toUpperCase() || "";
+    const defaultSignalNames = exchange === "MT5" ? ["mt5", "s11m"] : ["bybit", "s11"];
+    const signalNames = (searchParams.get("signals") || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => /^[a-z0-9_-]{1,32}$/.test(s));
+    const signalStreams = (signalNames.length ? signalNames : defaultSignalNames).map(
+      (n) => `trading:${n}:signals`
+    );
+
+    const perStreamLimit = Math.min(limit * 3, 5000);
+    const signalRaws = await Promise.all(
+      signalStreams.map((s) => redis.xrange(s, fromId, toId, perStreamLimit).catch(() => null))
+    );
 
     const signalsById = new Map<string, Record<string, any>>();
 
     const signalEntriesArr: Array<{ id: string; message: any }> = [];
 
-    if (Array.isArray(signalRaw)) {
-      for (const ent of signalRaw as any[]) {
-        if (ent?.id != null && ent?.message != null) {
-          signalEntriesArr.push({ id: String(ent.id), message: ent.message });
-          continue;
-        }
+    for (const signalRaw of signalRaws) {
+      if (Array.isArray(signalRaw)) {
+        for (const ent of signalRaw as any[]) {
+          if (ent?.id != null && ent?.message != null) {
+            signalEntriesArr.push({ id: String(ent.id), message: ent.message });
+            continue;
+          }
 
-        if (Array.isArray(ent) && ent.length >= 2) {
-          signalEntriesArr.push({ id: String(ent[0]), message: ent[1] });
-          continue;
+          if (Array.isArray(ent) && ent.length >= 2) {
+            signalEntriesArr.push({ id: String(ent[0]), message: ent[1] });
+            continue;
+          }
         }
-      }
-    } else if (signalRaw && typeof signalRaw === "object") {
-      for (const [id, message] of Object.entries(signalRaw as Record<string, any>)) {
-        signalEntriesArr.push({ id, message });
+      } else if (signalRaw && typeof signalRaw === "object") {
+        for (const [id, message] of Object.entries(signalRaw as Record<string, any>)) {
+          signalEntriesArr.push({ id, message });
+        }
       }
     }
 
