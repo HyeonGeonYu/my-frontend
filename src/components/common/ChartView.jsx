@@ -332,10 +332,12 @@ export default function ChartView({
     loading = false,
     intervalSec = 60,
     entryLines, // [{side:"LONG"|"SHORT", avg:number}] — 보유 포지션 평균 진입가 선
+    closedBands, // ✅ 휴장 구간 [{from,to}] (utc sec) — CFD 갭 음영. null/미전달이면 안 그림.
 }) {
     const wrapRef = useRef(null);
     const chartRef = useRef(null);
     const [overlayLabels, setOverlayLabels] = useState([]);
+    const [closedRects, setClosedRects] = useState([]); // ✅ 휴장 음영 px 사각형
     // ✅ width/height를 최신값으로 들고있을 ref
     const sizeRef = useRef({ width, height });
     const applyLayoutRef = useRef(() => {
@@ -434,6 +436,45 @@ export default function ChartView({
         return fmtComma(n, ps);
     }, []);
 
+
+    // ✅ 휴장 밴드 [{from,to}](sec) → px 사각형. 오버레이 라벨과 같은 좌표 방식(timeToCoordinate + 선형 폴백).
+    const rebuildClosedRects = useCallback(() => {
+        const chart = chartRef.current;
+        const el = wrapRef.current;
+        const bands = Array.isArray(closedBands) ? closedBands : [];
+
+        if (!chart || !el || !bands.length) {
+            setClosedRects((prev) => (prev.length ? [] : prev));
+            return;
+        }
+
+        const w = el.clientWidth || 0;
+        const vr = rangeRef.current;
+
+        const toX = (t) => {
+            let x = chart.timeScale().timeToCoordinate(t);
+            if (x == null || !Number.isFinite(x)) {
+                const s = Number(vr?.start);
+                const e = Number(vr?.end);
+                if (Number.isFinite(s) && Number.isFinite(e) && e > s) {
+                    x = ((t - s) / (e - s)) * w;
+                }
+            }
+            return Number.isFinite(x) ? x : null;
+        };
+
+        const rects = [];
+        for (const b of bands) {
+            const x1 = toX(Number(b.from));
+            const x2 = toX(Number(b.to));
+            if (x1 == null || x2 == null) continue;
+            const left = Math.max(0, Math.min(x1, x2));
+            const right = Math.min(w, Math.max(x1, x2));
+            if (right - left < 2) continue;
+            rects.push({key: `${b.from}_${b.to}`, left, width: right - left});
+        }
+        setClosedRects(rects);
+    }, [closedBands]);
 
     const rebuildOverlayLabels = useCallback(() => {
         const chart = chartRef.current;
@@ -881,9 +922,10 @@ export default function ChartView({
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 rebuildOverlayLabels();
+                rebuildClosedRects();
             });
         });
-    }, [safeCandles, safeMA, thr, safeMaSd, k1set, bandData, safeMarkers, loading, applyLayout, rebuildOverlayLabels]);
+    }, [safeCandles, safeMA, thr, safeMaSd, k1set, bandData, safeMarkers, loading, applyLayout, rebuildOverlayLabels, rebuildClosedRects]);
 
     // ✅ 보유 포지션 평균 진입가 선 (priceLine). entryLines 바뀔 때 갱신.
     const entryLinesKey = useMemo(
@@ -921,9 +963,10 @@ export default function ChartView({
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 rebuildOverlayLabels();
+                rebuildClosedRects();
             });
         });
-    }, [visibleRange?.start, visibleRange?.end, applyLayout, rebuildOverlayLabels]);
+    }, [visibleRange?.start, visibleRange?.end, applyLayout, rebuildOverlayLabels, rebuildClosedRects]);
 
     const visibleOverlayLabels = loading ? [] : overlayLabels;
     const crossLabels = visibleOverlayLabels.filter((l) => l.layer === "cross");
@@ -954,6 +997,52 @@ export default function ChartView({
                     zIndex: 1,
                 }}
             />
+
+            {/* ✅ 휴장 음영: 캔들 위·라벨 아래 (연속 빈 캔들 = 휴장) */}
+            {!loading && closedRects.length > 0 && (
+                <div
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 20,
+                        pointerEvents: "none",
+                    }}
+                >
+                    {closedRects.map((r) => (
+                        <div
+                            key={r.key}
+                            style={{
+                                position: "absolute",
+                                top: 0,
+                                bottom: 26, // 시간축 라벨은 안 덮음
+                                left: r.left,
+                                width: r.width,
+                                background: "rgba(148,163,184,0.08)",
+                                borderLeft: "1px dashed rgba(148,163,184,0.28)",
+                                borderRight: "1px dashed rgba(148,163,184,0.28)",
+                                boxSizing: "border-box",
+                            }}
+                        >
+                            {r.width > 46 && (
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        top: 6,
+                                        left: "50%",
+                                        transform: "translateX(-50%)",
+                                        fontSize: 10,
+                                        fontWeight: 800,
+                                        color: "rgba(148,163,184,0.75)",
+                                        whiteSpace: "nowrap",
+                                    }}
+                                >
+                                    휴장
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* ✅ 크로스타임 번호: 차트 위, 신호 라벨 아래 */}
             <div

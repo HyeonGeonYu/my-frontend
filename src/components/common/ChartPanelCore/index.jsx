@@ -23,6 +23,7 @@ export default function ChartPanelCore({
   bandSpec, // ✅ v4: 슬롯별 {k, w(분)} — 없으면 밴드 없음(캔들만)
   entryLines,
   crossTimes,
+  shadeClosedGaps = false, // ✅ 휴장 음영 (CFD 전용 — 캔들 갭 기반, 코인 24/7은 불필요)
 
   // formatters
   tickFormatter = (tsSec) => fmtKSTHour(tsSec),
@@ -41,6 +42,7 @@ export default function ChartPanelCore({
     loading,
     notesView,
     displayCandles,
+    closedBands,
     maSd,
     bandData,
     bandLoading,
@@ -167,6 +169,7 @@ export default function ChartPanelCore({
           priceScale={autoDigits}
           visibleRange={visibleRange}
           loading={loading}
+          closedBands={shadeClosedGaps ? closedBands : null}
         />
 
         <SignalNotesPanel

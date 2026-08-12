@@ -490,6 +490,7 @@ export default function Cfd() {
                                             entryLines={ent}
                                             onStats={onStats}
                                             bounds={{min: -7, max: 0}}
+                                            shadeClosedGaps
                                         />
                                     )}
                                 </div>

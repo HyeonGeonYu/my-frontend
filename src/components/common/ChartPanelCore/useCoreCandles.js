@@ -27,6 +27,10 @@ const CATCHUP_LOOKBACK_SEC = 2 * 3600; // 최근 2시간만 재조회해서 꼬�
 const CATCHUP_STALE_SEC = 5 * 60; // 마지막 캔들이 5분 이상 뒤쳐지면 stale로 판단
 const CATCHUP_THROTTLE_MS = 30_000; // 30초 이내 중복 fetch 방지
 
+// ✅ 휴장 판정(CFD 갭 음영): 연속 ≥N분 캔들 없음 = 휴장.
+//   짧은 피드 끊김(1~2분) 오탐 방지용 임계값 — 실제 휴장(일일 마감 ~1h, 주말 ~2d)은 확실히 초과.
+const CLOSED_GAP_MIN_MINUTES = 10;
+
 export default function useCoreCandles({
   // identity
   source,
@@ -64,6 +68,7 @@ export default function useCoreCandles({
 
   const [notesView, setNotesView] = useState([]);
   const [displayCandles, setDisplayCandles] = useState([]);
+  const [closedBands, setClosedBands] = useState([]); // ✅ 휴장 구간 [{from,to}] (utc sec) — CFD 갭 음영용
   const [ma100, setMa100] = useState([]);
   const [maSd, setMaSd] = useState([]); // ✅ 최단 win 롤링 {time, ma, sd} — 배지/앵커 판단용
   const [bandData, setBandData] = useState(null); // ✅ 슬롯별 사전계산 밴드 {ma, s1Long, ...}
@@ -159,6 +164,31 @@ export default function useCoreCandles({
         }
       }
       setDisplayCandles(filled);
+
+      // ✅ 휴장 밴드: 연속 ≥CLOSED_GAP_MIN_MINUTES분 빈 캔들 구간. 백엔드 세션 데이터 불필요
+      //   (with-gaps가 휴장 분을 비워서 내려줌). 미래(아직 안 온 분)는 휴장 아님 → now까지만 스캔.
+      {
+        const realTimes = new Set(real.map((b) => Math.floor(b.time / 60) * 60));
+        const nowMin = Math.floor(Date.now() / 60000) * 60;
+        const scanEnd = Math.min(end, nowMin);
+        const bands = [];
+        let runStart = null;
+        for (let t = start; t < scanEnd; t += 60) {
+          if (realTimes.has(t)) {
+            if (runStart != null) {
+              if ((t - runStart) / 60 >= CLOSED_GAP_MIN_MINUTES) bands.push({from: runStart, to: t});
+              runStart = null;
+            }
+          } else if (runStart == null) {
+            runStart = t;
+          }
+        }
+        // 꼬리 갭(현재 휴장 중)은 now까지 음영
+        if (runStart != null && (scanEnd - runStart) / 60 >= CLOSED_GAP_MIN_MINUTES) {
+          bands.push({from: runStart, to: scanEnd});
+        }
+        setClosedBands(bands);
+      }
 
       // ✅ MA series
       const forMa = sliceWithBuffer(arrAll, start, end, MA_BUF);
@@ -299,6 +329,7 @@ export default function useCoreCandles({
     setVisibleRange({start, end});
     setNotesView([]);
     setDisplayCandles([]);
+    setClosedBands([]);
     setMa100([]);
     setMaSd([]);
     setBandLoading(!!bandsEnabled); // 밴드 켜진 심볼이면 일단 '로딩중'으로 시작(아래 백필 끝나면 false)
@@ -579,6 +610,7 @@ export default function useCoreCandles({
     loading,
     notesView,
     displayCandles,
+    closedBands,
     ma100,
     maSd,
     bandData,
