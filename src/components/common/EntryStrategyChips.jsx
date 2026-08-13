@@ -5,17 +5,21 @@ import React from "react";
 import { groupEntriesByStrategy } from "../../lib/entryStrategies";
 import { fmtComma, fmtKSTMonth } from "../../lib/tradeUtils";
 
-export default function EntryStrategyChips({ entries, sigMap, fontSize = 10.5 }) {
+// onPick(group): 칩 클릭 콜백 — 주면 클릭 가능 표시(차트 타임프레임 전환 등에 사용).
+export default function EntryStrategyChips({ entries, sigMap, fontSize = 10.5, onPick }) {
   if (!sigMap || !Array.isArray(entries) || entries.length === 0) return null;
   const groups = groupEntriesByStrategy(entries, sigMap);
   if (!groups.length) return null;
 
   return (
     <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6, verticalAlign: "middle" }}>
-      {groups.map((g) => (
+      {groups.map((g) => {
+        const clickable = !!(onPick && g.book);
+        return (
         <span
           key={g.label}
-          title={`${g.label} — ${g.count}게임 · 수량 ${fmtComma(g.qty, 3)} · 평균가 ${fmtComma(g.avg, null)}${g.lastTs ? ` · 최근진입 ${fmtKSTMonth(Math.floor(g.lastTs / 1000))}` : ""}`}
+          onClick={clickable ? (e) => { e.stopPropagation(); onPick(g); } : undefined}
+          title={`${g.label} — ${g.count}게임 · 수량 ${fmtComma(g.qty, 3)} · 평균가 ${fmtComma(g.avg, null)}${g.lastTs ? ` · 최근진입 ${fmtKSTMonth(Math.floor(g.lastTs / 1000))}` : ""}${clickable ? " · 클릭: 해당 시간봉 차트" : ""}`}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -29,13 +33,15 @@ export default function EntryStrategyChips({ entries, sigMap, fontSize = 10.5 })
             fontWeight: 800,
             lineHeight: 1.5,
             whiteSpace: "nowrap",
+            cursor: clickable ? "pointer" : "default",
           }}
         >
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: g.color, flex: "0 0 auto" }} />
           {g.label}
           {g.count > 1 && <span style={{ opacity: 0.75 }}>×{g.count}</span>}
         </span>
-      ))}
+        );
+      })}
     </span>
   );
 }

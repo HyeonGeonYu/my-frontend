@@ -44,6 +44,14 @@ export function entryStrategyLabel(ns, tag) {
   return `${bookOf(ns, t)} ${TAG_LABEL[t] || t}`;
 }
 
+// 전략 책 → 차트 타임프레임 (포지션 칩 클릭 시 차트 전환용).
+//   4h 전용 차트는 없어 일봉으로 근사(보유 수일 단위라 일봉이 근접).
+export function bookTimeframe(book) {
+  if (book === "1분" || book === "구채널") return "1m";
+  if (book === "4h" || book === "일봉" || book === "일봉(구)") return "1D";
+  return null;
+}
+
 // ENTRY 신호의 reasons에서 전략 태그 추출 — ENTRY reasons는 [tag] 또는 [tag,"ADD"] 형태.
 function tagOfSignal(sig) {
   let r = sig?.reasons_json ?? sig?.reasons;
@@ -104,7 +112,12 @@ export function groupEntriesByStrategy(entries, sigMap) {
     const meta = sigMap?.get(String(e?.entry_signal_id || ""));
     const key = meta ? meta.label : "기타";
     if (!groups.has(key)) {
-      groups.set(key, { label: key, color: meta?.color || "#8a8a8a", count: 0, qty: 0, pxq: 0, lastTs: 0 });
+      groups.set(key, {
+        label: key,
+        color: meta?.color || "#8a8a8a",
+        book: meta ? bookOf(meta.ns, meta.tag) : null, // 칩 클릭→타임프레임 전환용
+        count: 0, qty: 0, pxq: 0, lastTs: 0,
+      });
     }
     const g = groups.get(key);
     g.count += 1;

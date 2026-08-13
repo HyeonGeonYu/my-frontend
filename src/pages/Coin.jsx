@@ -4,15 +4,15 @@ import AssetPanel from "../components/AssetPanel";
 import UnifiedTickerCard from "../components/common/UnifiedTickerCard";
 import ChartPanelCore from "../components/common/ChartPanelCore";
 import DailyChartPanel from "../components/common/DailyChartPanel";
-import BandLegend from "../components/common/BandLegend";
 import SymbolStrategyTag from "../components/common/SymbolStrategyTag";
+import TimeframeToggle from "../components/common/TimeframeToggle";
 import { minuteBandSpec, STRAT_PARAMS, fmtParam, fmtFade } from "../lib/strategyParams";
 import useIsMobile from "../hooks/useIsMobile";
 import { fetchConfigCached } from "../lib/configCache";
 import { makeBybitSource } from "../lib/chartSources";
 import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
-import { loadEntryStrategyMap } from "../lib/entryStrategies";
+import { loadEntryStrategyMap, bookTimeframe } from "../lib/entryStrategies";
 import EntryStrategyChips from "../components/common/EntryStrategyChips";
 import { getDayLabel } from "../utils/date";
 import TradeStatsCard from "../components/common/TradeStatsCard";
@@ -808,7 +808,12 @@ export default function Coin() {
     }, [configState]);
 
     const [selectedSymbol, setSelectedSymbol] = useState(null);
-    const [timeframe, setTimeframe] = useState("1m"); // "1m" | "1D"
+    // ✅ 타임프레임 차트별 개별 설정(2026-08-13, 구 페이지 일괄 토글 폐지). 기본 1분봉.
+    const [tfBySymbol, setTfBySymbol] = useState({});
+    const tfOf = useCallback((sym) => tfBySymbol[String(sym).toUpperCase()] || "1m", [tfBySymbol]);
+    const setTfFor = useCallback((sym, tf) => {
+        setTfBySymbol((prev) => ({ ...prev, [String(sym).toUpperCase()]: tf }));
+    }, []);
 
     const visibleSymbols = useMemo(() => {
         if (!selectedSymbol) return symbolsConfig;
@@ -1062,11 +1067,6 @@ export default function Coin() {
                         currentEquity={equityUsdt}
                     />
                 </div>
-                {/* ✅ 밴드 범례 (1분봉=S1/S2, 일봉=S3/S4) */}
-                <div style={{ maxWidth: PAGE_MAX_W, margin: "0 auto 4px", minWidth: 0 }}>
-                    <BandLegend mode={timeframe} />
-                </div>
-
                 {/* ✅ 하단: 보기설정/티커(기존 폭 유지) + 차트(그대로) */}
                 <div style={{
                     display: "grid",
@@ -1105,84 +1105,48 @@ export default function Coin() {
                                 }}>
                                     <div style={{ fontWeight: 700, marginBottom: 10 }}>보기 설정</div>
                                     <div style={{ fontSize: 12, opacity: 0.85 }}>
-                                        {timeframe === "1m" ? getDayLabel(anchorEndUtcSec, dayOffset) : "일봉 · 최근 365일"}
+                                        {getDayLabel(anchorEndUtcSec, dayOffset)}
                                     </div>
                                 </div>
 
-                                {/* 타임프레임 토글: 1분봉 / 일봉 */}
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                    {[
-                                        { key: "1m", label: "1분봉" },
-                                        { key: "1D", label: "일봉" },
-                                    ].map((tf) => {
-                                        const on = timeframe === tf.key;
-                                        return (
-                                            <button
-                                                key={tf.key}
-                                                onClick={() => setTimeframe(tf.key)}
-                                                style={{
-                                                    padding: "8px 12px",
-                                                    borderRadius: 10,
-                                                    border: on ? 0 : "1px solid #2a2a2a",
-                                                    background: on ? "#00ffcc" : "#1a1a1a",
-                                                    color: on ? "#000" : "#ddd",
-                                                    fontWeight: 700,
-                                                    cursor: "pointer",
-                                                }}
-                                                title={tf.key === "1D" ? "일봉(가격 위주, 최근 365일)" : "1분봉(진입밴드 포함)"}
-                                            >
-                                                {tf.label}
-                                            </button>
-                                        );
-                                    })}
+                                {/* 날짜 이동 — 1분봉 차트에 적용 (타임프레임은 각 차트 우상단에서 개별 선택) */}
+                                <div style={{ display: "flex", gap: 8 }}>
+                                    <button
+                                        onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
+                                        disabled={!boundsReady || atMin}
+                                        style={disBtnStyle(!boundsReady || atMin)}
+                                        title="전날 보기"
+                                    >
+                                        ◀ 전날
+                                    </button>
+
+                                    <button
+                                        onClick={() => setDayOffset(0)}
+                                        style={{
+                                            padding: "8px 12px",
+                                            borderRadius: 10,
+                                            border: 0,
+                                            background: "#00ffcc",
+                                            color: "#000",
+                                            fontWeight: 700,
+                                        }}
+                                        title="오늘 보기"
+                                    >
+                                        오늘
+                                    </button>
+
+                                    <button
+                                        onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
+                                        disabled={!boundsReady || atMax}
+                                        style={disBtnStyle(!boundsReady || atMax)}
+                                        title="다음날 보기"
+                                    >
+                                        다음날 ▶
+                                    </button>
                                 </div>
-
-                                {timeframe === "1D" && (
-                                    <div style={{ marginTop: 6, fontSize: 11, opacity: 0.6, lineHeight: 1.5 }}>
-                                        일봉은 가격 흐름용입니다. z-score 진입밴드는 1분봉 전용(7일 σ 기반)이라 일봉엔 표시되지 않습니다.
-                                    </div>
-                                )}
-
-                                {/* 날짜 이동은 1분봉에서만 (일봉은 최근 구간만 보면 됨) */}
-                                {timeframe === "1m" && (
-                                    <>
-                                        <div style={{ height: 10 }} />
-                                        <div style={{ display: "flex", gap: 8 }}>
-                                            <button
-                                                onClick={() => setDayOffset((d) => Math.max(minOffset, d - 1))}
-                                                disabled={!boundsReady || atMin}
-                                                style={disBtnStyle(!boundsReady || atMin)}
-                                                title="전날 보기"
-                                            >
-                                                ◀ 전날
-                                            </button>
-
-                                            <button
-                                                onClick={() => setDayOffset(0)}
-                                                style={{
-                                                    padding: "8px 12px",
-                                                    borderRadius: 10,
-                                                    border: 0,
-                                                    background: "#00ffcc",
-                                                    color: "#000",
-                                                    fontWeight: 700,
-                                                }}
-                                                title="오늘 보기"
-                                            >
-                                                오늘
-                                            </button>
-
-                                            <button
-                                                onClick={() => setDayOffset((d) => Math.min(maxOffset, d + 1))}
-                                                disabled={!boundsReady || atMax}
-                                                style={disBtnStyle(!boundsReady || atMax)}
-                                                title="다음날 보기"
-                                            >
-                                                다음날 ▶
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
+                                <div style={{ marginTop: 8, fontSize: 11, opacity: 0.55, lineHeight: 1.5 }}>
+                                    날짜 이동은 1분봉 차트에 적용 · 1분봉/일봉은 각 차트에서 선택
+                                </div>
                             </div>
                         </div>
 
@@ -1231,6 +1195,7 @@ export default function Coin() {
                         {sortedVisibleSymbols.map((s) => {
                             const ent = entriesBySymbol[String(s.symbol).toUpperCase()];
                             const hasPos = Array.isArray(ent) && ent.length > 0;
+                            const tf = tfOf(s.symbol); // ✅ 차트별 타임프레임
                             return (
                             <div key={s.symbol} style={{
                                 width: "100%", minWidth: 0,
@@ -1242,11 +1207,21 @@ export default function Coin() {
                                 {hasPos && (
                                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 800, color: "#2fe08d", marginBottom: 2 }}>
                                         <span>● 진입중 {ent.map((e) => `${e.side === "SHORT" ? "S" : "L"} @${e.avg.toFixed(e.avg < 10 ? 5 : 1)}`).join(" · ")}</span>
-                                        <EntryStrategyChips entries={ent.flatMap((e) => e.entries || [])} sigMap={sigStratMap} />
+                                        {/* ✅ 칩 클릭 → 그 전략의 시간봉으로 이 차트 전환 */}
+                                        <EntryStrategyChips
+                                            entries={ent.flatMap((e) => e.entries || [])}
+                                            sigMap={sigStratMap}
+                                            onPick={(g) => { const t = bookTimeframe(g.book); if (t) setTfFor(s.symbol, t); }}
+                                        />
                                     </div>
                                 )}
-                                <SymbolStrategyTag symbol={s.symbol} timeframe={timeframe} />
-                                {timeframe === "1D" ? (
+                                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                                    <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+                                        <SymbolStrategyTag symbol={s.symbol} timeframe={tf} />
+                                    </div>
+                                    <TimeframeToggle value={tf} onChange={(t) => setTfFor(s.symbol, t)} />
+                                </div>
+                                {tf === "1D" ? (
                                     <DailyChartPanel
                                         source={bybitSource}
                                         symbol={s.symbol}
