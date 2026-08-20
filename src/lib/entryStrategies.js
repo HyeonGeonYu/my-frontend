@@ -99,9 +99,10 @@ export async function loadEntryStrategyMap(nsList = []) {
 }
 
 /**
- * 포지션 entries([{qty, price, ts, entry_signal_id}])를 전략별로 묶는다.
+ * 포지션 entries([{qty, price, ts, entry_signal_id, strategy_tag?, signal_ns?}])를 전략별로 묶는다.
  * 반환: [{label, color, count, qty, avg, lastTs}] — 수량합 큰 순.
- * 매칭 실패(신호 만료 등)는 "기타"로 묶음.
+ * 매칭 우선순위: ① 신호 스트림(sigMap) ② lot에 박제된 strategy_tag/signal_ns
+ *   (2026-08-20 executor 박제 도입 — 신호 만료(35일)·API 순단에도 귀속 유지) ③ "기타".
  */
 export function groupEntriesByStrategy(entries, sigMap) {
   const groups = new Map();
@@ -110,12 +111,27 @@ export function groupEntriesByStrategy(entries, sigMap) {
     const px = Number(e?.price) || 0;
     if (qty <= 0) continue;
     const meta = sigMap?.get(String(e?.entry_signal_id || ""));
-    const key = meta ? meta.label : "기타";
+    const stampedTag = String(e?.strategy_tag || "").toUpperCase();
+    const stampedNs = String(e?.signal_ns || "");
+    let key, color, book;
+    if (meta) {
+      key = meta.label;
+      color = meta.color;
+      book = bookOf(meta.ns, meta.tag);
+    } else if (stampedTag) {
+      key = entryStrategyLabel(stampedNs, stampedTag);
+      color = TAG_COLOR[stampedTag] || "#8a8a8a";
+      book = bookOf(stampedNs, stampedTag);
+    } else {
+      key = "기타";
+      color = "#8a8a8a";
+      book = null;
+    }
     if (!groups.has(key)) {
       groups.set(key, {
         label: key,
-        color: meta?.color || "#8a8a8a",
-        book: meta ? bookOf(meta.ns, meta.tag) : null, // 칩 클릭→타임프레임 전환용
+        color,
+        book, // 칩 클릭→타임프레임 전환용
         count: 0, qty: 0, pxq: 0, lastTs: 0,
       });
     }
