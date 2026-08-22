@@ -89,8 +89,19 @@ export default function DailyChartPanel({
         }
 
         setDigits(inferDigitsFromRows(rows, 2));
-        setBars(barsVisible);
-        setRange({ start, end });
+
+        // ✅ 우측 여백: 일봉은 마지막 봉이 차트 오른쪽 끝에 붙어 현재가/진입가 라벨에 가림
+        //    → 분봉(하루창 좌측채움)처럼 마지막 봉 뒤에 빈 봉(whitespace)을 붙여 ~12%를 비워둠.
+        const lastBar = barsVisible[barsVisible.length - 1];
+        const padBars = Math.max(6, Math.ceil(barsVisible.length * 0.12));
+        if (lastBar) {
+          const pad = Array.from({ length: padBars }, (_, i) => ({ time: lastBar.time + (i + 1) * DAY_SEC }));
+          setBars([...barsVisible, ...pad]);
+          setRange({ start, end: lastBar.time + (padBars + 1) * DAY_SEC });
+        } else {
+          setBars(barsVisible);
+          setRange({ start, end });
+        }
 
         // 일봉 신호(S3/S4) 마커 — 지정 네임스페이스 스트림에서 읽어 일봉봉에 스냅.
         const names = Array.isArray(signalNames) ? signalNames : (signalNames ? [signalNames] : []);
