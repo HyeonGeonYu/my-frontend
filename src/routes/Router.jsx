@@ -1,5 +1,6 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route, NavLink } from "react-router-dom";
+import React, { useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from "react-router-dom";
+import { initGA, trackPageview, trackEvent } from "../lib/ga";
 import Home from "../pages/Home";
 import Exchange from "../pages/Exchange";
 import Indexes from "../pages/Indexes";
@@ -41,9 +42,37 @@ function TopNav() {
   );
 }
 
+// GA4: 최초 로드 + 라우트 전환 페이지뷰, 외부링크 클릭 이벤트 (전 페이지 위임 리스너)
+function GaTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    initGA();
+    const onClick = (e) => {
+      const a = e.target.closest?.("a[href]");
+      if (!a) return;
+      const href = a.getAttribute("href") || "";
+      if (!/^https?:\/\//.test(href)) return;
+      try {
+        if (new URL(href).host === window.location.host) return;
+      } catch { return; }
+      trackEvent("outbound_click", { link_url: href, page_path: window.location.pathname });
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
+  useEffect(() => {
+    trackPageview(location.pathname + location.search);
+  }, [location.pathname, location.search]);
+
+  return null;
+}
+
 function AppRouter() {
   return (
     <Router>
+      <GaTracker />
       {/* 공통 네비게이션 */}
       <TopNav />
 
