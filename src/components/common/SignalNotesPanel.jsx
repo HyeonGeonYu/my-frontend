@@ -127,24 +127,18 @@ export default function SignalNotesPanel({
                                     border: "1px solid #2a2a2a",
                                 }}
                             >
+                                {/* 2줄 레이아웃: 모바일에서 7컬럼 고정폭이 넘쳐 태그·설명이 잘리던 문제 해소 */}
                                 <div
                                     style={{
-                                        display: "grid",
-                                        gridTemplateColumns: "6ch 7ch 8ch 9ch 14ch 16ch 1fr",
-                                        columnGap: 12,
-                                        alignItems: "baseline",
                                         fontSize: 12,
                                         lineHeight: 1.5,
-                                        whiteSpace: "nowrap",
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
                                         fontVariantNumeric: "tabular-nums",
                                     }}
                                     title={[
                                         n.displayNo || `#${n.signalNo || n.seq || n.no || ""}`,
                                         timeTxt,
-                                        side,
-                                        kind,
+                                        sideTxt,
+                                        kindTxt,
                                         priceTxt,
                                         entryExitTagTxt,
                                         reasonTxt,
@@ -152,42 +146,55 @@ export default function SignalNotesPanel({
                                         n.timeSec ? fmtKSTFull(n.timeSec) : "",
                                     ].filter(Boolean).join(" · ")}
                                 >
-                                    <b style={{ opacity: 0.95 }}>
-                                        {n.displayNo || `#${n.signalNo || n.seq || n.no || ""}`}
-                                    </b>
-
-                                    <span>{timeTxt}</span>
-
-                                    <span style={{ color: sideColor, fontWeight: 700 }}>
-                                        {sideTxt}
-                                    </span>
-
-                                    <span style={{ opacity: 0.85 }}>
-                                        {kindTxt}
-                                    </span>
-
-                                    <span>{priceTxt}</span>
-
-                                    {/* 새 컬럼: #ENTRY 4 / #EXIT 3,4/4 */}
-                                    <span
+                                    <div
                                         style={{
-                                            opacity: entryExitTagTxt ? 0.95 : 0.45,
-                                            fontWeight: 700,
-                                        }}
-                                    >
-                                        {entryExitTagTxt || "—"}
-                                    </span>
-
-                                    {/* 마지막 설명: 첫 번째 reason만 */}
-                                    <span
-                                        style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "5ch 6ch 3ch 5ch 1fr",
+                                            columnGap: 10,
+                                            alignItems: "baseline",
+                                            whiteSpace: "nowrap",
                                             overflow: "hidden",
                                             textOverflow: "ellipsis",
-                                            opacity: reasonTxt ? 0.9 : 0.6,
                                         }}
                                     >
-                                        {reasonTxt || "—"}
-                                    </span>
+                                        <b style={{ opacity: 0.95 }}>
+                                            {n.displayNo || `#${n.signalNo || n.seq || n.no || ""}`}
+                                        </b>
+
+                                        <span>{timeTxt}</span>
+
+                                        <span style={{ color: sideColor, fontWeight: 700 }}>
+                                            {sideTxt}
+                                        </span>
+
+                                        <span style={{ opacity: 0.85 }}>
+                                            {kindTxt}
+                                        </span>
+
+                                        <span>{priceTxt}</span>
+                                    </div>
+
+                                    {/* 설명 줄: 전략 라벨(예: S12 역추세·TP) + #ENTRY/#EXIT 태그 */}
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            gap: 10,
+                                            marginTop: 2,
+                                            whiteSpace: "nowrap",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                        }}
+                                    >
+                                        <span style={{ opacity: reasonTxt ? 0.9 : 0.6 }}>
+                                            {reasonTxt || "—"}
+                                        </span>
+
+                                        {entryExitTagTxt ? (
+                                            <span style={{ opacity: 0.95, fontWeight: 700 }}>
+                                                {entryExitTagTxt}
+                                            </span>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </div>
                         );
