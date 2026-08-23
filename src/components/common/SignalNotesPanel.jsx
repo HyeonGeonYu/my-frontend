@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { fmtKSTFull } from "../../lib/tradeUtils";
+import { fmtKSTFull, shortSignalLabel } from "../../lib/tradeUtils";
 
 /**
  * notes: [{ key, seq, timeSec, side, kind, price, reasons }]
@@ -108,11 +108,14 @@ export default function SignalNotesPanel({
                         const side = String(n.side || "").toUpperCase();
                         const kind = String(n.kind || "").toUpperCase();
                         const sideColor = side === "LONG" ? "#16a34a" : side === "SHORT" ? "#dc2626" : "#9ca3af";
+                        const sideTxt = side === "LONG" ? "롱" : side === "SHORT" ? "숏" : side;
+                        const kindTxt = kind === "ENTRY" ? "진입" : kind === "EXIT" ? "청산" : kind;
 
                         const priceTxt = typeof getPriceText === "function" ? getPriceText(n) : (n.price != null ? String(n.price) : "—");
                         const timeTxt = n.timeSec ? fmtKSTHM(n.timeSec) : "";
                         const entryExitTagTxt = getEntryExitTagText(n);
-                        const reasonTxt = getFirstReasonText(n);
+                        // 설명 컬럼: 축약 라벨(예: S12 역추세·TP) 우선, 미매핑 토큰은 원문
+                        const reasonTxt = shortSignalLabel(n) || getFirstReasonText(n);
 
                         return (
                             <div
@@ -156,11 +159,11 @@ export default function SignalNotesPanel({
                                     <span>{timeTxt}</span>
 
                                     <span style={{ color: sideColor, fontWeight: 700 }}>
-                                        {side}
+                                        {sideTxt}
                                     </span>
 
                                     <span style={{ opacity: 0.85 }}>
-                                        {kind}
+                                        {kindTxt}
                                     </span>
 
                                     <span>{priceTxt}</span>
