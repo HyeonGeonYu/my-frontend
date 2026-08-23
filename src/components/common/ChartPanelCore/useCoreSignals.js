@@ -1,6 +1,6 @@
 // src/components/common/ChartPanelCore/useCoreSignals.js
 import { useCallback, useRef } from "react";
-import { buildCrossMarkers } from "../../../lib/tradeUtils";
+import { buildCrossMarkers, formatSignalTooltip, shortSignalLabel } from "../../../lib/tradeUtils";
 import { signalsRepo } from "../../../lib/signalsRepo";
 import { tradeRecordsRepo } from "../../../lib/tradeRecordsRepo";
 import { getNetPnlPctFromSignal, fmtSignedPct } from "./coreUtils";
@@ -59,25 +59,6 @@ function getSignalType(item, exec) {
     ).trim();
 }
 
-
-function getKindSideText(item, exec) {
-    const kind = String(item?.kind || exec?.kind || "").toUpperCase();
-    const side = String(item?.side || exec?.side || "").toUpperCase();
-
-    if (!kind && !side) return "";
-
-    return [kind, side].filter(Boolean).join(" ");
-}
-
-function buildBaseArchiveLikeText(item, exec) {
-    const kindSide = getKindSideText(item, exec);
-    const signalType = getSignalType(item, exec);
-
-    return [
-        kindSide,
-        signalType,
-    ].filter(Boolean).join(" · ");
-}
 
 function toNumOrNull(v) {
     if (v === null || v === undefined || v === "") return null;
@@ -216,7 +197,8 @@ function appendExecText(item, execMap) {
     const key = getSignalKey(item);
     const exec = key ? execMap.get(key) : null;
 
-    const baseText = buildBaseArchiveLikeText(item, exec);
+    // ✅ 책·세부전략·청산종류·진입/청산가까지 담는 공용 설명 (net PNL은 아래 exec가 붙임 → 중복 방지)
+    const baseText = formatSignalTooltip(item, { withPnl: false });
     const extraText = buildExecText(item, exec || {});
 
     const fullText = [
@@ -243,8 +225,8 @@ function appendExecText(item, execMap) {
         // hover용 전체 설명
         tooltipText: fullText,
 
-        // 패널 마지막 컬럼은 첫 reason만
-        noteText: firstReason,
+        // 패널 마지막 컬럼: 축약 라벨 (예: "S12 역추세·TP") — 미매핑 토큰은 원문
+        noteText: shortSignalLabel(item) || firstReason,
     };
 }
 

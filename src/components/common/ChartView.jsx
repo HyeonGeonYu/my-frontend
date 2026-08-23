@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useCallback, useState } from "react";
 import { createChart } from "lightweight-charts";
-import { fmtKSTFull, getTs, fmtComma } from "../../lib/tradeUtils";
+import { fmtKSTFull, getTs, fmtComma, formatSignalTooltip } from "../../lib/tradeUtils";
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -204,60 +204,12 @@ function getSignalBorderColor(m) {
     return "none";
 }
 
-function fmtSignedNumber(v, digits = 2) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return "";
-    return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}`;
-}
-
 function buildSignalTooltip(m) {
-    const side = String(m?.side || "").toUpperCase();
-    const kind = String(m?.kind || "").toUpperCase();
+    // 예: "S11·1분봉 역추세 · 롱 청산 · TP\n진입 62,708.6 → 청산 63,139.0 (PNL +0.69%)\nS12_TP"
+    const mainLine = String(m?.tooltipText || "").trim() || formatSignalTooltip(m);
 
     const reasons = getMarkerReasons(m);
-    const firstReason = getFirstReason(m);
-
-    const pnlUsdt =
-        m?.pnlUsdt ??
-        m?.pnl_usdt ??
-        m?.exec?.pnl_usdt ??
-        m?.raw_json?.pnl_usdt;
-
-    const pnlPct =
-        m?.pnl_pct ??
-        m?.pnlPct ??
-        m?.exec?.pnl_pct ??
-        m?.raw_json?.pnl_pct;
-
-    const qty =
-        m?.qty ??
-        m?.exec?.qty ??
-        m?.raw_json?.qty;
-
-    const usdtPctText =
-        Number.isFinite(Number(pnlUsdt)) && Number.isFinite(Number(pnlPct))
-            ? `${fmtSignedNumber(pnlUsdt, 2)} USDT (${fmtSignedNumber(pnlPct, 2)}%)`
-            : Number.isFinite(Number(pnlUsdt))
-                ? `${fmtSignedNumber(pnlUsdt, 2)} USDT`
-                : Number.isFinite(Number(pnlPct))
-                    ? `${fmtSignedNumber(pnlPct, 2)}%`
-                    : "";
-
-    const qtyText =
-        kind === "ENTRY" && Number.isFinite(Number(qty))
-            ? `qty ${Number(qty).toFixed(4)}`
-            : "";
-
-    // 예: EXIT LONG · SL(ID 3D) · -29.70 USDT (-4.23%)
-    const fallbackMainLine = [
-        [kind, side].filter(Boolean).join(" "),
-        firstReason,
-        usdtPctText || qtyText,
-    ].filter(Boolean).join(" · ");
-
     const detailLine = reasons.length ? reasons.join(", ") : "";
-
-    const mainLine = String(m?.tooltipText || "").trim() || fallbackMainLine;
 
     return [
         mainLine,

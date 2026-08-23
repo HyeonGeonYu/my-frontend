@@ -139,6 +139,93 @@ function normalizeReasons(s) {
 }
 
 /* ──────────────────────────────
+ * 신호 설명 (차트 툴팁·노트 패널 공용)
+ *   reasons 첫 토큰(S12 / S12_TP / S4_SL …)에서 대분류(책)·세부전략·청산종류를 도출.
+ *   책 구분 = trade_config 3책 구조: S11~S13=1분봉책 · S14=4시간봉책 · S3/S4=일봉책.
+ *   S1/S2는 구 σ-복귀 채널(드레인) 신호.
+ * ────────────────────────────── */
+const STRAT_CODE_INFO = {
+    S1: {book: "S11·1분봉(구채널)", detail: "추세"},
+    S2: {book: "S11·1분봉(구채널)", detail: "역추세"},
+    S11: {book: "S11·1분봉", detail: "추세"},
+    S12: {book: "S11·1분봉", detail: "역추세"},
+    S13: {book: "S11·1분봉", detail: "급락페이드"},
+    S14: {book: "S22·4시간봉", detail: "ewz추세"},
+    S3: {book: "S33·일봉", detail: "추세"},
+    S4: {book: "S33·일봉", detail: "역추세"},
+};
+
+const EXIT_TYPE_LABEL = {TP: "TP", SL: "SL", TIME: "시간청산", MANUAL: "수동청산", DRAIN: "드레인"};
+
+export function describeSignal(sig) {
+    const kindU = String(sig?.kind || "").toUpperCase();
+    const kind = kindU === "OPEN" ? "ENTRY" : kindU === "CLOSE" ? "EXIT" : kindU;
+    const side = String(sig?.side || "").toUpperCase();
+
+    const token = String(normalizeReasons(sig)[0] || sig?.mode || sig?.reason || "").trim();
+    const code = (/^(S\d+)/.exec(token) || [])[1] || null;
+    const info = code ? STRAT_CODE_INFO[code] : null;
+    const exitKey = (/(?:^|_|\b)(TP|SL|TIME|MANUAL|DRAIN)\b/i.exec(token) || [])[1] || null;
+
+    return {
+        kind, side, token, code,
+        book: info?.book || null,
+        detail: info?.detail || null,
+        exitType: kind === "EXIT" && exitKey
+            ? (EXIT_TYPE_LABEL[exitKey.toUpperCase()] || exitKey.toUpperCase())
+            : null,
+        price: Number(sig?.price ?? sig?.exit_price),
+        entryPrice: Number(sig?.entry_price),
+        pnlPct: Number(sig?.pnl_pct),
+    };
+}
+
+// 신호가 표기: 1 미만 5자리 · 10 미만 4자리 · 그 외 2자리
+export function fmtSignalPrice(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    const a = Math.abs(n);
+    return fmtComma(n, a < 1 ? 5 : a < 10 ? 4 : 2);
+}
+
+// 툴팁 본문 — 예)
+//   진입: "S11·1분봉 추세 · 롱 진입\n진입가 62,708.6"
+//   청산: "S11·1분봉 역추세 · 롱 청산 · TP\n진입 62,708.6 → 청산 63,139.0 (PNL +0.69%)"
+// withPnl=false: 분봉 경로처럼 뒤에서 exec가 net PNL을 붙일 때 중복 방지.
+export function formatSignalTooltip(sig, {withPnl = true} = {}) {
+    const d = describeSignal(sig);
+    const sideKo = d.side === "LONG" ? "롱" : d.side === "SHORT" ? "숏" : d.side;
+    const kindKo = d.kind === "ENTRY" ? "진입" : d.kind === "EXIT" ? "청산" : d.kind;
+
+    const strat = d.book ? [d.book, d.detail].filter(Boolean).join(" ") : (d.token || null);
+    const head = [strat, [sideKo, kindKo].filter(Boolean).join(" "), d.exitType]
+        .filter(Boolean).join(" · ");
+
+    let priceLine = null;
+    if (d.kind === "ENTRY") {
+        const px = fmtSignalPrice(d.price);
+        priceLine = px ? `진입가 ${px}` : null;
+    } else if (d.kind === "EXIT") {
+        const en = fmtSignalPrice(d.entryPrice);
+        const ex = fmtSignalPrice(d.price);
+        const pnl = withPnl && Number.isFinite(d.pnlPct)
+            ? ` (PNL ${d.pnlPct >= 0 ? "+" : ""}${d.pnlPct.toFixed(2)}%)`
+            : "";
+        if (en && ex) priceLine = `진입 ${en} → 청산 ${ex}${pnl}`;
+        else if (ex) priceLine = `청산가 ${ex}${pnl}`;
+    }
+
+    return [head, priceLine].filter(Boolean).join("\n");
+}
+
+// 노트 패널용 축약 라벨 — 예) "S12 역추세·TP" (미매핑 토큰은 원문 유지)
+export function shortSignalLabel(sig) {
+    const d = describeSignal(sig);
+    if (!d.code || !d.detail) return d.token || "";
+    return [`${d.code} ${d.detail}`, d.exitType].filter(Boolean).join("·");
+}
+
+/* ──────────────────────────────
  * 가격 시계열 계산
  * ────────────────────────────── */
 export function calcSMA(bars, win = 100) {
@@ -328,6 +415,16 @@ export function buildSignalAnnotations(sigs) {
             kind: kindStd,  // ENTRY/EXIT로 정규화 (OPEN/CLOSE 포함) → isTradeSignalMarker 인식용
             side: s.side,   // isUpBetMarker 방향 판단용
             position, color, shape, text: `#${s.seq} ${shortLabel}`, size: 2,
+            // ✅ 툴팁·y좌표용 신호 메타 — 일봉 차트는 enrich 단계가 없어 여기서 실어줌
+            signal_id: s.signal_id,
+            open_signal_id: s.open_signal_id,
+            price: s.price,
+            entry_price: s.entry_price,
+            exit_price: s.exit_price,
+            pnl_pct: s.pnl_pct,
+            reasons: s.reasons,
+            reasons_json: s.reasons_json,
+            tooltipText: formatSignalTooltip({...s, kind: kindStd}),
         });
 
         notes.push({
