@@ -49,6 +49,8 @@ export const STRAT_PARAMS = {
   XAUTUSDT: {
     s11: { L: { k: 4, b: -2.5, cd: "1h", w: 1440, wl: "24h" } },
     s12: { L: { k: 4.25, b: -3, cd: "3h", w: 1440, wl: "24h" } },
+    // 2026-08-29: 24/7 토큰금 프록시(PAXG 6y+빗파 XAUT 6.6y) 재스윕 채택 셀
+    h4: { s13: { L: { m: "24h", drop: 0.02, retr: 1.5, hold: "15d", cd: "24h" } } },
   },
 
   // ── MT5 지수·금속·유가·크립토CFD ──
