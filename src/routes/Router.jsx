@@ -10,6 +10,7 @@ import Cfd from "../pages/Cfd";
 import Archive from "../pages/Archive";
 import Updates from "../pages/Updates";
 import Others from "../pages/Others";
+import Privacy from "../pages/Privacy";
 import Layout from "../components/Layout";
 import useIsMobile from "../hooks/useIsMobile";
 
@@ -88,6 +89,8 @@ function AppRouter() {
           <Route path="/archive" element={<Archive />} />
           <Route path="/updates" element={<Updates />} />
           <Route path="/others" element={<Others />} />
+          {/* 플레이스토어 개인정보처리방침 URL 요건 — 상단 탭에는 노출하지 않음 */}
+          <Route path="/privacy" element={<Privacy />} />
         </Route>
       </Routes>
     </Router>
