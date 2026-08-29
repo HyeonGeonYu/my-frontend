@@ -5,6 +5,16 @@
       "has": [{ "type": "host", "value": "www.hyeongeonnoil.com" }],
       "destination": "https://hyeongeonnoil.com/$1",
       "permanent": true
+    },
+    {
+      "source": "/usstock",
+      "destination": "/indexes",
+      "permanent": true
+    },
+    {
+      "source": "/koreastock",
+      "destination": "/indexes",
+      "permanent": true
     }
   ],
   "rewrites": [
