@@ -20,6 +20,29 @@ export default function ArchiveDayPage({ day, countries, prevDay, nextDay }) {
   const title = `${y}년 ${Number(m)}월 ${Number(d)}일 세계 뉴스 요약 — NewsInsight`;
   const desc = `${names.map((c) => COUNTRY_KO[c] || c).join("·")} 주요 뉴스 정리. ${firstSummary}`.slice(0, 150);
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Article",
+        headline: title,
+        description: desc,
+        datePublished: day,
+        inLanguage: "ko",
+        author: { "@type": "Organization", name: "NewsInsight" },
+        publisher: { "@type": "Organization", name: "NewsInsight", url: "https://hyeongeonnoil.com" },
+        mainEntityOfPage: `https://hyeongeonnoil.com/archive/${day}`,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "아카이브", item: "https://hyeongeonnoil.com/archive" },
+          { "@type": "ListItem", position: 2, name: day, item: `https://hyeongeonnoil.com/archive/${day}` },
+        ],
+      },
+    ],
+  };
+
   return (
     <div style={box}>
       <Head>
@@ -29,6 +52,7 @@ export default function ArchiveDayPage({ day, countries, prevDay, nextDay }) {
         <meta property="og:description" content={desc} />
         <meta property="og:url" content={`https://hyeongeonnoil.com/archive/${day}`} />
         <link rel="canonical" href={`https://hyeongeonnoil.com/archive/${day}`} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </Head>
 
       <h1 style={{ color: "#00bfff", fontSize: 24 }}>
