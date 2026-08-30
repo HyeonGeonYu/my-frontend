@@ -442,3 +442,5 @@ export async function GET(req: Request): Promise<Response> {
     return json({ retCode: -1, retMsg: msg }, status);
   }
 }
+// Next pages/api edge 런타임은 default export를 요구 — GET 핸들러 위임
+export default GET;
