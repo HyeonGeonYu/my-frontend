@@ -1,4 +1,5 @@
 {
+  "framework": "nextjs",
   "redirects": [
     {
       "source": "/(.*)",
@@ -15,14 +16,6 @@
       "source": "/koreastock",
       "destination": "/indexes",
       "permanent": true
-    }
-  ],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-
-    {
-      "source": "/((?!api/|static/|favicon\\.ico|manifest\\.json|asset-manifest\\.json|logo192\\.png|logo512\\.png|robots\\.txt).*)",
-      "destination": "/index.html"
     }
   ]
 }

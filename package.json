@@ -19,6 +19,7 @@
     "fflate": "^0.8.2",
     "lightweight-charts": "^4.2.3",
     "lucide-react": "^0.525.0",
+    "next": "^14.2.35",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -27,9 +28,9 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "dev": "react-scripts start",
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "dev": "next dev",
+    "start": "next start",
+    "build": "next build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -52,6 +53,7 @@
     ]
   },
   "devDependencies": {
+    "@types/react": "19.2.18",
     "@vercel/node": "^5.5.16",
     "baseline-browser-mapping": "^2.9.11",
     "react-scripts": "^5.0.1",

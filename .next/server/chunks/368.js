@@ -1,0 +1,1 @@
+"use strict";exports.id=368,exports.ids=[368],exports.modules={1368:(t,e,r)=>{r.a(t,async(t,a)=>{try{r.r(e),r.d(e,{default:()=>i});var s=r(997);r(6689);var o=r(6923),c=t([o]);o=(c.then?(await c)():c)[0];let i=function(){return s.jsx(o.Z,{chartType:"commodity",title:"원자재 관련(+-10%)",envelop:10})};a()}catch(t){a(t)}})}};
