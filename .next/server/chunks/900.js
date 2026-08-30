@@ -1,1 +1,0 @@
-"use strict";exports.id=900,exports.ids=[900],exports.modules={6900:(t,e,r)=>{r.a(t,async(t,a)=>{try{r.r(e),r.d(e,{default:()=>c});var s=r(997);r(6689);var i=r(6923),n=t([i]);i=(n.then?(await n)():n)[0];let c=function(){return s.jsx(i.Z,{chartType:"index",title:"지수 관련(+-10%)",envelop:10})};a()}catch(t){a(t)}})}};

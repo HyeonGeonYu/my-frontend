@@ -1,1 +1,0 @@
-"use strict";exports.id=128,exports.ids=[128],exports.modules={1128:(r,e,s)=>{s.r(e),s.d(e,{default:()=>l});var d=s(997);s(6689);let l=function(){return(0,d.jsxs)("div",{style:{padding:"clamp(12px, 4vw, 40px)",color:"#fff",backgroundColor:"#111",minHeight:"100vh"},children:[d.jsx("h1",{style:{color:"#00ffcc"},children:"기타"}),d.jsx("p",{children:"여기는 기타 페이지입니다. (준비 중)"})]})}}};

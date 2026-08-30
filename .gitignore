@@ -28,3 +28,4 @@ yarn-error.log*
 
 # NVIDIA driver junk dirs
 NVIDIA Corporation/
+.next/
