@@ -23,6 +23,26 @@ export async function listAllDays() {
   return (data || []).map((r) => r.day).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
 }
 
+// 최근 N일치 요약 (RSS용) — 날짜별 개별 조회 대신 한 번에
+export async function getRecentDays(limit = 15) {
+  const supabase = client();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("daily_collections")
+    .select("day, raw_json")
+    .order("day", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || [])
+    .filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.day))
+    .map((r) => {
+      const yt = r.raw_json?.youtube_data || {};
+      const countries = Object.keys(yt);
+      const first = countries.length ? yt[countries[0]]?.summary_result || "" : "";
+      return { day: r.day, countries, excerpt: first.replace(/\s+/g, " ").slice(0, 300) };
+    });
+}
+
 // 단일 일자의 뉴스요약(youtube_data) — SEO 페이지 본문용.
 // summary_result(한국어 요약 전문)를 포함하고, 무거운 원문(summary_content)만 제외
 export async function getDaySummaries(day) {
