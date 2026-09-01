@@ -10,7 +10,6 @@ import { minuteBandSpec, STRAT_PARAMS, fmtParam, fmtFade } from "../lib/strategy
 import useIsMobile from "../hooks/useIsMobile";
 import { fetchConfigCached } from "../lib/configCache";
 import { makeBybitSource } from "../lib/chartSources";
-import { QRCodeCanvas } from "qrcode.react";
 import { next0650EndBoundaryUtcSec, positionSizeBySymbol, positionEntriesBySymbol } from "../lib/tradeUtils";
 import { loadEntryStrategyMap, bookTimeframe } from "../lib/entryStrategies";
 import EntryStrategyChips from "../components/common/EntryStrategyChips";
@@ -28,7 +27,7 @@ const COIN_STATS_SIGNALS = ["s11", "s22", "bybit", "cryptod"];
 const COIN_POS_STRAT_SIGNALS = ["s11", "s22", "bybit", "cryptod", "s1"];
 
 /* ------------------------- 상단 배너 ------------------------- */
-function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qrSize = 92 }) {
+function CopyTradingInfoBanner({ startDate, startUsdt, equityUsdt }) {
     const fmt = (n, d = 2) => typeof n === "number" && Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: d }) : "—";
 
     const pnl = typeof equityUsdt === "number" ? equityUsdt - startUsdt : null;
@@ -82,50 +81,13 @@ function CopyTradingInfoBanner({ inviteUrl, startDate, startUsdt, equityUsdt, qr
             </div>
         </div>
 
-        {/* ✅ 2) 둘째 줄: QR + 바로 참여 버튼 */}
-        <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <a
-                href={inviteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Bybit 초대 링크로 이동"
-                style={{ background: "#fff", padding: 10, borderRadius: 12 }}
-            >
-                <QRCodeCanvas value={inviteUrl} size={qrSize} includeMargin />
-            </a>
+        {/* 2) 초대 QR·참여 버튼 제거됨 (2026-09-01)
+            사유: 미신고 해외 거래소 레퍼럴을 국내 불특정 다수에게 홍보하는 행위에 대해
+                  FIU가 2026-06-25 방조 소지·형사처벌 가능성을 경고. 실적 기록만 남기고 유치 요소는 내림.
+            원복 방법: 이 커밋을 git revert 하면 QR·버튼·inviteUrl 사용이 그대로 복구됨.
+                      재개 전 법률 검토 권장. */}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <a
-                    href={inviteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Bybit 바로 참여"
-                    style={{
-                        padding: "10px 14px",
-                        borderRadius: 14,
-                        border: "1px solid #2a2a2a",
-                        background: "#00ffcc",
-                        color: "#000",
-                        fontWeight: 900,
-                        cursor: "pointer",
-                        fontSize: 14,
-                        width: 140,
-                        textAlign: "center",
-                        textDecoration: "none",
-                        display: "inline-block",
-                        boxSizing: "border-box",
-                    }}
-                >
-                    바로 참여하기
-                </a>
-
-                <div style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.4 }}>
-                    QR 또는 버튼을 누르면 Bybit 초대 페이지로 이동합니다.
-                </div>
-            </div>
-        </div>
-
-        {/* ✅ 3) 아래: 원래 경고문구 복원 + 한/중/일/EN */}
+        {/* 3) 아래: 원래 경고문구 복원 + 한/중/일/EN */}
         <details style={{ marginTop: 14 }}>
             <summary style={{ cursor: "pointer", fontSize: 12, opacity: 0.9 }}>
                 ⚠️ 리스크 고지 (KR / 中文 / 日本語 / EN)
@@ -1016,7 +978,7 @@ export default function Coin() {
     const MIN_RIGHT = 260;
     const GAP = 24;
     const MIN_MAIN = MIN_LEFT + MIN_RIGHT + GAP; // 544
-    const inviteUrl = "https://i.bybit.com/1ulbabnd?action=inviteToCopy";
+    // 초대 링크 제거됨 (2026-09-01) — 상단 CopyTradingInfoBanner 주석 참조. 원복은 해당 커밋 revert.
     const startDate = "2026-02-01";
 
     return (<div style={{ padding: isMobile ? 8 : 24, color: "#fff", background: "#111", minHeight: "100vh" }}>
@@ -1045,11 +1007,9 @@ export default function Coin() {
                     }}
                 >
                     <CopyTradingInfoBanner
-                        inviteUrl={inviteUrl}
                         startDate={startDate}
                         startUsdt={START_USDT}
                         equityUsdt={equityUsdt}
-                        qrSize={82}
                     />
 
                     <div style={{ minWidth: 0, overflow: "hidden" }}>
