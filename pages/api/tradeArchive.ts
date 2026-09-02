@@ -33,36 +33,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-        let q = supabase
-            .from("trade_records")
-            .select(
-                "id,day,symbol,side,kind,signal,price,qty,pnl," +
-                "account:raw_json->>account," +
-                "strategy_tag:raw_json->>strategy_tag," +
-                "signal_ns:raw_json->>signal_ns," +
-                "ts_ms:raw_json->>ts_ms," +
-                "entry_price:raw_json->>entry_price," +
-                "pnl_pct:raw_json->source_signal->>pnl_pct"
-            )
-            .gte("day", from)
-            .lte("day", to)
-            .order("day", { ascending: true })
-            .limit(limit);
+        // Supabase(PostgREST)는 요청당 최대 1000행 — range로 내부 페이지네이션
+        const PAGE = 1000;
+        const records: any[] = [];
 
-        // account 필드는 2026-08-20부터 기록 — 그 이전 백필 행은 전부 BYBIT (null 허용)
-        if (account === "MT5") {
-            q = q.eq("raw_json->>account", "MT5");
-        } else {
-            q = q.or("raw_json->>account.eq.BYBIT,raw_json->>account.is.null");
-        }
+        for (let offset = 0; offset < limit; offset += PAGE) {
+            let q = supabase
+                .from("trade_records")
+                .select(
+                    "id,day,symbol,side,kind,signal,price,qty,pnl," +
+                    "account:raw_json->>account," +
+                    "strategy_tag:raw_json->>strategy_tag," +
+                    "signal_ns:raw_json->>signal_ns," +
+                    "ts_ms:raw_json->>ts_ms," +
+                    "entry_price:raw_json->>entry_price," +
+                    "pnl_pct:raw_json->source_signal->>pnl_pct"
+                )
+                .gte("day", from)
+                .lte("day", to)
+                .order("day", { ascending: true })
+                .order("id", { ascending: true })
+                .range(offset, Math.min(offset + PAGE, limit) - 1);
 
-        const { data, error } = await q;
-        if (error) {
-            return res.status(500).json({ retCode: -1, retMsg: error.message });
+            // account 필드는 2026-08-20부터 기록 — 그 이전 백필 행은 전부 BYBIT (null 허용)
+            if (account === "MT5") {
+                q = q.eq("raw_json->>account", "MT5");
+            } else {
+                q = q.or("raw_json->>account.eq.BYBIT,raw_json->>account.is.null");
+            }
+
+            const { data, error } = await q;
+            if (error) {
+                return res.status(500).json({ retCode: -1, retMsg: error.message });
+            }
+
+            records.push(...(data || []));
+            if (!data || data.length < PAGE) break;
         }
 
         res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=3600");
-        return res.status(200).json({ retCode: 0, account, from, to, records: data || [] });
+        return res.status(200).json({ retCode: 0, account, from, to, records });
     } catch (e: any) {
         return res.status(500).json({ retCode: -1, retMsg: e?.message || "server error" });
     }
