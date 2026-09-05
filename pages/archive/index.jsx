@@ -34,8 +34,9 @@ export default function ArchivePage({ days }) {
         <meta
           name="description"
           content="미국·중국·일본·한국 등 주요국 뉴스 방송을 날짜별로 요약한 기록입니다."
+          key="desc"
         />
-        <link rel="canonical" href="https://hyeongeonnoil.com/archive" />
+        <link rel="canonical" href="https://hyeongeonnoil.com/archive" key="canonical" />
       </Head>
       <Archive />
       <DayIndex days={days} />

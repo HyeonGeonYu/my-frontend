@@ -47,11 +47,11 @@ export default function ArchiveDayPage({ day, countries, prevDay, nextDay }) {
     <div style={box}>
       <Head>
         <title>{title}</title>
-        <meta name="description" content={desc} />
-        <meta property="og:title" content={title} />
-        <meta property="og:description" content={desc} />
-        <meta property="og:url" content={`https://hyeongeonnoil.com/archive/${day}`} />
-        <link rel="canonical" href={`https://hyeongeonnoil.com/archive/${day}`} />
+        <meta name="description" content={desc} key="desc" />
+        <meta property="og:title" content={title} key="og-title" />
+        <meta property="og:description" content={desc} key="og-desc" />
+        <meta property="og:url" content={`https://hyeongeonnoil.com/archive/${day}`} key="og-url" />
+        <link rel="canonical" href={`https://hyeongeonnoil.com/archive/${day}`} key="canonical" />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </Head>
 

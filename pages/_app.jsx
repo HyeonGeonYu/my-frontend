@@ -45,11 +45,12 @@ export default function MyApp({ Component, pageProps }) {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        {/* 페이지별 <Head>가 덮어쓰는 기본값 */}
+        {/* 페이지별 <Head>가 덮어쓰는 기본값 — key가 Seo 컴포넌트와 일치해야 중복 없이 교체됨 */}
         <title>현건노일 NewsInsight — 환율·지수·코인 시세와 뉴스 대시보드</title>
         <meta
           name="description"
           content="현건노일 NewsInsight — 환율·채권·주가지수·원자재·코인 시세 차트와 전략 시그널, 세계 뉴스 요약 아카이브를 한 화면에서 보는 무료 대시보드"
+          key="desc"
         />
         <meta property="og:site_name" content="현건노일 NewsInsight" />
         <meta property="og:type" content="website" />
