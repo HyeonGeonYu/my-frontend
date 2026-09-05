@@ -62,8 +62,13 @@ function CopyTradingInfoBanner({ startDate, startUsdt, equityUsdt }) {
             카피트레이딩 계정 안내
         </div>
 
-        {/* ✅ 1) 시작일 / 시작돈 / 현재 : 3줄 */}
+        {/* ✅ 1) 계정 / 시작일 / 시작돈 / 현재 : 4줄
+            계정 닉네임은 링크·QR 없는 일반 텍스트만 허용 (아래 2026-09-01 제거 사유 참조) */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={pill}>
+                Bybit 카피트레이딩 계정: <b>zannavi</b>
+            </div>
+
             <div style={pill}>
                 시작일: <b>{startDate}</b>
             </div>
